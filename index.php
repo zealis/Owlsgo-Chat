@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.2';
+const OWLSGO_VERSION = '1.0.3';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -335,6 +335,9 @@ function ow_icon(string $name, int $size = 18): string
 
 function pageHead(string $title): void
 {
+    // 动态页禁止缓存：页面内含会话密钥，缓存旧页会导致提交时签名对不上
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
     $site = Sec::e(DB::setting('site_name', 'Owlsgo-Chat'));
     echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -388,6 +391,7 @@ function renderAuth(string $mode): void
        . '<p>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</p></div>';
     if ($mode === 'login') {
         echo '<form class="ow-auth-form" data-mode="login">'
+           . Sec::signField($_SESSION['anon_key'], 'login')
            . '<div class="ow-form-item"><label>用户名或邮箱</label><input class="ow-input" name="identity" required autocomplete="username"></div>'
            . '<div class="ow-form-item"><label>密码</label><input class="ow-input" type="password" name="password" required autocomplete="current-password"></div>'
            . '<div class="ow-form-item" id="owCaptchaRow" style="display:none"><label>图形验证码</label>'
@@ -396,6 +400,7 @@ function renderAuth(string $mode): void
            . '<div class="ow-auth-links"><a href="?page=register">注册账号</a><a href="?page=forgot">忘记密码</a><a href="?page=chat">返回聊天</a></div>';
     } elseif ($mode === 'register') {
         echo '<form class="ow-auth-form" data-mode="register">'
+           . Sec::signField($_SESSION['anon_key'], 'register')
            . '<div class="ow-form-item"><label>用户名</label><input class="ow-input" name="username" required placeholder="3-20 位字母、数字或下划线"></div>'
            . '<div class="ow-form-item"><label>邮箱</label><div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'
            . '<button type="button" class="ow-btn ow-btn-ghost" data-sendcode="register">发验证码</button></div></div>'
@@ -405,6 +410,7 @@ function renderAuth(string $mode): void
            . '<div class="ow-auth-links"><a href="?page=login">已有账号，去登录</a><a href="?page=chat">返回聊天</a></div>';
     } else {
         echo '<form class="ow-auth-form" data-mode="reset">'
+           . Sec::signField($_SESSION['anon_key'], 'reset')
            . '<div class="ow-form-item"><label>注册邮箱</label><div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'
            . '<button type="button" class="ow-btn ow-btn-ghost" data-sendcode="reset">发验证码</button></div></div>'
            . '<div class="ow-form-item"><label>邮箱验证码</label><input class="ow-input" name="code" required></div>'

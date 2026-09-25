@@ -20,6 +20,14 @@ class Sec
         return md5($key . '|' . $ts . '|' . $action);
     }
 
+    /** 服务端预生成签名（写入表单隐藏域）：JS 未执行时也能提交成功 */
+    public static function signField(string $key, string $action): string
+    {
+        $ts = (string)time();
+        return '<input type="hidden" name="ts" value="' . $ts . '">'
+             . '<input type="hidden" name="sign" value="' . self::sign($key, $ts, $action) . '">';
+    }
+
     public static function verifySign(string $key, string $action): bool
     {
         $ts   = $_POST['ts'] ?? $_GET['ts'] ?? '';

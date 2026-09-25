@@ -60,6 +60,15 @@
             var ts = Math.floor(new Date().getTime() / 1000);
             return { ts: ts, sign: md5(this.key + '|' + ts + '|' + action) };
         },
+        /* 签名失效自愈：会话重建/页面为旧缓存时密钥对不上，自动刷新一次取新密钥 */
+        onSignExpired: function (cb) {
+            var flag = 'owl_sig_reload_at', now = new Date().getTime(), last = 0;
+            try { last = parseInt(w.sessionStorage.getItem(flag) || '0', 10); } catch (e) {}
+            if (last && now - last < 15000) { if (cb) cb(); return; } // 15 秒内只自动刷新一次，避免死循环
+            try { w.sessionStorage.setItem(flag, String(now)); } catch (e) {}
+            if (cb) cb();
+            setTimeout(function () { location.reload(); }, 800);
+        },
         post: function (action, data, cb) {
             var s = this.sign(action), body = 'ts=' + s.ts + '&sign=' + s.sign, k;
             for (k in (data || {})) if (data.hasOwnProperty(k)) body += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
@@ -70,7 +79,12 @@
                 if (x.readyState !== 4) return;
                 var r = null;
                 try { r = JSON.parse(x.responseText); } catch (e) {}
-                cb(r || { ok: false, msg: '网络错误（' + x.status + '）' }, x.status);
+                r = r || { ok: false, msg: '网络错误（' + x.status + '）' };
+                if (r.ok === false && r.msg && r.msg.indexOf('签名验证失败') >= 0) {
+                    OwApi.onSignExpired(function () { cb(r, x.status); });
+                    return;
+                }
+                cb(r, x.status);
             };
             x.send(body);
             return x;
@@ -182,7 +196,11 @@
             form.onsubmit = function (e) {
                 e.preventDefault();
                 var data = {}, i, els = form.elements;
-                for (i = 0; i < els.length; i++) if (els[i].name) data[els[i].name] = els[i].value;
+                // 跳过服务端预置的 ts/sign 隐藏域：由 OwApi 用实时值重新签名
+                for (i = 0; i < els.length; i++) {
+                    if (!els[i].name || els[i].name === 'ts' || els[i].name === 'sign') continue;
+                    data[els[i].name] = els[i].value;
+                }
                 msg.innerHTML = '提交中…';
                 OwApi.post(mode === 'login' ? 'login' : mode, data, function (r) {
                     if (r.ok) {

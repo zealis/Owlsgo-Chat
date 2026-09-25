@@ -3,6 +3,8 @@
 !/data/.gitkeep
 /uploads/
 !/uploads/.gitkeep
+# 站点配置属于部署环境（含本机绝对路径），不纳入源码仓库
+/nginx-server.conf
 *.log
 .DS_Store
 Thumbs.db
