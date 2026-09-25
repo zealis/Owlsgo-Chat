@@ -7,3 +7,6 @@
 .DS_Store
 Thumbs.db
 
+
+# 工作区内部资料
+/.workbuddy/
