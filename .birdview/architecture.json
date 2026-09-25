@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "mapId": "owlsgo-chat",
+  "revision": 2,
+  "language": "zh",
+  "project": {
+    "id": "owlsgo-chat",
+    "name": "Owlsgo-Chat (OChat) 即时通讯聊天室"
+  },
+  "constraintDiscovery": {
+    "checkedAt": "2026-09-26T01:25:00+08:00",
+    "checkedPaths": [
+      "设计文档/开发文档.md",
+      "设计文档/色彩搭配方案.md",
+      "设计文档/前后端代码安全审核AI提示词.md",
+      "设计文档/失控的防御系统图片API文档.md",
+      "设计文档/其他选择.md"
+    ],
+    "uninspectedPaths": [
+      "设计文档/.obsidian",
+      "设计文档/Pasted image 20260908155620.png",
+      "设计文档/Pasted image 20260908160038.png"
+    ]
+  },
+  "groups": [
+    {
+      "id": "g-frontend",
+      "name": "前台交互",
+      "role": "interaction",
+      "members": ["web-ui"],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "note": "自研扁平化 UI（ow 前缀类名）、AJAX 交互与响应式布局", "quote": "采用自研扁平化 UI 设计（类名为ow开头）" }
+      ]
+    },
+    {
+      "id": "g-backend",
+      "name": "原生 PHP 后端",
+      "role": "runtime",
+      "members": ["app-entry", "realtime", "chat-core", "user-system", "admin-console", "upload-media", "security", "db-layer", "plugin-system"],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "note": "纯原生 PHP、单核心入口、无框架依赖", "quote": "纯原生 PHP，单核心代码文件，无框架和 Composer 依赖，部署与维护简单" }
+      ]
+    },
+    {
+      "id": "g-external",
+      "name": "外部服务",
+      "role": "external-services",
+      "members": ["imgbed-api", "smtp-mail", "ip-api"],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "note": "图床 API、邮件验证码、ip-api.com 归属地查询均为外部集成", "quote": "IP 归属地 — 管理员可查看用户 IP 归属地（通过 ip-api.com）" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "web-ui",
+      "name": "聊天室前端界面",
+      "kind": "local",
+      "role": "frontend",
+      "responsibility": "自研扁平化 UI（类名 ow 开头）：聊天主界面、房间列表、在线成员栏、消息气泡、Emoji/贴纸面板、管理后台界面、登录注册页。AJAX 交互、响应式布局，兼容 PC、移动端及落后内核浏览器（不依赖新 CSS/JS 特性）。Logo 使用 设计文档/index.svg。",
+      "ownership": [
+        { "kind": "directory", "path": "assets" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 2, "note": "自研扁平化 UI 与插件机制、移动端适配要求", "quote": "采用自研扁平化 UI 设计（类名为ow开头），支持插件机制" },
+        { "path": "设计文档/开发文档.md", "line": 12, "note": "AJAX 与响应式要求", "quote": "支持 AJAX 交互和响应式布局，兼顾 PC 与移动端使用体验" },
+        { "path": "设计文档/色彩搭配方案.md", "line": 73, "note": "视觉禁忌约束", "quote": "禁止在背景或按钮上使用 linear-gradient（渐变色）" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 0, "column": 1 }
+    },
+    {
+      "id": "app-entry",
+      "name": "统一入口与路由",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "根目录 index.php 单一入口：页面渲染与 AJAX API 统一分发（action 路由），负责请求解析、输出 JSON/HTML、错误兜底（不暴露堆栈）。无需指定目录，低成本虚拟主机可直接部署。",
+      "ownership": [
+        { "kind": "file", "path": "index.php" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 7, "note": "单核心文件、开箱即用", "quote": "纯原生 PHP，单核心代码文件，无框架和 Composer 依赖，部署与维护简单" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 1, "column": 1 }
+    },
+    {
+      "id": "realtime",
+      "name": "实时推送通道",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "消息实时推送与在线状态心跳同步。经用户裁决：主通道采用 AJAX 长轮询（约 20 秒挂起 + 心跳保活 + 断线自动降级短轮询），零依赖、低成本虚拟主机可跑，不引入 Workerman。",
+      "ownership": [
+        { "kind": "file", "path": "core/realtime.php" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 20, "note": "心跳保活与降级轮询要求（长轮询实现满足降级路径）", "quote": "实时消息 — WebSocket 实时推送，心跳保活，断线自动降级轮询" },
+        { "path": "设计文档/开发文档.md", "line": 69, "note": "零依赖硬性规则（用户裁决优先遵守）", "quote": "硬性规则：本项目禁止使用其他任何第三方框架和 Composer 包" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 1, "column": 0 }
+    },
+    {
+      "id": "chat-core",
+      "name": "聊天核心",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "多聊天室（公开/密码私密/限定角色）、消息类型（普通/@提及/私信/系统消息）、3 分钟内撤回（管理员与房主不限）、历史消息分页加载、敏感词过滤、发言频率限制（零依赖实现：数据库/文件计数替代 Redis）、游客每日发言限额。",
+      "ownership": [
+        { "kind": "file", "path": "core/chat.php" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 19, "note": "多聊天室三种类型", "quote": "多聊天室 — 支持创建公开、私密（密码）、限定角色三种类型的聊天室" },
+        { "path": "设计文档/开发文档.md", "line": 22, "note": "撤回规则", "quote": "消息撤回 — 发送者 3 分钟内可撤回，管理员与房主可撤回任意消息" },
+        { "path": "设计文档/开发文档.md", "line": 64, "note": "频率限制原设计基于 Redis，需零依赖替代", "quote": "频率限制 — 基于 Redis 的消息发送频率限制" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 2, "column": 1 }
+    },
+    {
+      "id": "user-system",
+      "name": "用户系统",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "用户名+邮箱注册、邮箱验证码校验、密码找回、游客模式（可配置浏览/发言、随机昵称、每日限额）、个人资料卡（昵称/头像）、角色体系（管理员/VIP/普通成员/游客）与自定义称号。",
+      "ownership": [
+        { "kind": "file", "path": "core/auth.php" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 30, "note": "注册登录方式", "quote": "独立注册登录 — 用户名 + 邮箱注册" },
+        { "path": "设计文档/开发文档.md", "line": 33, "note": "游客模式", "quote": "游客模式 — 可配置是否允许游客浏览 / 发言，游客自动分配随机昵称" },
+        { "path": "设计文档/开发文档.md", "line": 36, "note": "角色标签", "quote": "身份角色 — 管理员、VIP、普通成员、游客，各角色显示不同颜色标签" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 2, "column": 0 }
+    },
+    {
+      "id": "admin-console",
+      "name": "管理后台",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "用户管理（搜索/角色/称号）、禁言系统（按用户/游客昵称/IP，房间隔离，过期时间）、敏感词库（替换词、启停）、聊天室管理（权限/房主）、公告系统（绑定房间、优先级轮播）、安全日志查看、站点设置（注册控制/游客开关/发言限制）。",
+      "ownership": [
+        { "kind": "file", "path": "core/admin.php" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 51, "note": "禁言系统", "quote": "禁言系统 — 支持按用户 / 游客昵称 / IP 禁言，可按房间隔离，支持设置过期时间" },
+        { "path": "设计文档/开发文档.md", "line": 55, "note": "公告系统", "quote": "公告系统 — 支持创建公告和欢迎消息，可绑定到指定聊天室，支持优先级排序和轮播展示" },
+        { "path": "设计文档/开发文档.md", "line": 56, "note": "安全日志", "quote": "安全日志 — 记录登录、注册等关键操作的 IP 和请求数据" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 2, "column": 2 }
+    },
+    {
+      "id": "upload-media",
+      "name": "上传与媒体",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "头像/贴纸/图片消息上传。存储分流规则：头像与贴纸不使用图床（本地存储）；图片消息本地存储时走客户端开源压缩，使用图床时交给图床 API 压缩（服务端不再处理）。图床对接 img.scdn.io v1 API。",
+      "ownership": [
+        { "kind": "file", "path": "core/upload.php" },
+        { "kind": "directory", "path": "uploads" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 73, "note": "压缩分流规则", "quote": "头像和贴纸不使用图床，图片消息做一个判断，当使用本地存储时，使用客户端压缩，使用图床默认API压缩" },
+        { "path": "设计文档/失控的防御系统图片API文档.md", "line": 117, "note": "图床上传字段规范", "quote": "image — File — 二选一 — 要上传的图片或短视频文件" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 2, "column": 3 }
+    },
+    {
+      "id": "security",
+      "name": "安全机制",
+      "kind": "local",
+      "role": "security",
+      "responsibility": "API 签名验证（密钥混淆传输）、登录保护（连续失败触发验证码、阈值锁定）、邮件频率限制、SQL 注入/XSS/CSRF 全量防护、越权校验、安全日志记录。上线前按安全审核维度自查。",
+      "ownership": [
+        { "kind": "file", "path": "core/security.php" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 63, "note": "签名验证", "quote": "API 签名验证 — 前后端通信使用签名，密钥混淆传输" },
+        { "path": "设计文档/开发文档.md", "line": 65, "note": "登录保护", "quote": "登录保护 — 连续失败后触发验证码，超过阈值自动锁定" },
+        { "path": "设计文档/前后端代码安全审核AI提示词.md", "line": 3, "note": "安全审核维度", "quote": "检查是否存在 SQL 注入、XSS（跨站脚本）、CSRF（跨站请求伪造）漏洞" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 1, "column": 2 }
+    },
+    {
+      "id": "db-layer",
+      "name": "跨引擎数据层",
+      "kind": "local",
+      "role": "database",
+      "responsibility": "基于 PDO 的 SQLite/MySQL/PostgreSQL 三引擎适配：统一占位符、分页与 upsert 方言封装、schema 初始化与迁移、按需懒加载。数据库结构简单、跨引擎搜索能力一致。",
+      "ownership": [
+        { "kind": "file", "path": "core/db.php" },
+        { "kind": "directory", "path": "data" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 8, "note": "三引擎兼容", "quote": "支持 SQLite、MySQL 和 PostgreSQL，数据库结构和搜索能力保持跨引擎兼容" },
+        { "path": "设计文档/开发文档.md", "line": 11, "note": "结构简单、懒加载", "quote": "站点设置、聊天附件和用户按需懒加载，数据库结构简单，负载能力强" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 3, "column": 1 }
+    },
+    {
+      "id": "plugin-system",
+      "name": "插件机制",
+      "kind": "local",
+      "role": "backend",
+      "responsibility": "插件 Hook、路由注册、后台页面挂载、资源合并、在线安装更新与统一计划任务，支撑 AI 二次开发与低成本功能扩展。",
+      "ownership": [
+        { "kind": "file", "path": "core/plugin.php" },
+        { "kind": "directory", "path": "plugins" }
+      ],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 10, "note": "插件能力清单", "quote": "插件机制支持 Hook、路由、后台页面、资源合并、在线安装更新和统一计划任务" }
+      ],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 3, "column": 2 }
+    },
+    {
+      "id": "imgbed-api",
+      "name": "失控的防御系统图床",
+      "kind": "external",
+      "role": "generic",
+      "roleAssessment": {
+        "basis": "out-of-taxonomy",
+        "note": "外部图片托管 API（img.scdn.io /api/v1.php），不属于 frontend/backend/database 等本地职责分类。"
+      },
+      "responsibility": "图片消息可选的图床存储：POST /api/v1.php 上传（字段 image / image_url），由图床服务端完成压缩与 CDN 分发，返回 url 供消息嵌入。",
+      "ownership": [],
+      "evidence": [],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 4, "column": 3 }
+    },
+    {
+      "id": "smtp-mail",
+      "name": "邮件发送服务",
+      "kind": "external",
+      "role": "generic",
+      "roleAssessment": {
+        "basis": "out-of-taxonomy",
+        "note": "外部 SMTP/邮件服务，用于注册验证码与密码找回邮件，不属于本地模块职责分类。"
+      },
+      "responsibility": "发送注册验证码与密码找回邮件；配合邮件频率限制防滥用。",
+      "ownership": [],
+      "evidence": [],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 4, "column": 0 }
+    },
+    {
+      "id": "ip-api",
+      "name": "ip-api.com 归属地",
+      "kind": "external",
+      "role": "generic",
+      "roleAssessment": {
+        "basis": "out-of-taxonomy",
+        "note": "外部 IP 归属地查询服务（ip-api.com），仅管理员侧使用，不属于本地模块职责分类。"
+      },
+      "responsibility": "管理员查看用户 IP 归属地时的外部查询来源。",
+      "ownership": [],
+      "evidence": [],
+      "status": "supported",
+      "openQuestions": [],
+      "layout": { "row": 4, "column": 2 }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "r-ui-entry",
+      "from": "web-ui", "to": "app-entry",
+      "label": "AJAX 请求与页面访问",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 12, "note": "AJAX 交互" }],
+      "kind": "request", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-entry-ui",
+      "from": "app-entry", "to": "web-ui",
+      "label": "返回页面 / JSON 响应",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 7, "note": "单核心入口统一响应" }],
+      "kind": "result", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-ui-realtime",
+      "from": "web-ui", "to": "realtime",
+      "label": "轮询 / WebSocket 拉取新消息",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 20, "note": "心跳保活与断线降级轮询" }],
+      "kind": "request", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-realtime-ui",
+      "from": "realtime", "to": "web-ui",
+      "label": "推送新消息与在线状态",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 44, "note": "实时在线列表" }],
+      "kind": "event", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-realtime-chat",
+      "from": "realtime", "to": "chat-core",
+      "label": "读取增量消息 / 广播",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 20, "note": "实时消息推送" }],
+      "kind": "request", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-entry-security",
+      "from": "app-entry", "to": "security",
+      "label": "签名校验 / 频率限制 / 登录保护",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 63, "note": "API 签名验证" }],
+      "kind": "control", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-chat-security",
+      "from": "chat-core", "to": "security",
+      "label": "敏感词 / 禁言 / 发言频率检查",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 52, "note": "敏感词过滤与频率限制" }],
+      "kind": "control", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-chat-db",
+      "from": "chat-core", "to": "db-layer",
+      "label": "消息与房间持久化",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 8, "note": "跨引擎兼容" }],
+      "kind": "dependency", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-user-db",
+      "from": "user-system", "to": "db-layer",
+      "label": "用户 / 会话 / 验证码持久化",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 30, "note": "用户系统数据" }],
+      "kind": "dependency", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-admin-db",
+      "from": "admin-console", "to": "db-layer",
+      "label": "管理数据读写",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 49, "note": "管理后台功能清单" }],
+      "kind": "dependency", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-user-mail",
+      "from": "user-system", "to": "smtp-mail",
+      "label": "发送验证码 / 找回邮件",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 31, "note": "邮箱验证码校验" }],
+      "kind": "request", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-upload-imgbed",
+      "from": "upload-media", "to": "imgbed-api",
+      "label": "图片消息图床上传（可选）",
+      "evidence": [{ "path": "设计文档/失控的防御系统图片API文档.md", "line": 216, "note": "POST 上传接口", "quote": "curl -X POST -F \"image=@/path/to/your/image.jpg\" https://img.scdn.io/api/v1.php" }],
+      "kind": "request", "visibility": "overview",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-security-db",
+      "from": "security", "to": "db-layer",
+      "label": "安全日志 / 失败计数存储",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 56, "note": "安全日志记录" }],
+      "kind": "dependency", "visibility": "detail",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-upload-db",
+      "from": "upload-media", "to": "db-layer",
+      "label": "附件记录",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 11, "note": "聊天附件按需懒加载" }],
+      "kind": "dependency", "visibility": "detail",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-user-ipapi",
+      "from": "user-system", "to": "ip-api",
+      "label": "查询 IP 归属地（管理员）",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 45, "note": "ip-api.com", "quote": "IP 归属地 — 管理员可查看用户 IP 归属地（通过 ip-api.com）" }],
+      "kind": "request", "visibility": "detail",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-plugin-entry",
+      "from": "plugin-system", "to": "app-entry",
+      "label": "注册 Hook / 路由 / 后台页面",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 10, "note": "插件机制能力" }],
+      "kind": "control", "visibility": "detail",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-chat-user",
+      "from": "chat-core", "to": "user-system",
+      "label": "读取角色 / 禁言 / 游客身份",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 36, "note": "角色体系" }],
+      "kind": "dependency", "visibility": "detail",
+      "status": "supported", "openQuestions": []
+    },
+    {
+      "id": "r-admin-user",
+      "from": "admin-console", "to": "user-system",
+      "label": "角色变更 / 称号设置",
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 50, "note": "用户管理" }],
+      "kind": "request", "visibility": "detail",
+      "status": "supported", "openQuestions": []
+    }
+  ],
+  "constraints": [
+    {
+      "id": "c-no-third-party-deps",
+      "name": "硬性规则：禁止任何第三方框架与 Composer 包；需引入依赖必须先建议并等待确认",
+      "note": "开发文档明确列为硬性规则，用户本次需求再次强调纯原生、无框架、无依赖。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 69, "note": "硬性规则原文", "quote": "硬性规则：本项目禁止使用其他任何第三方框架和 Composer 包" }],
+      "verification": "检查项目无 composer.json/vendor 目录与外部库引用；代码评审确认全部为标准库实现"
+    },
+    {
+      "id": "c-single-root-entry",
+      "name": "根目录 index.php 单一入口，无需指定目录，精简代码，适合低成本部署",
+      "note": "用户本次需求：网站入口文件在根目录、不需要指定目录；开发文档要求单核心代码文件、开箱即用。",
+      "origin": "user",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "modules",
+      "modules": ["app-entry"],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 7, "note": "单核心文件要求", "quote": "纯原生 PHP，单核心代码文件，无框架和 Composer 依赖，部署与维护简单" }],
+      "verification": "在虚拟主机根目录直接部署验证可访问；无额外目录层级要求"
+    },
+    {
+      "id": "c-multi-db-compat",
+      "name": "同时支持 SQLite、MySQL、PostgreSQL，结构与搜索能力跨引擎兼容",
+      "note": "开发文档特点要求；用户本次需求再次确认三引擎支持。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "modules",
+      "modules": ["db-layer"],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 8, "note": "三引擎兼容要求", "quote": "支持 SQLite、MySQL 和 PostgreSQL，数据库结构和搜索能力保持跨引擎兼容" }],
+      "verification": "三种引擎分别初始化 schema 并跑通注册、发言、历史消息分页主流程"
+    },
+    {
+      "id": "c-responsive-legacy-browser",
+      "name": "AJAX 交互 + 响应式布局，兼容 PC/移动端与落后内核浏览器",
+      "note": "用户本次需求明确要求落后内核浏览器也能正常访问；开发文档要求兼顾 PC 与移动端。",
+      "origin": "user",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "modules",
+      "modules": ["web-ui"],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 12, "note": "响应式要求", "quote": "支持 AJAX 交互和响应式布局，兼顾 PC 与移动端使用体验" }],
+      "verification": "用旧内核浏览器（如旧版国产浏览器/IE 内核兼容模式）访问验证布局与 AJAX 降级"
+    },
+    {
+      "id": "c-ow-ui-style",
+      "name": "自研扁平化 UI（类名 ow 开头）；禁止渐变色、Emoji 充当功能图标、大面积毛玻璃",
+      "note": "开发文档定义 UI 风格，色彩搭配方案定义视觉禁忌与 WCAG AA 对比度要求。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "modules",
+      "modules": ["web-ui"],
+      "relationships": [],
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 2, "note": "UI 命名约定", "quote": "采用自研扁平化 UI 设计（类名为ow开头）" },
+        { "path": "设计文档/色彩搭配方案.md", "line": 73, "note": "视觉禁忌", "quote": "禁止在背景或按钮上使用 linear-gradient（渐变色）" }
+      ],
+      "verification": "CSS 检查无 linear-gradient / backdrop-filter；组件类名均为 ow 前缀；对比度 ≥4.5:1"
+    },
+    {
+      "id": "c-image-storage-split",
+      "name": "头像/贴纸不使用图床；图片消息本地存储走客户端压缩，图床存储走 API 压缩",
+      "note": "开发文档其他章节的明确分流规则。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "modules",
+      "modules": ["upload-media"],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 73, "note": "分流规则原文", "quote": "头像和贴纸不使用图床，图片消息做一个判断，当使用本地存储时，使用客户端压缩，使用图床默认API压缩" }],
+      "verification": "上传头像/贴纸时不发起图床请求；图片消息按配置分别走客户端压缩或图床 API"
+    },
+    {
+      "id": "c-security-audit-before-prod",
+      "name": "上线前按安全审核维度自查：注入/XSS/CSRF/越权/限流/敏感数据明文",
+      "note": "设计文档中的安全审核提示词定义了审核维度与输出要求。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/前后端代码安全审核AI提示词.md", "line": 3, "note": "审核维度", "quote": "检查是否存在 SQL 注入、XSS（跨站脚本）、CSRF（跨站请求伪造）漏洞" }],
+      "verification": "交付前输出按致命/严重/建议分级的问题清单并完成修复验证"
+    },
+    {
+      "id": "c-version-and-github-push",
+      "name": "每次修改递增版本号，并与旧项目一样推送 GitHub",
+      "note": "用户本次需求明确要求（当前会话用户指令）。",
+      "origin": "user",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/其他选择.md", "note": "该文件为空；此规则来自用户本次会话指令：每次修改除了增加版本号还需要和旧项目一样的推送 GitHub" }],
+      "verification": "每次交付检查版本号递增记录与 git 推送日志"
+    },
+    {
+      "id": "c-realtime-transport-conflict",
+      "name": "已裁决：Workerman WebSocket + Redis 频率限制 与 零依赖硬性规则的冲突",
+      "note": "用户已于 2026-09-26 裁决：主通道采用 AJAX 长轮询（零依赖），限流以数据库/文件计数替代 Redis。原冲突规则由 c-long-polling-transport 取代。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "superseded",
+      "scope": "modules",
+      "modules": ["realtime", "chat-core"],
+      "relationships": [],
+      "supersededBy": "c-long-polling-transport",
+      "evidence": [
+        { "path": "设计文档/开发文档.md", "line": 2, "note": "Workerman 依赖表述", "quote": "基于原生 PHP 8.1+ + SQLite、MySQL 和 PostgreSQL+ Workerman WebSocket 构建" },
+        { "path": "设计文档/开发文档.md", "line": 64, "note": "Redis 限流表述", "quote": "频率限制 — 基于 Redis 的消息发送频率限制" },
+        { "path": "设计文档/开发文档.md", "line": 69, "note": "零依赖硬性规则", "quote": "硬性规则：本项目禁止使用其他任何第三方框架和 Composer 包" }
+      ],
+      "verification": "用户裁决后在地图中更新 realtime 模块职责与状态"
+    },
+    {
+      "id": "c-long-polling-transport",
+      "name": "实时主通道采用 AJAX 长轮询 + 心跳 + 断线降级短轮询；频率限制以数据库/文件计数实现（替代 Redis）",
+      "note": "用户 2026-09-26 对 c-realtime-transport-conflict 的裁决结果，优先满足零依赖硬性规则。",
+      "origin": "user",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "modules",
+      "modules": ["realtime", "chat-core"],
+      "relationships": [],
+      "evidence": [{ "path": "设计文档/开发文档.md", "line": 69, "note": "裁决依据：零依赖硬性规则", "quote": "硬性规则：本项目禁止使用其他任何第三方框架和 Composer 包" }],
+      "verification": "不引入 Workerman/Redis；长轮询接口压测与断线降级验证；限流计数表功能验证"
+    }
+  ]
+}

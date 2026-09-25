@@ -1,0 +1,9 @@
+# 依赖忽略：本项目零 Composer 依赖，无 vendor
+/data/
+!/data/.gitkeep
+/uploads/
+!/uploads/.gitkeep
+*.log
+.DS_Store
+Thumbs.db
+

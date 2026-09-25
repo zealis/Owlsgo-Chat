@@ -1,0 +1,497 @@
+/* ==========================================================================
+   Owlsgo-Chat 自研扁平化 UI（ow 前缀）
+   色彩规范：经典蓝 #00A0E9 / 深蓝 #0078D4，禁渐变、禁毛玻璃、禁 Emoji 图标依赖
+   兼容旧内核浏览器：flex 布局 + 媒体查询，无 CSS Grid 依赖（渐进增强）
+   ========================================================================== */
+
+:root {
+    --ow-primary: #00A0E9;
+    --ow-primary-dark: #0078D4;
+    --ow-bg: #FFFFFF;
+    --ow-bg-sub: #F5F7FA;
+    --ow-border: #E0E4E8;
+    --ow-text: #333333;
+    --ow-text-sub: #999999;
+    --ow-text-title: #1A1A1A;
+    --ow-green: #52C41A;
+    --ow-yellow: #FAAD14;
+    --ow-red: #F5222D;
+    --ow-orange: #FF7D00;
+    --ow-blue-light: #E6F7FF;
+    --ow-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --ow-mono: Consolas, Monaco, "Courier New", monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    font-family: var(--ow-font);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ow-text);
+    background: var(--ow-bg-sub);
+}
+a { color: var(--ow-primary); text-decoration: none; }
+a:hover { color: var(--ow-primary-dark); }
+img { max-width: 100%; }
+ul { list-style: none; }
+button { font-family: inherit; cursor: pointer; }
+
+/* ---------- 按钮 ---------- */
+.ow-btn {
+    display: inline-block;
+    padding: 8px 18px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.4;
+    background: var(--ow-bg-sub);
+    color: var(--ow-text);
+    transition: background .15s;
+}
+.ow-btn-primary { background: var(--ow-primary); color: #fff; }
+.ow-btn-primary:hover { background: var(--ow-primary-dark); }
+.ow-btn-primary:active { background: #005a9e; }
+.ow-btn-ghost { background: transparent; border-color: var(--ow-border); }
+.ow-btn-ghost:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
+.ow-btn-block { display: block; width: 100%; text-align: center; }
+.ow-btn-danger { background: var(--ow-red); color: #fff; }
+.ow-btn-danger:hover { background: #cf1322; }
+.ow-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+.ow-icon-btn {
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    text-align: center;
+    border-radius: 6px;
+    color: var(--ow-text-sub);
+}
+.ow-icon-btn:hover { background: var(--ow-bg-sub); color: var(--ow-primary-dark); }
+.ow-ico { vertical-align: middle; }
+
+/* ---------- 表单 ---------- */
+.ow-form-item { margin-bottom: 14px; }
+.ow-form-item label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--ow-text); }
+.ow-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--ow-border);
+    border-radius: 6px;
+    background: var(--ow-bg-sub);
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--ow-text);
+}
+.ow-input:focus { outline: none; border-color: var(--ow-primary); background: #fff; }
+.ow-form-msg { margin-top: 10px; font-size: 13px; min-height: 20px; }
+.ow-captcha-row { display: flex; display: -webkit-flex; gap: 8px; }
+.ow-captcha-row .ow-input { flex: 1; -webkit-flex: 1; }
+.ow-captcha-row img { height: 38px; border: 1px solid var(--ow-border); border-radius: 6px; cursor: pointer; }
+
+.ow-alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; }
+.ow-alert-error { background: #fff1f0; color: var(--ow-red); border: 1px solid #ffa39e; }
+
+/* ---------- 标签 ---------- */
+.ow-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    font-size: 10px;
+    line-height: 16px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+.ow-tag-green { background: #f6ffed; color: var(--ow-green); border: 1px solid #b7eb8f; }
+.ow-tag-admin { background: #fff1f0; color: var(--ow-red); border: 1px solid #ffa39e; }
+.ow-tag-vip { background: #fff7e6; color: var(--ow-orange); border: 1px solid #ffd591; }
+.ow-tag-member { background: var(--ow-blue-light); color: var(--ow-primary-dark); border: 1px solid #91d5ff; }
+.ow-tag-guest { background: var(--ow-bg-sub); color: var(--ow-text-sub); border: 1px solid var(--ow-border); }
+.ow-tag-title { background: #fffbe6; color: #d48806; border: 1px solid #ffe58f; }
+.ow-badge-num {
+    display: inline-block;
+    min-width: 18px;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    background: var(--ow-border);
+    color: var(--ow-text-sub);
+}
+
+/* ---------- 头像 ---------- */
+.ow-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--ow-border);
+    color: #fff;
+    font-size: 16px;
+    text-align: center;
+    line-height: 40px;
+    overflow: hidden;
+    flex-shrink: 0;
+    -webkit-flex-shrink: 0;
+}
+.ow-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ow-avatar-sm { width: 28px; height: 28px; line-height: 28px; font-size: 12px; }
+
+/* ==========================================================================
+   登录 / 注册 / 安装
+   ========================================================================== */
+.ow-auth-body {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    justify-content: center; -webkit-justify-content: center;
+    min-height: 100%;
+    padding: 20px;
+}
+.ow-auth-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--ow-bg);
+    border: 1px solid var(--ow-border);
+    border-radius: 10px;
+    padding: 32px 28px;
+}
+.ow-auth-logo { text-align: center; margin-bottom: 24px; }
+.ow-auth-logo img { width: 64px; height: 64px; }
+.ow-auth-logo h1 { font-size: 24px; font-weight: 600; color: var(--ow-text-title); line-height: 1.3; margin-top: 10px; }
+.ow-auth-logo p { font-size: 12px; color: var(--ow-text-sub); }
+.ow-auth-links { display: flex; display: -webkit-flex; justify-content: space-between; -webkit-justify-content: space-between; margin-top: 16px; font-size: 13px; }
+
+/* ==========================================================================
+   聊天主界面
+   ========================================================================== */
+.ow-chat-body { overflow: hidden; }
+.ow-layout {
+    display: flex; display: -webkit-flex;
+    height: 100vh;
+    max-width: 1440px;
+    margin: 0 auto;
+    background: var(--ow-bg);
+}
+
+/* 左侧栏 */
+.ow-sidebar {
+    width: 240px;
+    border-right: 1px solid var(--ow-border);
+    background: var(--ow-bg-sub);
+    display: flex; display: -webkit-flex;
+    flex-direction: column; -webkit-flex-direction: column;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+}
+.ow-brand {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--ow-border);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ow-text-title);
+}
+.ow-brand img { width: 28px; height: 28px; }
+.ow-side-title {
+    padding: 12px 16px 6px;
+    font-size: 12px;
+    color: var(--ow-text-sub);
+}
+.ow-room-list { flex: 1; -webkit-flex: 1; overflow-y: auto; padding: 0 8px; }
+.ow-room-item {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--ow-text);
+}
+.ow-room-item:hover { background: var(--ow-blue-light); }
+.ow-room-item.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
+.ow-room-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--ow-primary);
+    color: #fff;
+    text-align: center;
+    line-height: 32px;
+    font-size: 14px;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+}
+.ow-room-item .ow-room-lock { font-size: 12px; color: var(--ow-text-sub); }
+.ow-me {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--ow-border);
+}
+.ow-me-name { font-weight: 600; color: var(--ow-text-title); }
+.ow-side-actions { display: flex; display: -webkit-flex; gap: 8px; padding: 0 16px 14px; flex-wrap: wrap; -webkit-flex-wrap: wrap; }
+
+/* 主区域 */
+.ow-main {
+    flex: 1; -webkit-flex: 1;
+    display: flex; display: -webkit-flex;
+    flex-direction: column; -webkit-flex-direction: column;
+    min-width: 0;
+    position: relative;
+}
+.ow-topbar {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ow-border);
+    background: var(--ow-bg);
+}
+.ow-room-name { font-size: 18px; font-weight: 600; color: var(--ow-text-title); line-height: 1.3; }
+.ow-latency { font-size: 12px; color: var(--ow-green); }
+.ow-topbar .ow-icon-btn:last-child { margin-left: auto; }
+
+/* 公告轮播 */
+.ow-announce {
+    background: #fffbe6;
+    border-bottom: 1px solid #ffe58f;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: #d48806;
+    overflow: hidden;
+    height: 30px;
+    position: relative;
+}
+.ow-announce-track { transition: transform .4s; }
+.ow-announce-item { height: 18px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 消息列表 */
+.ow-messages {
+    flex: 1; -webkit-flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    background: var(--ow-bg);
+}
+.ow-load-more {
+    text-align: center;
+    font-size: 12px;
+    color: var(--ow-primary);
+    padding: 6px;
+    cursor: pointer;
+}
+.ow-load-more:hover { color: var(--ow-primary-dark); }
+.ow-msg {
+    display: flex; display: -webkit-flex;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.ow-msg-body { min-width: 0; max-width: 78%; }
+.ow-msg-meta { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 2px; }
+.ow-msg-meta .ow-msg-nick { color: var(--ow-text); font-weight: 600; cursor: pointer; margin-right: 4px; }
+.ow-msg-meta .ow-msg-nick:hover { color: var(--ow-primary-dark); }
+.ow-msg-meta .ow-msg-time { margin-left: 6px; }
+.ow-msg-content {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--ow-bg-sub);
+    border: 1px solid var(--ow-border);
+    word-break: break-word;
+    white-space: pre-wrap;
+    position: relative;
+}
+.ow-msg.mine { flex-direction: row-reverse; -webkit-flex-direction: row-reverse; }
+.ow-msg.mine .ow-msg-body { text-align: right; }
+.ow-msg.mine .ow-msg-content { background: var(--ow-blue-light); border-color: #91d5ff; text-align: left; }
+.ow-msg.mention .ow-msg-content { background: #fffbe6; border-color: #ffe58f; }
+.ow-msg.private .ow-msg-content { background: #f9f0ff; border-color: #d3adf7; }
+.ow-msg.private .ow-msg-meta::after { content: "[私信]"; color: #722ed1; margin-left: 6px; font-size: 10px; }
+.ow-msg.system { justify-content: center; -webkit-justify-content: center; }
+.ow-msg.system .ow-msg-content { background: transparent; border: none; color: var(--ow-text-sub); font-size: 12px; padding: 2px 8px; }
+.ow-msg.recalled .ow-msg-content { background: transparent; border: 1px dashed var(--ow-border); color: var(--ow-text-sub); font-size: 12px; }
+.ow-msg-img { max-width: 240px; max-height: 240px; border-radius: 6px; cursor: zoom-in; display: block; }
+.ow-msg-sticker { max-width: 120px; max-height: 120px; border-radius: 6px; cursor: zoom-in; }
+.ow-msg-actions { display: none; font-size: 12px; margin-top: 2px; }
+.ow-msg:hover .ow-msg-actions { display: block; }
+.ow-msg-actions a { margin-right: 8px; font-size: 12px; }
+
+/* 输入区 */
+.ow-inputbar { border-top: 1px solid var(--ow-border); background: var(--ow-bg); padding: 8px 12px 12px; }
+.ow-toolbar { display: flex; display: -webkit-flex; gap: 4px; margin-bottom: 6px; }
+.ow-input-row { display: flex; display: -webkit-flex; gap: 10px; align-items: flex-end; -webkit-align-items: flex-end; }
+.ow-input-row .ow-input { resize: none; max-height: 120px; background: var(--ow-bg-sub); }
+.ow-send { width: 46px; height: 40px; padding: 0; font-size: 18px; border-radius: 50%; flex-shrink: 0; -webkit-flex-shrink: 0; }
+
+/* 表情面板 */
+.ow-emoji-panel {
+    position: absolute;
+    bottom: 110px;
+    left: 12px;
+    width: 320px;
+    max-height: 300px;
+    background: var(--ow-bg);
+    border: 1px solid var(--ow-border);
+    border-radius: 8px;
+    overflow: hidden;
+    z-index: 30;
+}
+.ow-emoji-tabs { display: flex; display: -webkit-flex; border-bottom: 1px solid var(--ow-border); }
+.ow-emoji-tab { flex: 1; -webkit-flex: 1; padding: 8px; text-align: center; font-size: 13px; background: var(--ow-bg-sub); border: none; color: var(--ow-text-sub); }
+.ow-emoji-tab.active { background: var(--ow-bg); color: var(--ow-primary-dark); font-weight: 600; }
+.ow-emoji-grid { display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; padding: 8px; max-height: 240px; overflow-y: auto; }
+.ow-emoji-item { width: 34px; height: 34px; line-height: 34px; text-align: center; font-size: 20px; cursor: pointer; border-radius: 4px; }
+.ow-emoji-item:hover { background: var(--ow-blue-light); }
+.ow-sticker-item { width: 64px; height: 64px; margin: 4px; cursor: pointer; border-radius: 6px; border: 1px solid var(--ow-border); object-fit: cover; }
+.ow-sticker-item:hover { border-color: var(--ow-primary); }
+
+/* 右侧在线列表 */
+.ow-online {
+    width: 220px;
+    border-left: 1px solid var(--ow-border);
+    background: var(--ow-bg-sub);
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    overflow-y: auto;
+}
+.ow-online-item {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+}
+.ow-online-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ow-green); flex-shrink: 0; -webkit-flex-shrink: 0; }
+.ow-online-name { flex: 1; -webkit-flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ow-online-name:hover { color: var(--ow-primary-dark); }
+
+/* ---------- 弹层 ---------- */
+.ow-modal-mask {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, .45);
+    z-index: 100;
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    justify-content: center; -webkit-justify-content: center;
+    padding: 20px;
+}
+.ow-modal {
+    background: var(--ow-bg);
+    border-radius: 10px;
+    padding: 24px;
+    width: 100%;
+    max-width: 380px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+.ow-modal h3 { font-size: 18px; font-weight: 600; color: var(--ow-text-title); margin-bottom: 16px; }
+.ow-modal-close { float: right; border: none; background: none; font-size: 18px; color: var(--ow-text-sub); }
+
+.ow-img-viewer {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, .8);
+    z-index: 200;
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    justify-content: center; -webkit-justify-content: center;
+    cursor: zoom-out;
+}
+.ow-img-viewer img { max-width: 92%; max-height: 92%; }
+
+.ow-toast {
+    position: fixed;
+    top: 20px; left: 50%;
+    transform: translateX(-50%);
+    -webkit-transform: translateX(-50%);
+    background: var(--ow-text-title);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 300;
+}
+
+/* ==========================================================================
+   管理后台
+   ========================================================================== */
+.ow-admin-layout { display: flex; display: -webkit-flex; min-height: 100vh; }
+.ow-admin-side {
+    width: 220px;
+    background: var(--ow-bg);
+    border-right: 1px solid var(--ow-border);
+    padding: 16px 12px;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+}
+.ow-admin-brand { font-size: 11px; color: var(--ow-text-sub); letter-spacing: 2px; padding: 4px 8px 14px; }
+.ow-admin-brand strong { font-size: 20px; color: var(--ow-text-title); letter-spacing: 0; }
+.ow-admin-menu { margin-top: 14px; }
+.ow-admin-menu li {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--ow-text);
+    font-size: 14px;
+}
+.ow-admin-menu li:hover { background: var(--ow-bg-sub); }
+.ow-admin-menu li.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
+.ow-admin-ico { font-size: 15px; }
+.ow-admin-main { flex: 1; -webkit-flex: 1; padding: 24px 28px; min-width: 0; }
+.ow-admin-main h2 { font-size: 24px; font-weight: 600; color: var(--ow-text-title); line-height: 1.3; }
+.ow-admin-main .ow-admin-desc { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 20px; }
+.ow-card {
+    background: var(--ow-bg);
+    border: 1px solid var(--ow-border);
+    border-radius: 8px;
+    padding: 18px;
+    margin-bottom: 16px;
+}
+.ow-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--ow-bg); }
+.ow-table th, .ow-table td { padding: 8px 10px; border-bottom: 1px solid var(--ow-border); text-align: left; }
+.ow-table th { color: var(--ow-text-sub); font-weight: 400; font-size: 12px; background: var(--ow-bg-sub); }
+.ow-table tr:hover td { background: var(--ow-blue-light); }
+.ow-table .ow-input { padding: 4px 8px; font-size: 13px; }
+.ow-form-row { display: flex; display: -webkit-flex; gap: 10px; flex-wrap: wrap; -webkit-flex-wrap: wrap; align-items: flex-end; -webkit-align-items: flex-end; }
+.ow-form-row .ow-form-item { margin-bottom: 10px; min-width: 140px; }
+
+/* ---------- 响应式 ---------- */
+.ow-only-mobile { display: none; }
+
+@media (max-width: 960px) {
+    .ow-online {
+        position: fixed;
+        right: -240px; top: 0; bottom: 0;
+        z-index: 90;
+        transition: right .2s;
+        width: 220px;
+    }
+    .ow-online.open { right: 0; }
+}
+
+@media (max-width: 720px) {
+    .ow-only-mobile { display: block; }
+    .ow-sidebar {
+        position: fixed;
+        left: -260px; top: 0; bottom: 0;
+        z-index: 90;
+        transition: left .2s;
+        width: 250px;
+    }
+    .ow-sidebar.open { left: 0; }
+    .ow-msg-body { max-width: 85%; }
+    .ow-msg-img { max-width: 180px; max-height: 180px; }
+    .ow-emoji-panel { width: 92%; left: 4%; }
+    .ow-admin-layout { flex-direction: column; -webkit-flex-direction: column; }
+    .ow-admin-side { width: 100%; border-right: none; border-bottom: 1px solid var(--ow-border); }
+    .ow-admin-menu { display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; gap: 4px; }
+    .ow-admin-menu li { padding: 6px 10px; font-size: 13px; }
+    .ow-admin-main { padding: 16px; }
+    .ow-auth-card { padding: 24px 18px; }
+    .ow-auth-logo h1 { font-size: 20px; }
+    body { font-size: 14px; }
+}
+
+/* 旧内核兼容：无 flex 时的兜底（极简降级，保证可读可用） */
+@media screen and (max-width: 0\0) { /* IE 专属 hack，仅兜底 */
+    .ow-layout, .ow-sidebar, .ow-main { display: block; }
+}
