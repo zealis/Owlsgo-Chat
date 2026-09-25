@@ -11,6 +11,9 @@
 
 切换 MySQL / PostgreSQL：编辑 `core/config.php` 的 `db` 段，删除 `data/install.lock` 后重新访问安装向导。
 
+> 本地调试推荐 phpStudy / 宝塔（Nginx + PHP-FPM，多进程），可正常验证长轮询并发推送。
+> 若用 `php -S` 内置服务器：Windows 下它是单进程（`PHP_CLI_SERVER_WORKERS` 在 Windows 不生效），长轮询会占住唯一进程导致其他请求排队，仅适合单机快速试跑，不适合验证实时推送。
+
 ## 功能
 
 - **聊天核心**：多聊天室（公开 / 密码私密 / 限定角色）、AJAX 长轮询实时推送 + 心跳 + 断线降级短轮询、普通 / @提及 / 私信 / 系统消息、3 分钟撤回（管理员与房主不限）、滚动加载历史、图片消息（粘贴 / 上传 / 大图预览）、Emoji 面板 + 自定义贴纸收藏、新消息提示音
@@ -42,6 +45,3 @@ uploads/           头像 / 贴纸 / 图片（运行时生成）
 - 插件示例：在 `plugins/demo/` 放 `plugin.json` 与 `main.php`，`Plugin::on('message.after_send', fn)` 即可挂载钩子
 - 前端为纯 ES5 + XHR，无构建步骤，改完即生效；兼容落后内核浏览器
 
-## 硬性规则
-
-本项目**禁止任何第三方框架与 Composer 包**；确需引入依赖请先提出建议并等待确认。
