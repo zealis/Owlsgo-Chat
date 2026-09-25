@@ -5,41 +5,91 @@
 (function (w) {
     'use strict';
 
-    /* ---------- 纯 JS MD5（用于 API 签名 sign = md5(key|ts|action)） ---------- */
+    /* ---------- 纯 JS MD5（标准实现，用于 API 签名 sign = md5(key|ts|action)） ----------
+       注意：MD5 的 64 个 T 常量必须逐一写死，不能用公式推导，否则与服务端 md5 不一致。 */
     function md5(s) {
-        function L(a, b) { return (a << b) | (a >>> (32 - b)); }
-        function K(x, y) { var l = (x & 0xFFFF) + (y & 0xFFFF), m = (x >> 16) + (y >> 16) + (l >> 16); return (m << 16) | (l & 0xFFFF); }
-        function q(f, a, b, x, t, s) { return K(L(K(K(a, f), K(x, t)), s), b); }
-        function F(a, b, c, d, x, t, s) { return q((b & c) | (~b & d), a, b, x, t, s); }
-        function G(a, b, c, d, x, t, s) { return q((b & d) | (c & ~d), a, b, x, t, s); }
-        function H(a, b, c, d, x, t, s) { return q(b ^ c ^ d, a, b, x, t, s); }
-        function I(a, b, c, d, x, t, s) { return q(c ^ (b | ~d), a, b, x, t, s); }
-        function toWords(str) {
-            var i, n = str.length, out = [];
-            for (i = 0; i < n * 8; i += 8) out[i >> 5] = (out[i >> 5] || 0) | ((str.charCodeAt(i / 8) & 0xFF) << (i % 32));
+        function safeAdd(x, y) {
+            var lsw = (x & 0xffff) + (y & 0xffff);
+            var msw = (x >> 16) + (y >> 16) + (lsw >> 16);
+            return (msw << 16) | (lsw & 0xffff);
+        }
+        function rol(num, cnt) { return (num << cnt) | (num >>> (32 - cnt)); }
+        function cmn(q, a, b, x, s, t) { return safeAdd(rol(safeAdd(safeAdd(a, q), safeAdd(x, t)), s), b); }
+        function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
+        function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
+        function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+        function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+        function cycle(x, k) {
+            var a = x[0], b = x[1], c = x[2], d = x[3];
+            a = ff(a, b, c, d, k[0], 7, -680876936);    d = ff(d, a, b, c, k[1], 12, -389564586);
+            c = ff(c, d, a, b, k[2], 17, 606105819);    b = ff(b, c, d, a, k[3], 22, -1044525330);
+            a = ff(a, b, c, d, k[4], 7, -176418897);    d = ff(d, a, b, c, k[5], 12, 1200080426);
+            c = ff(c, d, a, b, k[6], 17, -1473231341);  b = ff(b, c, d, a, k[7], 22, -45705983);
+            a = ff(a, b, c, d, k[8], 7, 1770035416);    d = ff(d, a, b, c, k[9], 12, -1958414417);
+            c = ff(c, d, a, b, k[10], 17, -42063);      b = ff(b, c, d, a, k[11], 22, -1990404162);
+            a = ff(a, b, c, d, k[12], 7, 1804603682);   d = ff(d, a, b, c, k[13], 12, -40341101);
+            c = ff(c, d, a, b, k[14], 17, -1502002290); b = ff(b, c, d, a, k[15], 22, 1236535329);
+
+            a = gg(a, b, c, d, k[1], 5, -165796510);    d = gg(d, a, b, c, k[6], 9, -1069501632);
+            c = gg(c, d, a, b, k[11], 14, 643717713);   b = gg(b, c, d, a, k[0], 20, -373897302);
+            a = gg(a, b, c, d, k[5], 5, -701558691);    d = gg(d, a, b, c, k[10], 9, 38016083);
+            c = gg(c, d, a, b, k[15], 14, -660478335);  b = gg(b, c, d, a, k[4], 20, -405537848);
+            a = gg(a, b, c, d, k[9], 5, 568446438);     d = gg(d, a, b, c, k[14], 9, -1019803690);
+            c = gg(c, d, a, b, k[3], 14, -187363961);   b = gg(b, c, d, a, k[8], 20, 1163531501);
+            a = gg(a, b, c, d, k[13], 5, -1444681467);  d = gg(d, a, b, c, k[2], 9, -51403784);
+            c = gg(c, d, a, b, k[7], 14, 1735328473);   b = gg(b, c, d, a, k[12], 20, -1926607734);
+
+            a = hh(a, b, c, d, k[5], 4, -378558);       d = hh(d, a, b, c, k[8], 11, -2022574463);
+            c = hh(c, d, a, b, k[11], 16, 1839030562);  b = hh(b, c, d, a, k[14], 23, -35309556);
+            a = hh(a, b, c, d, k[1], 4, -1530992060);   d = hh(d, a, b, c, k[4], 11, 1272893353);
+            c = hh(c, d, a, b, k[7], 16, -155497632);   b = hh(b, c, d, a, k[10], 23, -1094730640);
+            a = hh(a, b, c, d, k[13], 4, 681279174);    d = hh(d, a, b, c, k[0], 11, -358537222);
+            c = hh(c, d, a, b, k[3], 16, -722521979);   b = hh(b, c, d, a, k[6], 23, 76029189);
+            a = hh(a, b, c, d, k[9], 4, -640364487);    d = hh(d, a, b, c, k[12], 11, -421815835);
+            c = hh(c, d, a, b, k[15], 16, 530742520);   b = hh(b, c, d, a, k[2], 23, -995338651);
+
+            a = ii(a, b, c, d, k[0], 6, -198630844);    d = ii(d, a, b, c, k[7], 10, 1126891415);
+            c = ii(c, d, a, b, k[14], 15, -1416354905); b = ii(b, c, d, a, k[5], 21, -57434055);
+            a = ii(a, b, c, d, k[12], 6, 1700485571);   d = ii(d, a, b, c, k[3], 10, -1894986606);
+            c = ii(c, d, a, b, k[10], 15, -1051523);    b = ii(b, c, d, a, k[1], 21, -2054922799);
+            a = ii(a, b, c, d, k[8], 6, 1873313359);    d = ii(d, a, b, c, k[15], 10, -30611744);
+            c = ii(c, d, a, b, k[6], 15, -1560198380);  b = ii(b, c, d, a, k[13], 21, 1309151649);
+            a = ii(a, b, c, d, k[4], 6, -145523070);    d = ii(d, a, b, c, k[11], 10, -1120210379);
+            c = ii(c, d, a, b, k[2], 15, 718787259);    b = ii(b, c, d, a, k[9], 21, -343485551);
+
+            x[0] = safeAdd(a, x[0]); x[1] = safeAdd(b, x[1]);
+            x[2] = safeAdd(c, x[2]); x[3] = safeAdd(d, x[3]);
+        }
+        function blk(s) {
+            var out = [], i;
+            for (i = 0; i < 64; i += 4) {
+                out[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) +
+                    (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24);
+            }
             return out;
         }
-        function hex(n) { var s = '', i; for (i = 0; i < 4; i++) s += ('0' + ((n >> (i * 8)) & 0xFF).toString(16)).slice(-2); return s; }
-        var x = toWords(unescape(encodeURIComponent(s))), len = s.length, a = 1732584193, b = -271733879, c = -1732584194, d = 271733878, i;
-        var bytes = 0; for (i = 0; i < len; i++) { var ch = s.charCodeAt(i); bytes += ch < 128 ? 1 : ch < 2048 ? 2 : ch < 65536 ? 3 : 4; }
-        x[bytes >> 2] = (x[bytes >> 2] || 0) | (0x80 << ((bytes % 4) * 8));
-        x[(((bytes + 8) >> 6) + 1) * 16 - 2] = bytes * 8;
-        var S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
-        var M = [
-            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-            [1, 6, 11, 0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12],
-            [5, 8, 11, 14, 1, 4, 7, 10, 13, 0, 3, 6, 9, 12, 15, 2],
-            [0, 7, 14, 5, 12, 3, 10, 1, 8, 15, 6, 13, 4, 11, 2, 9]
-        ];
-        for (i = 0; i < x.length; i += 16) {
-            var oa = a, ob = b, oc = c, od = d, j;
-            for (j = 0; j < 16; j++) { a = F(a, b, c, d, x[i + M[0][j]] || 0, -680876936 + j * 2654435761 % 4294967296 | 0, S[j % 4]); var t = a; a = d; d = c; c = b; b = t; }
-            for (j = 0; j < 16; j++) { a = G(a, b, c, d, x[i + M[1][j]] || 0, -165796510 + j * 2654435761 % 4294967296 | 0, S[j % 4]); t = a; a = d; d = c; c = b; b = t; }
-            for (j = 0; j < 16; j++) { a = H(a, b, c, d, x[i + M[2][j]] || 0, -643717713 + j * 2654435761 % 4294967296 | 0, S[j % 4]); t = a; a = d; d = c; c = b; b = t; }
-            for (j = 0; j < 16; j++) { a = I(a, b, c, d, x[i + M[3][j]] || 0, -30611744 + j * 2654435761 % 4294967296 | 0, S[j % 4]); t = a; a = d; d = c; c = b; b = t; }
-            a = K(a, oa); b = K(b, ob); c = K(c, oc); d = K(d, od);
+        function hex(n) {
+            var s2 = '', i, v;
+            for (i = 0; i < 4; i++) {
+                v = (n >> (i * 8)) & 0xff;
+                s2 += ('0' + v.toString(16)).slice(-2);
+            }
+            return s2;
         }
-        return hex(a) + hex(b) + hex(c) + hex(d);
+        var str = String(s == null ? '' : s), n, i, tail;
+        try { str = unescape(encodeURIComponent(str)); } catch (e) { /* 旧内核降级：按原串处理 */ }
+        n = str.length;
+        var state = [1732584193, -271733879, -1732584194, 271733878];
+        for (i = 64; i <= n; i += 64) cycle(state, blk(str.substring(i - 64, i)));
+        str = str.substring(i - 64);
+        tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        for (i = 0; i < str.length; i++) tail[i >> 2] |= str.charCodeAt(i) << ((i % 4) << 3);
+        tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+        if (i > 55) { cycle(state, tail); for (i = 0; i < 16; i++) tail[i] = 0; }
+        tail[14] = n * 8;
+        tail[15] = Math.floor(n / 0x20000000);
+        cycle(state, tail);
+        return hex(state[0]) + hex(state[1]) + hex(state[2]) + hex(state[3]);
     }
 
     /* ---------- 通用工具 ---------- */
