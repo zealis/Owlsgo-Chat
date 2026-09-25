@@ -30,10 +30,19 @@ class Sec
 
     public static function verifySign(string $key, string $action): bool
     {
+        return self::verifySignAny([$key], $action);
+    }
+
+    /** 多密钥任一匹配即通过：兼容「会话密钥」与「cookie 备份密钥」 */
+    public static function verifySignAny(array $keys, string $action): bool
+    {
         $ts   = $_POST['ts'] ?? $_GET['ts'] ?? '';
         $sign = $_POST['sign'] ?? $_GET['sign'] ?? '';
         if (!$ts || !$sign || abs(time() - (int)$ts) > (self::$cfg['sign_window'] ?? 300)) return false;
-        return hash_equals(self::sign($key, (string)$ts, $action), (string)$sign);
+        foreach ($keys as $k) {
+            if ($k && hash_equals(self::sign($k, (string)$ts, $action), (string)$sign)) return true;
+        }
+        return false;
     }
 
     public static function clientKey(): string

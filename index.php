@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.4';
+const OWLSGO_VERSION = '1.0.5';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -37,8 +37,16 @@ class Api
 Sec::sessionStart($CFG);
 Sec::init($CFG);
 
-// 匿名会话密钥（登录前 API 签名用）
-if (empty($_SESSION['anon_key'])) $_SESSION['anon_key'] = Sec::clientKey();
+// 匿名会话密钥（登录前 API 签名用）：同时写入 cookie 备份，
+// 避免 php-cgi 多进程下 PHP session 偶发丢失/重建导致签名对不上
+if (empty($_COOKIE['owl_akey']) || !preg_match('/^[a-f0-9]{32}$/', (string)$_COOKIE['owl_akey'])) {
+    $akey = Sec::clientKey();
+    setcookie('owl_akey', $akey, [
+        'expires' => time() + 86400 * 30, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+    ]);
+    $_COOKIE['owl_akey'] = $akey;
+}
+if (empty($_SESSION['anon_key'])) $_SESSION['anon_key'] = $_COOKIE['owl_akey'];
 
 $LOCK = $CFG['data_dir'] . '/install.lock';
 $installed = is_file($LOCK);
@@ -154,9 +162,13 @@ if ($action !== '') {
         Api::json(['ok' => true]);
     }
 
-    // 签名密钥：登录用户/游客用其 client_key，匿名用会话 key
-    $signKey = $actor['key'] ?: $_SESSION['anon_key'];
-    if (!Sec::verifySign($signKey, $action)) {
+    // 签名密钥：登录用户/游客用其 client_key，匿名用会话 key（并兼容 cookie 备份 key）
+    $signKeys = array_values(array_unique(array_filter([
+        (string)($actor['key'] ?? ''),
+        (string)($_SESSION['anon_key'] ?? ''),
+        (string)($_COOKIE['owl_akey'] ?? ''),
+    ])));
+    if (!Sec::verifySignAny($signKeys, $action)) {
         Api::json(['ok' => false, 'msg' => '签名验证失败，请刷新页面'], 403);
     }
 
@@ -419,7 +431,8 @@ function renderAuth(string $mode): void
            . '<div class="ow-auth-links"><a href="?page=login">返回登录</a></div>';
     }
     echo '</div><script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
-       . '<script>OwAuth.init(' . json_encode(['key' => $_SESSION['anon_key']]) . ');</script>';
+       // 下发服务器时间：前端据此校正本机时钟偏差，避免签名 ts 超出时间窗
+       . '<script>OwAuth.init(' . json_encode(['key' => $_SESSION['anon_key'], 'ts' => time()]) . ');</script>';
     Plugin::fire('page.footer');
     echo '</body></html>';
 }
@@ -500,6 +513,7 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
             'nickname' => $user['nickname'], 'username' => $user['username'],
             'role' => $user['role'], 'title' => $user['title'] ?? '', 'avatar' => $user['avatar'] ?? '',
         ] : null,
+        'ts' => time(),
         'version' => OWLSGO_VERSION,
     ];
     echo '<script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
@@ -533,6 +547,6 @@ function renderAdmin(array $actor): void
        . '<main class="ow-admin-main" id="owAdminMain"></main></div>'
        . '<div class="ow-toast" id="owToast" style="display:none"></div>'
        . '<script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
-       . '<script>OwAdmin.init(' . json_encode(['key' => $actor['key']]) . ');</script>'
+       . '<script>OwAdmin.init(' . json_encode(['key' => $actor['key'], 'ts' => time()]) . ');</script>'
        . '</body></html>';
 }

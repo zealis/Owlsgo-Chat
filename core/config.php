@@ -20,7 +20,7 @@ return [
     // ---------- 安全 ----------
     'secret'     => 'CHANGE_ME_RANDOM_64_CHARS', // API 签名密钥（安装向导会自动改写为随机值）
     'session_name' => 'OWLSESSID',
-    'sign_window'  => 300,                       // 签名时间窗（秒）
+    'sign_window'  => 1800,                      // 签名时间窗（秒）；前端已用服务器时间校正时钟偏差
 
     // ---------- 邮件（注册验证码 / 密码找回）----------
     'mail' => [

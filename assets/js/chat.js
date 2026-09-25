@@ -106,8 +106,14 @@
 
     var OwApi = {
         key: '',
+        tsOffset: 0,   // 客户端时钟与服务器的偏差（秒），由页面下发的服务器时间校正
+        // 关键：签名用的 ts 以「服务器时间」为准，客户端系统时钟不准也不会导致签名失败
+        setServerTime: function (ts) {
+            if (!ts) return;
+            this.tsOffset = parseInt(ts, 10) - Math.floor(new Date().getTime() / 1000);
+        },
         sign: function (action) {
-            var ts = Math.floor(new Date().getTime() / 1000);
+            var ts = Math.floor(new Date().getTime() / 1000) + this.tsOffset;
             return { ts: ts, sign: md5(this.key + '|' + ts + '|' + action) };
         },
         /* 签名失效自愈：会话重建/页面为旧缓存时密钥对不上，自动刷新一次取新密钥 */
@@ -218,6 +224,7 @@
     var OwAuth = {
         init: function (opt) {
             OwApi.key = opt.key;
+            OwApi.setServerTime(opt.ts);   // 用服务器时间校正本机时钟偏差
             var form = document.querySelector('.ow-auth-form');
             if (!form) return;
             var mode = form.getAttribute('data-mode');
@@ -279,6 +286,7 @@
         init: function (cfg) {
             this.cfg = cfg;
             OwApi.key = cfg.key;
+            OwApi.setServerTime(cfg.ts);
             this.room = cfg.room;
             this.sound = cfg.settings.sound === '1';
             var self = this;
@@ -754,6 +762,7 @@
     var OwAdmin = {
         init: function (opt) {
             OwApi.key = opt.key;
+            OwApi.setServerTime(opt.ts);
             var menu = $('owAdminMenu'), self = this;
             var items = menu.getElementsByTagName('li'), i;
             for (i = 0; i < items.length; i++) {
