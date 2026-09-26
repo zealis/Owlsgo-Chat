@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.6';
+const OWLSGO_VERSION = '1.0.7';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -220,13 +220,15 @@ if ($action !== '') {
             if (!$room) Api::json(['ok' => false, 'msg' => '聊天室不存在']);
             if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权进入该聊天室']);
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
-            // 密码房：已持有有效通行授权则免密；否则校验密码并授予授权（缓存期内不必重复输入）
-            if ($room['type'] === 'password' && !Chat::roomPassCached((int)$room['id']) && $actor['role'] !== 'admin') {
-                if (!Chat::checkRoomPassword($room, $p('password'))) {
-                    Sec::log('room_pass_fail', $actor['nickname'] ?? '', ['room' => (int)$room['id']]);
-                    Api::json(['ok' => false, 'msg' => '房间密码错误', 'need_password' => true]);
+            // 密码房：已持有有效通行授权则免密；管理员免密码。
+            // 是否真的需要密码一律由服务端判定，前端只需先空密码尝试一次，返回 need_password 再弹窗。
+            if ($room['type'] === 'password' && !Chat::roomPassCached((int)$room['id'])) {
+                if ($actor['role'] !== 'admin' && !Chat::checkRoomPassword($room, $p('password'))) {
+                    $empty = $p('password') === '';
+                    if (!$empty) Sec::log('room_pass_fail', $actor['nickname'] ?? '', ['room' => (int)$room['id']]);
+                    Api::json(['ok' => false, 'msg' => $empty ? '该房间需要密码' : '房间密码错误', 'need_password' => true]);
                 }
-                Chat::grantRoomPass((int)$room['id']);
+                Chat::grantRoomPass((int)$room['id']);   // 管理员同样授予，避免每次点击都往返一次
             }
             Api::json([
                 'ok' => true,

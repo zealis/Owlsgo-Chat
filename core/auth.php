@@ -8,7 +8,19 @@ class Auth
     public static function user(): ?array
     {
         if (empty($_SESSION['uid'])) return null;
-        return DB::one('SELECT * FROM users WHERE id=? AND status=1', [$_SESSION['uid']]);
+        $u = DB::one('SELECT * FROM users WHERE id=? AND status=1', [$_SESSION['uid']]);
+        // client_key 为空（历史数据/手工建号）会导致该用户所有 API 签名失败，这里自动补全
+        if ($u && (string)($u['client_key'] ?? '') === '') $u = self::ensureKey($u, 'users');
+        return $u;
+    }
+
+    /** 保证访问者持有签名密钥 */
+    private static function ensureKey(array $row, string $table): array
+    {
+        $key = Sec::clientKey();
+        DB::run("UPDATE $table SET client_key=? WHERE id=?", [$key, $row['id']]);
+        $row['client_key'] = $key;
+        return $row;
     }
 
     /** 当前游客（数组）或 null */
@@ -16,7 +28,9 @@ class Auth
     {
         $token = $_COOKIE['owl_guest'] ?? '';
         if (!$token || !preg_match('/^[a-f0-9]{32}$/', $token)) return null;
-        return DB::one('SELECT * FROM guests WHERE token=?', [$token]);
+        $g = DB::one('SELECT * FROM guests WHERE token=?', [$token]);
+        if ($g && (string)($g['client_key'] ?? '') === '') $g = self::ensureKey($g, 'guests');
+        return $g;
     }
 
     /** 确保游客身份存在（允许游客浏览时调用） */

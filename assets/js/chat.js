@@ -296,29 +296,37 @@
             this.buildEmojiPanel();
             this.bindEvents();
 
-            // 初始加载历史（默认房间若是密码房且本地无有效授权，先弹自研密码框）
+            // 初始加载历史：是否需密码由服务端判定（管理员/已授权会直接放行，不会弹窗）
             var first = null, i;
             for (i = 0; i < cfg.rooms.length; i++) if (cfg.rooms[i].id === this.room) first = cfg.rooms[i];
-            var load = function () {
-                OwApi.post('history', { room_id: self.room, before: 0 }, function (r) {
-                    if (r.ok) {
-                        for (var j = 0; j < r.data.length; j++) self.addMessage(r.data[j], true);
-                        if (r.data.length) self.since = r.data[r.data.length - 1].id;
-                        self.scrollBottom();
-                        if (r.data.length < 30) self.historyDone = true;
-                    } else if (r.need_password) {
-                        self.passForget(self.room);
-                        self.askRoomPassword(self.room, first ? first.name : '', load);
-                        return;
+            var load = function (password) {
+                OwApi.post('room_join', { room_id: self.room, password: password || '' }, function (j) {
+                    if (!j.ok) {
+                        if (j.need_password) {
+                            self.passForget(self.room);
+                            self.askRoomPassword(self.room, first ? first.name : '', function (pw) { load(pw); });
+                            return;
+                        }
+                        if (j.need_login) { location.href = '?page=login'; return; }
+                    } else {
+                        self.passRemember(self.room, j.ttl);
                     }
-                    self.startPoll();
+                    OwApi.post('history', { room_id: self.room, before: 0 }, function (r) {
+                        if (r.ok) {
+                            for (var k = 0; k < r.data.length; k++) self.addMessage(r.data[k], true);
+                            if (r.data.length) self.since = r.data[r.data.length - 1].id;
+                            self.scrollBottom();
+                            if (r.data.length < 30) self.historyDone = true;
+                        } else if (r.need_password) {
+                            self.passForget(self.room);
+                            self.askRoomPassword(self.room, first ? first.name : '', function (pw) { load(pw); });
+                            return;
+                        }
+                        self.startPoll();
+                    });
                 });
             };
-            if (first && first.need_password && !this.passCached(this.room)) {
-                this.askRoomPassword(this.room, first.name, load);
-            } else {
-                load();
-            }
+            load('');
         },
 
         bindEvents: function () {
@@ -443,13 +451,17 @@
                     var el = this;
                     var id = parseInt(el.getAttribute('data-room'), 10);
                     var name = el.getAttribute('data-name');
-                    var needPw = el.getAttribute('data-pw') === '1';
-                    var join = function () {
-                        OwApi.post('room_join', { room_id: id }, function (r) {
+                    // 先不带密码尝试一次：是否真需要密码由服务端判定（管理员/已缓存都会直接放行）
+                    var tryJoin = function (password) {
+                        OwApi.post('room_join', { room_id: id, password: password || '' }, function (r) {
                             if (!r.ok) {
+                                if (r.need_password) {
+                                    if (password) toast(r.msg);           // 带密码仍失败 → 提示后重弹
+                                    self.passForget(id);
+                                    self.askRoomPassword(id, name, function (pw) { tryJoin(pw); });
+                                    return;
+                                }
                                 toast(r.msg);
-                                // 服务端未持有通行授权（缓存过期/会话重建）→ 重新弹窗
-                                if (r.need_password) { self.passForget(id); self.askRoomPassword(id, name, join); return; }
                                 if (r.need_login) location.href = '?page=login';
                                 return;
                             }
@@ -457,9 +469,7 @@
                             self.switchRoom(id, r.room.name, el);
                         });
                     };
-                    // 本地已缓存且在有效期内 → 直接进入，不再弹窗
-                    if (needPw && !self.passCached(id)) { self.askRoomPassword(id, name, join); return; }
-                    join();
+                    tryJoin('');
                 };
             }
         },
