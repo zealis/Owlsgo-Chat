@@ -141,7 +141,7 @@ class Admin
             case 'admin_settings_save':
                 $allow = ['site_name', 'allow_register', 'reg_email_verify', 'guest_browse', 'guest_chat',
                           'guest_daily_limit', 'msg_rate_window', 'msg_rate_max', 'mail_rate_limit',
-                          'sound_default', 'image_mode'];
+                          'sound_default', 'image_mode', 'room_pass_ttl'];
                 foreach ($allow as $k) {
                     if (isset($_POST[$k])) DB::setSetting($k, $p($k));
                 }

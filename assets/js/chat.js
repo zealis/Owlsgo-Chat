@@ -296,16 +296,29 @@
             this.buildEmojiPanel();
             this.bindEvents();
 
-            // 初始加载历史
-            OwApi.post('history', { room_id: this.room, before: 0 }, function (r) {
-                if (r.ok) {
-                    for (var i = 0; i < r.data.length; i++) self.addMessage(r.data[i], true);
-                    if (r.data.length) self.since = r.data[r.data.length - 1].id;
-                    self.scrollBottom();
-                    if (r.data.length < 30) self.historyDone = true;
-                }
-                self.startPoll();
-            });
+            // 初始加载历史（默认房间若是密码房且本地无有效授权，先弹自研密码框）
+            var first = null, i;
+            for (i = 0; i < cfg.rooms.length; i++) if (cfg.rooms[i].id === this.room) first = cfg.rooms[i];
+            var load = function () {
+                OwApi.post('history', { room_id: self.room, before: 0 }, function (r) {
+                    if (r.ok) {
+                        for (var j = 0; j < r.data.length; j++) self.addMessage(r.data[j], true);
+                        if (r.data.length) self.since = r.data[r.data.length - 1].id;
+                        self.scrollBottom();
+                        if (r.data.length < 30) self.historyDone = true;
+                    } else if (r.need_password) {
+                        self.passForget(self.room);
+                        self.askRoomPassword(self.room, first ? first.name : '', load);
+                        return;
+                    }
+                    self.startPoll();
+                });
+            };
+            if (first && first.need_password && !this.passCached(this.room)) {
+                this.askRoomPassword(this.room, first.name, load);
+            } else {
+                load();
+            }
         },
 
         bindEvents: function () {
@@ -357,6 +370,61 @@
             if (st) st.onclick = function () { self.openSettings(); };
         },
 
+        /* ---------- 密码房：通行缓存 + 自研密码弹窗 ---------- */
+        // 缓存键（按房间），仅存"已授权到几点"，不存密码本身
+        passCacheKey: function (roomId) { return 'owl_room_pass_' + roomId; },
+        passCached: function (roomId) {
+            var v = 0;
+            try { v = parseInt(w.sessionStorage.getItem(this.passCacheKey(roomId)) || '0', 10); } catch (e) {}
+            return v > Math.floor(new Date().getTime() / 1000);
+        },
+        passRemember: function (roomId, ttl) {
+            if (!ttl || ttl <= 0) { this.passForget(roomId); return; }
+            // 比服务端有效期提前 60 秒失效，避免边界上反复弹窗
+            var until = Math.floor(new Date().getTime() / 1000) + Math.max(60, ttl - 60);
+            try { w.sessionStorage.setItem(this.passCacheKey(roomId), String(until)); } catch (e) {}
+        },
+        passForget: function (roomId) {
+            try { w.sessionStorage.removeItem(this.passCacheKey(roomId)); } catch (e) {}
+        },
+        // 需要密码（且本地无有效缓存）时弹出自研弹窗，验证成功回调 onOk
+        askRoomPassword: function (roomId, roomName, onOk) {
+            var self = this;
+            this.openModal(
+                '<h3>需要密码</h3>'
+                + '<p class="ow-modal-desc">进入「' + esc(roomName) + '」需要密码，验证成功后在有效期内不必重复输入。</p>'
+                + '<div class="ow-form-item"><label>房间密码</label>'
+                + '<input class="ow-input" type="password" id="owRoomPw" autocomplete="off" placeholder="请输入房间密码"></div>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost" id="owRoomPwCancel">取消</button>'
+                + '<button class="ow-btn ow-btn-primary" id="owRoomPwOk">进 入</button></div>'
+                + '<div class="ow-form-msg" id="owRoomPwMsg"></div>'
+            );
+            var input = $('owRoomPw'), msg = $('owRoomPwMsg');
+            var submit = function () {
+                var pw = input.value;
+                if (!pw) { msg.innerHTML = '<span style="color:#F5222D">请输入密码</span>'; return; }
+                msg.innerHTML = '验证中…';
+                OwApi.post('room_join', { room_id: roomId, password: pw }, function (r) {
+                    if (!r.ok) {
+                        msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>';
+                        input.select();
+                        return;
+                    }
+                    self.passRemember(roomId, r.ttl);
+                    self.closeModal();
+                    if (onOk) onOk();
+                });
+            };
+            $('owRoomPwOk').onclick = submit;
+            $('owRoomPwCancel').onclick = function () { self.closeModal(); };
+            input.onkeydown = function (e) {
+                e = e || w.event;
+                if (e.keyCode === 13) { e.preventDefault ? e.preventDefault() : (e.returnValue = false); submit(); }
+            };
+            try { input.focus(); } catch (e) {}
+        },
+
         /* ---------- 房间 ---------- */
         renderRooms: function (rooms) {
             var html = '', i, self = this;
@@ -372,23 +440,32 @@
             var items = $('owRoomList').getElementsByTagName('li');
             for (i = 0; i < items.length; i++) {
                 items[i].onclick = function () {
-                    var id = parseInt(this.getAttribute('data-room'), 10);
-                    var pw = this.getAttribute('data-pw') === '1';
-                    var password = '';
-                    if (pw) {
-                        password = w.prompt('请输入房间密码：') || '';
-                        if (!password) return;
-                    }
-                    OwApi.post('room_join', { room_id: id, password: password }, function (r) {
-                        if (!r.ok) { toast(r.msg); if (r.need_login) location.href = '?page=login'; return; }
-                        self.switchRoom(id, r.room.name, this);
-                    });
+                    var el = this;
+                    var id = parseInt(el.getAttribute('data-room'), 10);
+                    var name = el.getAttribute('data-name');
+                    var needPw = el.getAttribute('data-pw') === '1';
+                    var join = function () {
+                        OwApi.post('room_join', { room_id: id }, function (r) {
+                            if (!r.ok) {
+                                toast(r.msg);
+                                // 服务端未持有通行授权（缓存过期/会话重建）→ 重新弹窗
+                                if (r.need_password) { self.passForget(id); self.askRoomPassword(id, name, join); return; }
+                                if (r.need_login) location.href = '?page=login';
+                                return;
+                            }
+                            self.passRemember(id, r.ttl);
+                            self.switchRoom(id, r.room.name, el);
+                        });
+                    };
+                    // 本地已缓存且在有效期内 → 直接进入，不再弹窗
+                    if (needPw && !self.passCached(id)) { self.askRoomPassword(id, name, join); return; }
+                    join();
                 };
             }
         },
 
         switchRoom: function (id, name, el) {
-            this.room = id; this.since = 0; this.historyDone = false;
+            this.room = id; this.roomName = name; this.since = 0; this.historyDone = false;
             $('owRoomName').innerHTML = esc(name);
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             var items = $('owRoomList').getElementsByTagName('li'), i;
@@ -396,14 +473,21 @@
             if (el) el.className += ' active';
             $('owSidebar').className = $('owSidebar').className.replace(' open', '');
             var self = this;
-            OwApi.post('history', { room_id: id, before: 0 }, function (r) {
-                if (r.ok) {
-                    for (var i = 0; i < r.data.length; i++) self.addMessage(r.data[i], true);
-                    if (r.data.length) self.since = r.data[r.data.length - 1].id;
-                    self.scrollBottom();
-                    if (r.data.length < 30) self.historyDone = true;
-                }
-            });
+            var load = function () {
+                OwApi.post('history', { room_id: id, before: 0 }, function (r) {
+                    if (r.ok) {
+                        for (var i = 0; i < r.data.length; i++) self.addMessage(r.data[i], true);
+                        if (r.data.length) self.since = r.data[r.data.length - 1].id;
+                        self.scrollBottom();
+                        if (r.data.length < 30) self.historyDone = true;
+                    } else if (r.need_password) {
+                        // 通行授权已过期 → 重新验证，验证成功后自动重试
+                        self.passForget(id);
+                        self.askRoomPassword(id, name, load);
+                    }
+                });
+            };
+            load();
         },
 
         /* ---------- 长轮询（主通道）+ 断线降级短轮询 ---------- */
@@ -413,6 +497,12 @@
                 var t0 = new Date().getTime();
                 OwApi.post('poll', { room_id: self.room, since: self.since }, function (r, status) {
                     if (!r || !r.ok) {
+                        // 密码房授权过期：停止轮询，重新验证后继续
+                        if (r && r.need_password) {
+                            self.passForget(self.room);
+                            self.askRoomPassword(self.room, self.roomName || '', function () { self.startPoll(); });
+                            return;
+                        }
                         self.failCount++;
                         // 降级：短轮询 + 指数退避（2s → 10s 封顶）
                         var wait = Math.min(10000, 2000 * self.failCount);
@@ -919,6 +1009,8 @@
                         + '<div class="ow-form-item"><label>邮件发送间隔(秒)</label><input class="ow-input" id="owS_mail_rate_limit" value="' + esc(d.mail_rate_limit || '60') + '"></div>'
                         + '</div>'
                         + '<div class="ow-form-item"><label>图片消息存储</label>' + sel('image_mode', { 'local': '本地存储（客户端压缩）', 'imgbed': '图床（API 压缩）' }) + '</div>'
+                        + '<div class="ow-form-item"><label>密码房通行缓存(秒)</label><input class="ow-input" id="owS_room_pass_ttl" value="' + esc(d.room_pass_ttl || '1800') + '">'
+                        + '<p style="font-size:12px;color:#999;margin-top:4px">验证一次密码后，该时间内进入同一房间无需重复输入；填 0 表示每次进入都要输入。</p></div>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
                 });
@@ -1019,6 +1111,7 @@
                 msg_rate_max: $('owS_msg_rate_max').value,
                 mail_rate_limit: $('owS_mail_rate_limit').value,
                 image_mode: $('owS_image_mode').value,
+                room_pass_ttl: $('owS_room_pass_ttl') ? $('owS_room_pass_ttl').value : '',
                 sound_default: $('owS_sound_default').value
             }, function (r) { toast(r.msg); });
         }

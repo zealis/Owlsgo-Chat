@@ -41,6 +41,43 @@ class Chat
         return $room['type'] !== 'password' || hash_equals((string)$room['password'], $password);
     }
 
+    // ---------- 密码房通行缓存（避免每次进入都重新输密码） ----------
+    /** 缓存时长（秒），0 表示每次都要输入 */
+    public static function passTtl(): int
+    {
+        return (int)DB::setting('room_pass_ttl', 1800);
+    }
+
+    /** 该房间是否已持有未过期的通行授权 */
+    public static function roomPassCached(int $roomId): bool
+    {
+        $ttl = self::passTtl();
+        if ($ttl <= 0) return false;
+        return !empty($_SESSION['room_pass'][$roomId]) && (int)$_SESSION['room_pass'][$roomId] > time();
+    }
+
+    /** 授予通行授权（默认保留 30 分钟，可在后台配置） */
+    public static function grantRoomPass(int $roomId): void
+    {
+        $ttl = self::passTtl();
+        if ($ttl <= 0) return;
+        if (!isset($_SESSION['room_pass']) || !is_array($_SESSION['room_pass'])) $_SESSION['room_pass'] = [];
+        $_SESSION['room_pass'][$roomId] = time() + $ttl;
+    }
+
+    /**
+     * 完整进入校验：角色房查角色，密码房必须有有效通行授权（管理员免密）
+     */
+    public static function roomAccessOk(array $room, array $actor): bool
+    {
+        if (!self::canEnter($room, $actor)) return false;
+        if ($room['type'] === 'password') {
+            if ($actor['role'] === 'admin') return true;      // 管理员免密码
+            return self::roomPassCached((int)$room['id']);
+        }
+        return true;
+    }
+
     // ---------- 禁言检查 ----------
     public static function isBanned(array $actor, int $roomId): ?string
     {
@@ -80,7 +117,7 @@ class Chat
     {
         $room = self::room($roomId);
         if (!$room) return [false, '聊天室不存在'];
-        if (!self::canEnter($room, $actor)) return [false, '无权进入该聊天室'];
+        if (!self::roomAccessOk($room, $actor)) return [false, '无权进入该聊天室'];
 
         // 游客发言权限
         if ($actor['kind'] === 'guest') {

@@ -237,6 +237,7 @@ class DB
             'msg_rate_max'     => '8',   // 窗口内最大消息数
             'mail_rate_limit'  => '60',  // 邮件发送最小间隔(秒)
             'sound_default'    => '1',
+            'room_pass_ttl'    => '1800', // 密码房通行缓存(秒)，0=每次进入都要输入密码
         ];
         foreach ($defs as $k => $v) {
             if (self::setting($k) === null) self::setSetting($k, $v);

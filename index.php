@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.5';
+const OWLSGO_VERSION = '1.0.6';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -173,7 +173,8 @@ if ($action !== '') {
     }
 
     // 关键：长轮询等只读动作提前释放会话锁，避免阻塞同会话的发消息等请求（PHP-FPM 生产环境必需）
-    if (!in_array($action, ['login', 'logout', 'register', 'reset', 'send_code'], true)) {
+    // room_join 需要写入密码房通行缓存，必须保留会话写入能力
+    if (!in_array($action, ['login', 'logout', 'register', 'reset', 'send_code', 'room_join'], true)) {
         session_write_close();
     }
 
@@ -218,23 +219,37 @@ if ($action !== '') {
             $room = Chat::room((int)$p('room_id'));
             if (!$room) Api::json(['ok' => false, 'msg' => '聊天室不存在']);
             if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权进入该聊天室']);
-            if ($room['type'] === 'password' && !Chat::checkRoomPassword($room, $p('password'))) {
-                Api::json(['ok' => false, 'msg' => '房间密码错误', 'need_password' => true]);
-            }
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
-            Api::json(['ok' => true, 'room' => ['id' => (int)$room['id'], 'name' => $room['name']]]);
+            // 密码房：已持有有效通行授权则免密；否则校验密码并授予授权（缓存期内不必重复输入）
+            if ($room['type'] === 'password' && !Chat::roomPassCached((int)$room['id']) && $actor['role'] !== 'admin') {
+                if (!Chat::checkRoomPassword($room, $p('password'))) {
+                    Sec::log('room_pass_fail', $actor['nickname'] ?? '', ['room' => (int)$room['id']]);
+                    Api::json(['ok' => false, 'msg' => '房间密码错误', 'need_password' => true]);
+                }
+                Chat::grantRoomPass((int)$room['id']);
+            }
+            Api::json([
+                'ok' => true,
+                'room' => ['id' => (int)$room['id'], 'name' => $room['name']],
+                'ttl' => Chat::passTtl(),
+            ]);
 
         case 'poll':
             $roomId = (int)$p('room_id');
             $room = Chat::room($roomId);
-            if (!$room || !Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权访问']);
+            if (!$room || !Chat::roomAccessOk($room, $actor)) {
+                Api::json(['ok' => false, 'msg' => '无权访问该聊天室', 'need_password' => $room && $room['type'] === 'password']);
+            }
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
             Api::json(['ok' => true] + Chat::poll($actor, $roomId, (int)$p('since', '0')));
 
         case 'history':
             $roomId = (int)$p('room_id');
             $room = Chat::room($roomId);
-            if (!$room || !Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权访问']);
+            // 密码房必须持有有效通行授权，否则任何人都能绕过密码读取历史
+            if (!$room || !Chat::roomAccessOk($room, $actor)) {
+                Api::json(['ok' => false, 'msg' => '无权访问该聊天室', 'need_password' => $room && $room['type'] === 'password']);
+            }
             Api::json(['ok' => true, 'data' => Chat::history($actor, $roomId, (int)$p('before', '0'))]);
 
         case 'send':
