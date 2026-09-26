@@ -104,6 +104,18 @@
         t._tm = setTimeout(function () { t.style.display = 'none'; }, ms || 2200);
     }
 
+    /* 枚举值中文显示（提交时仍用英文原始值，仅界面本地化） */
+    var ROOM_TYPE_CN = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
+    var ROLE_CN = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '管理员' };
+    function cn(map, v) { return map[v] || v; }
+    function opts(map, keys, current) {
+        var h = '', i;
+        for (i = 0; i < keys.length; i++) {
+            h += '<option value="' + esc(keys[i]) + '"' + (current === keys[i] ? ' selected' : '') + '>' + esc(cn(map, keys[i])) + '</option>';
+        }
+        return h;
+    }
+
     var OwApi = {
         key: '',
         tsOffset: 0,   // 客户端时钟与服务器的偏差（秒），由页面下发的服务器时间校正
@@ -903,7 +915,7 @@
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(d.type) + '</td><td>' + esc(d.min_role) + '</td><td>' + (d.owner_id || '-') + '</td>'
+                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id || '-') + '</td>'
                            + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
                            + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
@@ -924,7 +936,7 @@
                         + '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>类型</th><th>目标</th><th>房间</th><th>原因</th><th>过期时间</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.type) + '</td><td>' + esc(d.target) + '</td><td>' + (d.room_id == 0 ? '全局' : d.room_id) + '</td><td>' + esc(d.reason || '') + '</td>'
+                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.type === 'user' ? '用户' : d.type === 'guest' ? '游客' : 'IP') + '</td><td>' + esc(d.target) + '</td><td>' + (d.room_id == 0 ? '全局' : d.room_id) + '</td><td>' + esc(d.reason || '') + '</td>'
                            + '<td>' + (d.expires_at ? new Date(d.expires_at * 1000).toLocaleString() : '永久') + '</td>'
                            + '<td><a href="javascript:;" onclick="OwAdmin.banDel(' + d.id + ')">解除</a></td></tr>';
                     }
@@ -961,7 +973,7 @@
                         + '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>内容</th><th>房间</th><th>类型</th><th>优先级</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.content) + '</td><td>' + (d.room_id == 0 ? '全部' : d.room_id) + '</td><td>' + esc(d.type) + '</td><td>' + d.priority + '</td>'
+                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.content) + '</td><td>' + (d.room_id == 0 ? '全部' : d.room_id) + '</td><td>' + esc(d.type === 'welcome' ? '欢迎消息' : '公告') + '</td><td>' + d.priority + '</td>'
                            + '<td>' + (d.enabled == 1 ? '展示中' : '已停用') + '</td>'
                            + '<td><a href="javascript:;" onclick="OwAdmin.annToggle(' + d.id + ',' + (d.enabled == 1 ? 0 : 1) + ')">' + (d.enabled == 1 ? '停用' : '启用') + '</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.annDel(' + d.id + ')">删除</a></td></tr>';
@@ -1035,7 +1047,7 @@
                     var d = r.data[i];
                     h += '<tr><td>' + d.id + '</td><td>' + esc(d.username) + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
                        + '<td><select class="ow-input" id="owUR' + d.id + '">'
-                       + ['member', 'vip', 'admin'].map(function (x) { return '<option' + (d.role === x ? ' selected' : '') + '>' + x + '</option>'; }).join('')
+                       + opts(ROLE_CN, ['member', 'vip', 'admin'], d.role)
                        + '</select></td>'
                        + '<td><input class="ow-input" id="owUT' + d.id + '" value="' + esc(d.title || '') + '"></td>'
                        + '<td>' + (d.status == 1 ? '正常' : '禁用') + '</td>'
@@ -1060,10 +1072,10 @@
                 + '<input type="hidden" id="owRId" value="' + d.id + '">'
                 + '<div class="ow-form-item"><label>名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '"></div>'
                 + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRType">'
-                + ['public', 'password', 'role'].map(function (x) { return '<option' + (d.type === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></div>'
+                + opts(ROOM_TYPE_CN, ['public', 'password', 'role'], d.type) + '</select></div>'
                 + '<div class="ow-form-item"><label>房间密码（password 类型时有效）</label><input class="ow-input" id="owRPass" value="' + esc(d.password || '') + '"></div>'
                 + '<div class="ow-form-item"><label>最低进入角色（role 类型时有效）</label><select class="ow-input" id="owRRole">'
-                + ['guest', 'member', 'vip', 'admin'].map(function (x) { return '<option' + (d.min_role === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></div>'
+                + opts(ROLE_CN, ['guest', 'member', 'vip', 'admin'], d.min_role) + '</select></div>'
                 + '<div class="ow-form-item"><label>房主用户ID（房主可撤回本房间任意消息）</label><input class="ow-input" id="owROwner" value="' + (d.owner_id || '') + '"></div>'
                 + '<div class="ow-form-item"><label>描述</label><input class="ow-input" id="owRDesc" value="' + esc(d.description || '') + '"></div>'
                 + '<div class="ow-form-item"><label>状态</label><select class="ow-input" id="owRStatus"><option value="1"' + (d.status == 1 ? ' selected' : '') + '>开启</option><option value="0"' + (d.status == 0 ? ' selected' : '') + '>关闭</option></select></div>'

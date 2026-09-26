@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.7';
+const OWLSGO_VERSION = '1.0.8';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
