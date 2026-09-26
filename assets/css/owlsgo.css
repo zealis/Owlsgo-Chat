@@ -312,9 +312,20 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg.recalled .ow-msg-content { background: transparent; border: 1px dashed var(--ow-border); color: var(--ow-text-sub); font-size: 12px; }
 .ow-msg-img { max-width: 240px; max-height: 240px; border-radius: 6px; cursor: zoom-in; display: block; }
 .ow-msg-sticker { max-width: 120px; max-height: 120px; border-radius: 6px; cursor: zoom-in; }
-.ow-msg-actions { display: none; font-size: 12px; margin-top: 2px; }
-.ow-msg:hover .ow-msg-actions { display: block; }
-.ow-msg-actions a { margin-right: 8px; font-size: 12px; }
+/* 悬停气泡时显示时间；操作改为右键菜单 */
+.ow-msg-sub { display: none; font-size: 12px; color: var(--ow-text-sub); margin-top: 2px; }
+.ow-msg:hover .ow-msg-sub { display: block; }
+.ow-ctx-menu {
+    position: fixed;
+    z-index: 400;
+    background: var(--ow-bg);
+    border: 1px solid var(--ow-border);
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 136px;
+}
+.ow-ctx-menu a { display: block; padding: 6px 14px; font-size: 13px; color: var(--ow-text); white-space: nowrap; }
+.ow-ctx-menu a:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
 
 /* 输入区 */
 .ow-inputbar { border-top: 1px solid var(--ow-border); background: var(--ow-bg); padding: 8px 12px 12px; }

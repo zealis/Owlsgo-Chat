@@ -382,6 +382,34 @@
                 if (this.scrollTop < 40 && !self.historyDone && !self.loadingHistory) self.loadHistory();
             };
             $('owLoadMore').onclick = function () { self.loadHistory(); };
+            // 右键消息气泡 → 操作菜单（@/私信/收藏/撤回/归属地）
+            $('owMessages').oncontextmenu = function (e) {
+                e = e || w.event;
+                var t = e.target || e.srcElement, node = t;
+                while (node && node !== this) {
+                    if (node.id && /^owMsg\d+$/.test(node.id)) break;
+                    node = node.parentNode;
+                }
+                if (!node || node === this || !node.id) { self.hideCtxMenu(); return; }
+                var m = self.msgCache[parseInt(node.id.replace('owMsg', ''), 10)];
+                if (!m || m.type === 'system' || m.recalled) { self.hideCtxMenu(); return; }
+                if (e.preventDefault) e.preventDefault(); else e.returnValue = false;
+                self.showCtxMenu(e.clientX || 0, e.clientY || 0, m);
+                return false;
+            };
+            // 点击菜单外 / Esc 关闭
+            document.onclick = function (e) {
+                var menu = $('owCtxMenu');
+                if (!menu || menu.style.display === 'none') return;
+                var t = e.target || e.srcElement;
+                var inside = false, n = t;
+                while (n) { if (n === menu) { inside = true; break; } n = n.parentNode; }
+                if (!inside) self.hideCtxMenu();
+            };
+            document.onkeydown = function (e) {
+                e = e || w.event;
+                if (e.keyCode === 27) self.hideCtxMenu();
+            };
             $('owModalMask').onclick = function (e) { if (e.target === this) self.closeModal(); };
             $('owImgViewer').onclick = function () { this.style.display = 'none'; };
             var lo = $('owBtnLogout');
@@ -556,9 +584,11 @@
         },
 
         /* ---------- 消息渲染 ---------- */
-        addMessage: function (m, batch) {
-            var box = $('owMessages');
-            if (document.getElementById('owMsg' + m.id)) return;
+        msgCache: {},
+
+        // 统一构建消息 DOM：头像一侧依次是「用户组标签、昵称」；
+        // 时间不直接显示，悬停气泡时显示在气泡下方；操作（@/私信/收藏/撤回/归属地）改为右键菜单
+        buildMessage: function (m) {
             var cls = 'ow-msg';
             if (m.mine) cls += ' mine';
             if (m.type === 'mention') cls += ' mention';
@@ -571,30 +601,38 @@
             else if (m.type === 'image') content = '<span class="ow-msg-content" style="padding:4px"><img class="ow-msg-img" src="' + esc(m.content) + '" onclick="OwChat.viewImg(this.src)" alt="图片"></span>';
             else content = '<span class="ow-msg-content">' + esc(m.content) + '</span>';
 
-            var actions = '';
-            var canRecall = m.mine || this.cfg.actor.role === 'admin';
-            if (!m.recalled && m.type !== 'system') {
-                actions = '<div class="ow-msg-actions">'
-                        + '<a href="javascript:;" onclick="OwChat.mention(\'' + esc(m.nickname) + '\',' + (m.uid || 0) + ',' + (m.gid || 0) + ')">@</a>'
-                        + (!m.mine && this.cfg.actor.kind === 'user' ? '<a href="javascript:;" onclick="OwChat.pm(\'' + esc(m.nickname) + '\',' + (m.uid || 0) + ',' + (m.gid || 0) + ')">私信</a>' : '')
-                        + (m.type === 'image' && this.cfg.actor.kind === 'user' ? '<a href="javascript:;" onclick="OwChat.collect(\'' + esc(m.content) + '\')">收藏贴纸</a>' : '')
-                        + (canRecall ? '<a href="javascript:;" onclick="OwChat.recall(' + m.id + ')">撤回</a>' : '')
-                        + (this.cfg.actor.role === 'admin' && m.ip ? '<a href="javascript:;" onclick="OwChat.ipLoc(\'' + esc(m.ip) + '\')">归属地</a>' : '')
-                        + '</div>';
-            }
+            var isSys = m.type === 'system';
+            var meta = isSys ? '' :
+                '<div class="ow-msg-meta">' + roleTag(m.role, m.title)
+                + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
+                + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '')
+                + '</div>';
+            var sub = isSys ? '' :
+                '<div class="ow-msg-sub"><span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span></div>';
 
+            return {
+                cls: cls,
+                html: (isSys ? '' : avatarHtml(m.avatar, m.nickname))
+                    + '<div class="ow-msg-body">' + meta + content + sub + '</div>'
+            };
+        },
+
+        addMessage: function (m, batch) {
+            var box = $('owMessages');
+            if (document.getElementById('owMsg' + m.id)) return;
+            this.msgCache[m.id] = m;
+            var b = this.buildMessage(m);
             var div = document.createElement('div');
-            div.className = cls;
+            div.className = b.cls;
             div.id = 'owMsg' + m.id;
-            div.innerHTML = (m.type === 'system' ? '' : avatarHtml(m.avatar, m.nickname))
-                + '<div class="ow-msg-body">'
-                + (m.type === 'system' ? '' : '<div class="ow-msg-meta"><span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
-                    + roleTag(m.role, m.title)
-                    + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '')
-                    + '<span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span></div>')
-                + content + actions + '</div>';
+            div.innerHTML = b.html;
             box.appendChild(div);
-            if (!batch && box.children.length > 500) box.removeChild(box.children[1]);
+            if (!batch && box.children.length > 500) {
+                var old = box.children[1];
+                var oid = parseInt((old.id || '').replace('owMsg', ''), 10);
+                if (oid) delete this.msgCache[oid];
+                box.removeChild(old);
+            }
         },
 
         scrollBottom: function () {
@@ -622,25 +660,50 @@
         addMessageBefore: function (m, ref) {
             var box = $('owMessages');
             if (document.getElementById('owMsg' + m.id)) return;
-            var cls = 'ow-msg';
-            if (m.mine) cls += ' mine';
-            if (m.type === 'mention') cls += ' mention';
-            if (m.type === 'private') cls += ' private';
-            if (m.type === 'system') cls += ' system';
-            if (m.recalled) cls += ' recalled';
-            var content;
-            if (m.recalled) content = '<span class="ow-msg-content">此消息已撤回</span>';
-            else if (m.type === 'image') content = '<span class="ow-msg-content" style="padding:4px"><img class="ow-msg-img" src="' + esc(m.content) + '" onclick="OwChat.viewImg(this.src)" alt="图片"></span>';
-            else content = '<span class="ow-msg-content">' + esc(m.content) + '</span>';
+            this.msgCache[m.id] = m;
+            var b = this.buildMessage(m);
             var div = document.createElement('div');
-            div.className = cls;
+            div.className = b.cls;
             div.id = 'owMsg' + m.id;
-            div.innerHTML = (m.type === 'system' ? '' : avatarHtml(m.avatar, m.nickname))
-                + '<div class="ow-msg-body">'
-                + (m.type === 'system' ? '' : '<div class="ow-msg-meta"><span class="ow-msg-nick">' + esc(m.nickname) + '</span>'
-                    + roleTag(m.role, m.title) + '<span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span></div>')
-                + content + '</div>';
+            div.innerHTML = b.html;
             box.insertBefore(div, ref);
+        },
+
+        /* ---------- 消息右键菜单（@ / 私信 / 收藏贴纸 / 撤回 / 归属地） ---------- */
+        _ctxItems: [],
+        hideCtxMenu: function () {
+            var menu = $('owCtxMenu');
+            if (menu) menu.style.display = 'none';
+        },
+        showCtxMenu: function (x, y, m) {
+            var self = this, admin = this.cfg.actor.role === 'admin', items = [];
+            if (!m.recalled) {
+                items.push({ t: '@ ' + m.nickname, run: function () { self.mention(m.nickname); } });
+                if (!m.mine && this.cfg.actor.kind === 'user')
+                    items.push({ t: '私信', run: function () { self.pm(m.nickname, m.uid, m.gid); } });
+                if (m.type === 'image' && this.cfg.actor.kind === 'user')
+                    items.push({ t: '收藏为贴纸', run: function () { self.collect(m.content); } });
+                if (m.mine || admin)
+                    items.push({ t: '撤回', run: function () { self.recall(m.id); } });
+            }
+            if (admin && m.ip)
+                items.push({ t: 'IP 归属地', run: function () { self.ipLoc(m.ip); } });
+            if (!items.length) return;
+
+            this._ctxItems = items;
+            var html = '', i;
+            for (i = 0; i < items.length; i++) {
+                html += '<a href="javascript:;" data-i="' + i + '">' + esc(items[i].t) + '</a>';
+            }
+            var menu = $('owCtxMenu');
+            menu.innerHTML = html;
+            menu.style.display = 'block';
+            // 视口边界：菜单放不下时往回挪
+            var vw = w.innerWidth || document.documentElement.clientWidth;
+            var vh = w.innerHeight || document.documentElement.clientHeight;
+            var mw = menu.offsetWidth || 140, mh = menu.offsetHeight || items.length * 32;
+            menu.style.left = Math.max(4, x + mw > vw ? x - mw : x) + 'px';
+            menu.style.top = Math.max(4, y + mh > vh ? y - mh : y) + 'px';
         },
 
         /* ---------- 发送 ---------- */
