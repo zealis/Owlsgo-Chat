@@ -290,7 +290,12 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg-meta { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 2px; }
 .ow-msg-meta .ow-msg-nick { color: var(--ow-text); font-weight: 600; cursor: pointer; margin-right: 4px; }
 .ow-msg-meta .ow-msg-nick:hover { color: var(--ow-primary-dark); }
-.ow-msg-meta .ow-msg-time { margin-left: 6px; }
+/* meta 行 flex：悬停时时间出现在该行远离头像的一端（自己的消息镜像后标签仍贴头像） */
+.ow-msg-meta { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 6px; flex-wrap: wrap; }
+.ow-msg-meta .ow-msg-time { display: none; font-size: 12px; color: var(--ow-text-sub); margin-left: auto; }
+.ow-msg.mine .ow-msg-meta { flex-direction: row-reverse; -webkit-flex-direction: row-reverse; }
+.ow-msg.mine .ow-msg-meta .ow-msg-time { margin-left: 0; margin-right: auto; }
+.ow-msg:hover .ow-msg-meta .ow-msg-time { display: inline; }
 .ow-msg-content {
     display: inline-block;
     padding: 8px 12px;
@@ -312,9 +317,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg.recalled .ow-msg-content { background: transparent; border: 1px dashed var(--ow-border); color: var(--ow-text-sub); font-size: 12px; }
 .ow-msg-img { max-width: 240px; max-height: 240px; border-radius: 6px; cursor: zoom-in; display: block; }
 .ow-msg-sticker { max-width: 120px; max-height: 120px; border-radius: 6px; cursor: zoom-in; }
-/* 悬停气泡时显示时间；操作改为右键菜单 */
-.ow-msg-sub { display: none; font-size: 12px; color: var(--ow-text-sub); margin-top: 2px; }
-.ow-msg:hover .ow-msg-sub { display: block; }
+/* 消息操作改为右键菜单（.ow-ctx-menu） */
 .ow-ctx-menu {
     position: fixed;
     z-index: 400;

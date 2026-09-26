@@ -410,6 +410,15 @@
                 e = e || w.event;
                 if (e.keyCode === 27) self.hideCtxMenu();
             };
+            // 菜单项点击（委托）：执行对应操作后收起菜单
+            $('owCtxMenu').onclick = function (e) {
+                e = e || w.event;
+                var t = e.target || e.srcElement;
+                if (!t || (t.tagName || '').toUpperCase() !== 'A') return;
+                var it = self._ctxItems[parseInt(t.getAttribute('data-i'), 10)];
+                self.hideCtxMenu();
+                if (it && it.run) it.run();
+            };
             $('owModalMask').onclick = function (e) { if (e.target === this) self.closeModal(); };
             $('owImgViewer').onclick = function () { this.style.display = 'none'; };
             var lo = $('owBtnLogout');
@@ -602,24 +611,30 @@
             else content = '<span class="ow-msg-content">' + esc(m.content) + '</span>';
 
             var isSys = m.type === 'system';
-            var meta = isSys ? '' :
-                '<div class="ow-msg-meta">' + roleTag(m.role, m.title)
+            // meta 行：头像一侧依次是「用户组标签、昵称」；时间不直接显示，
+            // 悬停时出现在该行远离头像的一端（自己的消息镜像后标签仍贴头像）
+            var timeHtml = '<span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span>';
+            var mainPart = roleTag(m.role, m.title)
                 + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
-                + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '')
-                + '</div>';
-            var sub = isSys ? '' :
-                '<div class="ow-msg-sub"><span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span></div>';
+                + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '');
+            var meta = isSys ? '' :
+                '<div class="ow-msg-meta">' + (m.mine ? timeHtml + mainPart : mainPart + timeHtml) + '</div>';
 
             return {
                 cls: cls,
                 html: (isSys ? '' : avatarHtml(m.avatar, m.nickname))
-                    + '<div class="ow-msg-body">' + meta + content + sub + '</div>'
+                    + '<div class="ow-msg-body">' + meta + content + '</div>'
             };
         },
 
         addMessage: function (m, batch) {
             var box = $('owMessages');
-            if (document.getElementById('owMsg' + m.id)) return;
+            var exist = document.getElementById('owMsg' + m.id);
+            if (exist) {
+                // 轮询带回撤回状态时，同步更新已渲染的气泡（否则撤回后界面不变）
+                if (m.recalled) this.markRecalled(m.id);
+                return;
+            }
             this.msgCache[m.id] = m;
             var b = this.buildMessage(m);
             var div = document.createElement('div');
@@ -633,6 +648,31 @@
                 if (oid) delete this.msgCache[oid];
                 box.removeChild(old);
             }
+        },
+
+        /** 把某条消息的气泡更新为「已撤回」状态 */
+        markRecalled: function (id) {
+            var el = document.getElementById('owMsg' + id);
+            if (!el || el.className.indexOf('recalled') >= 0) return;
+            el.className += ' recalled';
+            var cs = el.querySelector('.ow-msg-content');
+            if (cs) cs.outerHTML = '<span class="ow-msg-content">此消息已撤回</span>';
+            this.msgCache[id] = this.msgCache[id] || {};
+            this.msgCache[id].recalled = 1;
+        },
+
+        /** 自研确认弹窗（替代原生 confirm） */
+        confirmModal: function (text, onOk) {
+            var self = this;
+            this.openModal(
+                '<h3>确认操作</h3>'
+                + '<p class="ow-modal-desc">' + esc(text) + '</p>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost" id="owCfmNo">取消</button>'
+                + '<button class="ow-btn ow-btn-danger" id="owCfmOk">确定</button></div>'
+            );
+            $('owCfmOk').onclick = function () { self.closeModal(); if (onOk) onOk(); };
+            $('owCfmNo').onclick = function () { self.closeModal(); };
         },
 
         scrollBottom: function () {
@@ -740,8 +780,13 @@
         },
 
         recall: function (id) {
-            if (!w.confirm('确定撤回这条消息吗？')) return;
-            OwApi.post('recall', { id: id }, function (r) { if (!r.ok) toast(r.msg); });
+            var self = this;
+            this.confirmModal('确定撤回这条消息吗？', function () {
+                OwApi.post('recall', { id: id }, function (r) {
+                    if (r.ok) self.markRecalled(id);
+                    else toast(r.msg);
+                });
+            });
         },
 
         mention: function (nick) {
