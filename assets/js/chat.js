@@ -618,7 +618,7 @@
                 + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
                 + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '');
             var meta = isSys ? '' :
-                '<div class="ow-msg-meta">' + (m.mine ? timeHtml + mainPart : mainPart + timeHtml) + '</div>';
+                '<div class="ow-msg-meta">' + mainPart + timeHtml + '</div>';
 
             return {
                 cls: cls,

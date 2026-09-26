@@ -294,7 +294,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg-meta { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 6px; flex-wrap: wrap; }
 .ow-msg-meta .ow-msg-time { display: none; font-size: 12px; color: var(--ow-text-sub); margin-left: auto; }
 .ow-msg.mine .ow-msg-meta { flex-direction: row-reverse; -webkit-flex-direction: row-reverse; }
-.ow-msg.mine .ow-msg-meta .ow-msg-time { margin-left: 0; margin-right: auto; }
+.ow-msg.mine .ow-msg-meta .ow-msg-time { margin-left: auto; margin-right: 0; }
 .ow-msg:hover .ow-msg-meta .ow-msg-time { display: inline; }
 .ow-msg-content {
     display: inline-block;
