@@ -192,6 +192,9 @@ class DB
         ];
         foreach ($tables as $sql) self::$pdo->exec($sql);
 
+        // ---------- 增量迁移（幂等） ----------
+        self::addColumn('users', 'points', 'int', '0');   // 用户积分
+
         // 索引（跨引擎兼容语法）
         $idx = [
             'CREATE INDEX IF NOT EXISTS idx_msg_room ON messages (room_id, id)',
@@ -209,6 +212,39 @@ class DB
         } else {
             foreach ($idx as $sql) self::$pdo->exec($sql);
         }
+    }
+
+    /** 列是否已存在（三引擎方言） */
+    private static function hasColumn(string $table, string $col): bool
+    {
+        try {
+            if (self::$driver === 'sqlite') {
+                foreach (self::all("PRAGMA table_info($table)") as $r) {
+                    if (($r['name'] ?? '') === $col) return true;
+                }
+                return false;
+            }
+            if (self::$driver === 'pgsql') {
+                return (bool)self::val(
+                    'SELECT COUNT(*) FROM information_schema.columns WHERE table_name=? AND column_name=?',
+                    [$table, $col]
+                );
+            }
+            return (bool)self::val(
+                'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?',
+                [$table, $col]
+            );
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /** 幂等加列：已存在则跳过 */
+    private static function addColumn(string $table, string $col, string $type, string $default): void
+    {
+        if (self::hasColumn($table, $col)) return;
+        $t = self::t($type);
+        self::$pdo->exec("ALTER TABLE $table ADD COLUMN $col $t NOT NULL DEFAULT $default");
     }
 
     // ---------- 站点设置 ----------

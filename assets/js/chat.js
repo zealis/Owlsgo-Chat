@@ -717,7 +717,9 @@
                     + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname)
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
                     + '<div style="margin-top:4px">' + roleTag(u.role, u.title) + '</div></div>'
-                    + '<p style="font-size:13px;color:#999">账号：' + esc(u.username) + '<br>注册：' + esc((u.created_at || '').toString().substr(0, 10)) + '</p>'
+                    + '<p style="font-size:13px;color:#999">账号：' + esc(u.username) + '<br>'
+                    + '积分：' + esc(u.points || 0) + '<br>'
+                    + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
                 );
             });
         },
@@ -813,7 +815,8 @@
             if (!el) return;
             if (me) {
                 el.innerHTML = avatarHtml(me.avatar, me.nickname)
-                    + '<div><div class="ow-me-name">' + esc(me.nickname) + '</div>' + roleTag(me.role, me.title) + '</div>';
+                    + '<div><div class="ow-me-name">' + esc(me.nickname) + '</div>' + roleTag(me.role, me.title)
+                    + '<div style="font-size:11px;color:var(--ow-text-sub)">积分 ' + esc(me.points || 0) + '</div></div>';
             } else {
                 el.innerHTML = avatarHtml('', this.cfg.actor.nickname)
                     + '<div><div class="ow-me-name">' + esc(this.cfg.actor.nickname) + '</div>' + roleTag('guest', '') + '</div>';
@@ -1042,7 +1045,7 @@
         /* ---------- 用户管理动作 ---------- */
         searchUsers: function () {
             OwApi.post('admin_users', { q: $('owAQ').value }, function (r) {
-                var h = '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>用户名</th><th>昵称</th><th>邮箱</th><th>角色</th><th>称号</th><th>状态</th><th>操作</th></tr>';
+                var h = '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>用户名</th><th>昵称</th><th>邮箱</th><th>角色</th><th>称号</th><th>积分</th><th>状态</th><th>操作</th></tr>';
                 for (var i = 0; i < r.data.length; i++) {
                     var d = r.data[i];
                     h += '<tr><td>' + d.id + '</td><td>' + esc(d.username) + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
@@ -1050,16 +1053,20 @@
                        + opts(ROLE_CN, ['member', 'vip', 'admin'], d.role)
                        + '</select></td>'
                        + '<td><input class="ow-input" id="owUT' + d.id + '" value="' + esc(d.title || '') + '"></td>'
+                       + '<td><input class="ow-input" id="owUP' + d.id + '" value="' + esc(d.points || 0) + '" style="width:88px"></td>'
                        + '<td>' + (d.status == 1 ? '正常' : '禁用') + '</td>'
                        + '<td><a href="javascript:;" onclick="OwAdmin.userSave(' + d.id + ')">保存</a> '
                        + '<a href="javascript:;" onclick="OwAdmin.userStatus(' + d.id + ',' + (d.status == 1 ? 0 : 1) + ')">' + (d.status == 1 ? '禁用' : '启用') + '</a></td></tr>';
                 }
-                if (!r.data.length) h += '<tr><td colspan="8" style="color:#999">无匹配结果</td></tr>';
+                if (!r.data.length) h += '<tr><td colspan="9" style="color:#999">无匹配结果</td></tr>';
                 $('owAResult').innerHTML = h + '</table></div>';
             });
         },
         userSave: function (id) {
-            OwApi.post('admin_user_set', { id: id, role: $('owUR' + id).value, title: $('owUT' + id).value }, function (r) { toast(r.msg); });
+            OwApi.post('admin_user_set', {
+                id: id, role: $('owUR' + id).value,
+                title: $('owUT' + id).value, points: $('owUP' + id).value
+            }, function (r) { toast(r.msg); });
         },
         userStatus: function (id, s) {
             OwApi.post('admin_user_status', { id: id, status: s }, function (r) { toast(r.msg); OwAdmin.searchUsers(); });

@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.8';
+const OWLSGO_VERSION = '1.0.9';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -292,7 +292,7 @@ if ($action !== '') {
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         case 'user_card':
-            $u = DB::one('SELECT id,username,nickname,role,title,avatar,created_at,last_login FROM users WHERE id=?', [(int)$p('id')]);
+            $u = DB::one('SELECT id,username,nickname,role,title,avatar,points,created_at,last_login FROM users WHERE id=?', [(int)$p('id')]);
             if (!$u) Api::json(['ok' => false, 'msg' => '用户不存在']);
             Api::json(['ok' => true, 'data' => $u]);
 
@@ -528,7 +528,8 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         'settings' => $settings,
         'me' => $user ? [
             'nickname' => $user['nickname'], 'username' => $user['username'],
-            'role' => $user['role'], 'title' => $user['title'] ?? '', 'avatar' => $user['avatar'] ?? '',
+            'role' => $user['role'], 'title' => $user['title'] ?? '',
+            'avatar' => $user['avatar'] ?? '', 'points' => (int)($user['points'] ?? 0),
         ] : null,
         'ts' => time(),
         'version' => OWLSGO_VERSION,

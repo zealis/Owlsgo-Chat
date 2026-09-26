@@ -23,7 +23,7 @@ class Admin
                 if ($q === '') Api::json(['ok' => true, 'data' => [], 'hint' => '请输入关键词']);
                 $like = '%' . $q . '%';
                 $cast = DB::driver() === 'mysql' ? 'CAST(id AS CHAR)' : 'CAST(id AS TEXT)';
-                $rows = DB::all("SELECT id,username,email,nickname,role,title,status,created_at,last_login FROM users
+                $rows = DB::all("SELECT id,username,email,nickname,role,title,points,status,created_at,last_login FROM users
                     WHERE username LIKE ? OR nickname LIKE ? OR email LIKE ? OR $cast LIKE ? LIMIT 50",
                     [$like, $like, $like, $like]);
                 Api::json(['ok' => true, 'data' => $rows]);
@@ -33,6 +33,12 @@ class Admin
                 $role = $p('role');
                 if (!in_array($role, ['member', 'vip', 'admin'], true)) Api::json(['ok' => false, 'msg' => '非法角色']);
                 DB::run('UPDATE users SET role=?, title=? WHERE id=?', [$role, $p('title'), $id]);
+                // 积分：允许后台单独调整（可为负数，但不接受非数字）
+                if (isset($_POST['points']) && $_POST['points'] !== '') {
+                    $pts = (int)$_POST['points'];
+                    DB::run('UPDATE users SET points=? WHERE id=?', [$pts, $id]);
+                    Sec::log('admin_user_points', $actor['nickname'], ['id' => $id, 'points' => $pts]);
+                }
                 Sec::log('admin_user_set', $actor['nickname'], ['id' => $id, 'role' => $role]);
                 Api::json(['ok' => true, 'msg' => '已更新']);
 
