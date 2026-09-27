@@ -1149,6 +1149,8 @@
                         + '<div class="ow-form-item"><label>登录失败几次后锁定</label><input class="ow-input" id="owS_login_fail_lock" value="' + esc(d.login_fail_lock || '10') + '"></div>'
                         + '<div class="ow-form-item"><label>锁定时长(分钟)</label><input class="ow-input" id="owS_login_lock_minutes" value="' + esc(d.login_lock_minutes || '15') + '"></div>'
                         + '</div>'
+                        + '<div class="ow-form-item"><label>注册最低年龄(周岁)</label><input class="ow-input" id="owS_min_register_age" value="' + esc(d.min_register_age || '0') + '">'
+                        + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限制；填 18 则注册时必须选择出生日期且年满 18 周岁（按日期精确计算）。</p></div>'
                         + '<p style="font-size:12px;color:#999;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
@@ -1255,6 +1257,7 @@
                 mail_rate_limit: $('owS_mail_rate_limit').value,
                 image_mode: $('owS_image_mode').value,
                 room_pass_ttl: $('owS_room_pass_ttl') ? $('owS_room_pass_ttl').value : '',
+                min_register_age: $('owS_min_register_age') ? $('owS_min_register_age').value : '',
                 login_fail_captcha: $('owS_login_fail_captcha') ? $('owS_login_fail_captcha').value : '',
                 login_fail_lock: $('owS_login_fail_lock') ? $('owS_login_fail_lock').value : '',
                 login_lock_minutes: $('owS_login_lock_minutes') ? $('owS_login_lock_minutes').value : '',

@@ -120,7 +120,11 @@ class DB
             'pgsql' => ['text' => 'TEXT', 'str' => 'VARCHAR(191)', 'int' => 'INTEGER', 'bigint' => 'BIGINT', 'ts' => 'BIGINT'],
             'sqlite'=> ['text' => 'TEXT', 'str' => 'TEXT', 'int' => 'INTEGER', 'bigint' => 'INTEGER', 'ts' => 'INTEGER'],
         ];
-        return $map[self::$driver][$type];
+        // 支持 varchar(N) 形式，其余走统一映射；未知类型原样返回，绝不返回 null
+        if (preg_match('/^varchar\((\d+)\)$/i', $type, $m)) {
+            return self::$driver === 'sqlite' ? 'TEXT' : 'VARCHAR(' . $m[1] . ')';
+        }
+        return $map[self::$driver][$type] ?? $type;
     }
 
     /** 初始化全部表结构（幂等） */
@@ -194,6 +198,7 @@ class DB
 
         // ---------- 增量迁移（幂等） ----------
         self::addColumn('users', 'points', 'int', '0');   // 用户积分
+        self::addColumn('users', 'birthdate', 'varchar(10)', "''");   // 出生日期（年龄限制注册用）
 
         // 索引（跨引擎兼容语法）
         $idx = [
@@ -278,6 +283,7 @@ class DB
             'login_fail_captcha' => '3',  // 连续失败达此次数后要求图形验证码（0=不启用）
             'login_fail_lock'    => '10', // 连续失败达此次数后临时锁定（0=不锁定）
             'login_lock_minutes' => '15', // 锁定时长（分钟）
+            'min_register_age' => '0',   // 注册最低年龄（周岁），0=不限制
         ];
         foreach ($defs as $k => $v) {
             if (self::setting($k) === null) self::setSetting($k, $v);

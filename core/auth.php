@@ -53,7 +53,19 @@ class Auth
         return DB::one('SELECT * FROM guests WHERE id=?', [$id]);
     }
 
-    public static function register(string $username, string $email, string $password, string $code): array
+    /**
+     * 计算周岁：传入 Y-m-d，返回年龄；日期非法或为未来日期返回 -1
+     */
+    public static function age(string $birthdate): int
+    {
+        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $birthdate)) return -1;
+        $b = DateTimeImmutable::createFromFormat('Y-m-d', $birthdate);
+        $today = new DateTimeImmutable('today');
+        if (!$b || $b > $today) return -1;
+        return (int)$today->diff($b)->y;
+    }
+
+    public static function register(string $username, string $email, string $password, string $code, string $birthdate = ''): array
     {
         if (DB::setting('allow_register', '1') !== '1') return [false, '站点已关闭注册'];
         if (!preg_match('/^[a-zA-Z0-9_]{3,20}$/', $username)) return [false, '用户名需 3-20 位字母、数字或下划线'];
@@ -64,12 +76,20 @@ class Auth
         if (DB::setting('reg_email_verify', '1') === '1' && !Mailer::verifyCode($email, 'register', $code)) {
             return [false, '邮箱验证码错误或已过期'];
         }
+        // 年龄限制（周岁，按出生日期精确计算）
+        $minAge = (int)DB::setting('min_register_age', 0);
+        if ($minAge > 0) {
+            $age = self::age($birthdate);
+            if ($age < 0) return [false, '请选择有效的出生日期'];
+            if ($age < $minAge) return [false, '注册需年满 ' . $minAge . ' 周岁（当前 ' . $age . ' 周岁）'];
+        }
         $id = DB::insert('users', [
             'username' => $username, 'email' => $email,
             'password' => password_hash($password, PASSWORD_DEFAULT),
             'nickname' => $username, 'avatar' => '', 'role' => 'member',
             'client_key' => Sec::clientKey(), 'status' => 1,
             'email_verified' => DB::setting('reg_email_verify', '1') === '1' ? 1 : 0,
+            'birthdate' => $birthdate,
             'created_at' => time(),
         ]);
         Sec::log('register', $username, ['email' => $email]);

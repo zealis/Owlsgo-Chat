@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.14';
+const OWLSGO_VERSION = '1.0.15';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -192,7 +192,12 @@ if ($action !== '') {
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         case 'register':
-            [$ok, $msg] = Auth::register($p('username'), $p('email'), (string)($_POST['password'] ?? ''), $p('code'));
+            // 组装出生日期（年/月/日 → Y-m-d），未开启年龄限制时为空
+            $by = (int)$p('birth_y');
+            $bm = (int)$p('birth_m');
+            $bd = (int)$p('birth_d');
+            $birthdate = ($by && $bm && $bd) ? sprintf('%04d-%02d-%02d', $by, $bm, $bd) : '';
+            [$ok, $msg] = Auth::register($p('username'), $p('email'), (string)($_POST['password'] ?? ''), $p('code'), $birthdate);
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         case 'login':
@@ -380,6 +385,28 @@ function ow_icon(string $name, int $size = 18): string
     return '<svg class="ow-ico" width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
 }
 
+/**
+ * 年龄限制开启时，渲染出生日期选择（年/月/日三个下拉，兼容不支持 date 类型的老浏览器）
+ * 未开启（0）时返回空字符串
+ */
+function ageFieldHtml(): string
+{
+    $min = (int)DB::setting('min_register_age', 0);
+    if ($min <= 0) return '';
+    $yNow = (int)date('Y');
+    $ys = '<option value="">年</option>';
+    for ($y = $yNow; $y >= $yNow - 100; $y--) $ys .= '<option value="' . $y . '">' . $y . '</option>';
+    $ms = '<option value="">月</option>';
+    for ($m = 1; $m <= 12; $m++) $ms .= '<option value="' . $m . '">' . $m . '</option>';
+    $ds = '<option value="">日</option>';
+    for ($d = 1; $d <= 31; $d++) $ds .= '<option value="' . $d . '">' . $d . '</option>';
+    return '<div class="ow-form-item"><label>出生日期</label>'
+        . '<div class="ow-birth-row"><select class="ow-input" name="birth_y" required>' . $ys . '</select>'
+        . '<select class="ow-input" name="birth_m" required>' . $ms . '</select>'
+        . '<select class="ow-input" name="birth_d" required>' . $ds . '</select></div>'
+        . '<p style="font-size:12px;color:#999;margin-top:4px">注册需年满 ' . $min . ' 周岁（按出生日期精确计算）。</p></div>';
+}
+
 function pageHead(string $title): void
 {
     // 动态页禁止缓存：页面内含会话密钥，缓存旧页会导致提交时签名对不上
@@ -460,6 +487,8 @@ function renderAuth(string $mode): void
            . ($needMail ? '注册需要邮箱验证码。' : '当前未开启邮箱验证，邮箱仅用于找回密码。')
            . '</p></div>'
            . ($needMail ? '<div class="ow-form-item"><label>邮箱验证码</label><input class="ow-input" name="code" required></div>' : '')
+           // 年龄限制：开启时要求选择出生日期（年/月/日，兼容不支持 date 类型的老浏览器）
+           . ageFieldHtml()
            . '<div class="ow-form-item"><label>密码</label><input class="ow-input" type="password" name="password" required placeholder="至少 6 位"></div>'
            . '<button class="ow-btn ow-btn-primary ow-btn-block" type="submit">注 册</button><div class="ow-form-msg"></div></form>'
            . '<div class="ow-auth-links"><a href="?page=login">已有账号，去登录</a><a href="?page=chat">返回聊天</a></div>';
@@ -474,7 +503,6 @@ function renderAuth(string $mode): void
            . '<div class="ow-auth-links"><a href="?page=login">返回登录</a></div>';
     }
     echo '</div><script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
-       // 下发服务器时间：前端据此校正本机时钟偏差，避免签名 ts 超出时间窗
        . '<script>OwAuth.init(' . json_encode(['key' => $_SESSION['anon_key'], 'ts' => time()]) . ');</script>';
     Plugin::fire('page.footer');
     echo '</body></html>';

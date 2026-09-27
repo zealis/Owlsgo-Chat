@@ -317,7 +317,8 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg.recalled .ow-msg-content { background: transparent; border: 1px dashed var(--ow-border); color: var(--ow-text-sub); font-size: 12px; }
 .ow-msg-img { max-width: 240px; max-height: 240px; border-radius: 6px; cursor: zoom-in; display: block; }
 .ow-msg-sticker { max-width: 120px; max-height: 120px; border-radius: 6px; cursor: zoom-in; }
-/* 消息操作改为右键菜单（.ow-ctx-menu） */
+.ow-birth-row { display: flex; display: -webkit-flex; gap: 8px; }
+.ow-birth-row .ow-input { flex: 1; -webkit-flex: 1; min-width: 0; }
 .ow-ctx-menu {
     position: fixed;
     z-index: 400;
