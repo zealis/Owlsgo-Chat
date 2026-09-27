@@ -12,3 +12,6 @@ Thumbs.db
 
 # 工作区内部资料
 /.workbuddy/
+
+# 测试临时文件
+*.tmp
