@@ -86,11 +86,14 @@ class Sec
     public static function loginFail(string $identity): void
     {
         $fails = self::loginFails($identity) + 1;
-        $lock = $fails >= 10 ? time() + 900 : null; // 10 次失败锁 15 分钟
+        $lockAt = (int)DB::setting('login_fail_lock', 10);      // 达此失败次数即锁定
+        $mins   = (int)DB::setting('login_lock_minutes', 15);   // 锁定时长（分钟）
+        $lock = ($lockAt > 0 && $fails >= $lockAt) ? time() + $mins * 60 : null;
         DB::upsert('login_attempts', [
             'identity' => $identity, 'fails' => $fails,
             'locked_until' => $lock, 'updated_at' => time(),
         ], ['identity']);
+        if ($lock) self::log('login_locked', $identity, ['fails' => $fails, 'minutes' => $mins]);
     }
 
     public static function loginOk(string $identity): void
@@ -98,9 +101,20 @@ class Sec
         DB::run('DELETE FROM login_attempts WHERE identity=?', [$identity]);
     }
 
+    /** 达到该失败次数后要求图形验证码（0 = 不启用验证码） */
     public static function needCaptcha(string $identity): bool
     {
-        return self::loginFails($identity) >= 3;
+        $n = (int)DB::setting('login_fail_captcha', 3);
+        if ($n <= 0) return false;
+        return self::loginFails($identity) >= $n;
+    }
+
+    /** 剩余锁定时长（秒），未锁定返回 0 */
+    public static function lockSeconds(string $identity): int
+    {
+        $r = DB::one('SELECT locked_until FROM login_attempts WHERE identity=?', [$identity]);
+        if (!$r || !$r['locked_until']) return 0;
+        return max(0, (int)$r['locked_until'] - time());
     }
 
     // ---------- SVG 验证码（零依赖，无需 GD） ----------

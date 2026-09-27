@@ -274,6 +274,10 @@ class DB
             'mail_rate_limit'  => '60',  // 邮件发送最小间隔(秒)
             'sound_default'    => '1',
             'room_pass_ttl'    => '1800', // 密码房通行缓存(秒)，0=每次进入都要输入密码
+            // 登录保护
+            'login_fail_captcha' => '3',  // 连续失败达此次数后要求图形验证码（0=不启用）
+            'login_fail_lock'    => '10', // 连续失败达此次数后临时锁定（0=不锁定）
+            'login_lock_minutes' => '15', // 锁定时长（分钟）
         ];
         foreach ($defs as $k => $v) {
             if (self::setting($k) === null) self::setSetting($k, $v);

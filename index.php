@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.12';
+const OWLSGO_VERSION = '1.0.13';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -197,11 +197,29 @@ if ($action !== '') {
 
         case 'login':
             $identity = $p('identity');
-            if (Sec::needCaptcha(strtolower($identity) . '|' . Sec::ip())) {
-                if (!Sec::checkCaptcha($p('captcha'))) Api::json(['ok' => false, 'msg' => '图形验证码错误', 'captcha' => true]);
+            $key = strtolower($identity) . '|' . Sec::ip();
+            // 登录保护：先查锁定，再查是否需要图形验证码
+            $lockSec = Sec::lockSeconds($key);
+            if ($lockSec > 0) {
+                Api::json(['ok' => false, 'msg' => '失败次数过多，已临时锁定 ' . (int)ceil($lockSec / 60) . ' 分钟', 'locked' => true]);
+            }
+            if (Sec::needCaptcha($key)) {
+                $code = $p('captcha');
+                if ($code === '') {
+                    Sec::loginFail($key);   // 验证码为空同样计入失败，保证锁定可达
+                    Api::json(['ok' => false, 'msg' => '请填写图形验证码', 'captcha' => true]);
+                }
+                if (!Sec::checkCaptcha($code)) {
+                    Sec::loginFail($key);   // 验证码错误也计入失败
+                    Api::json(['ok' => false, 'msg' => '图形验证码错误', 'captcha' => true]);
+                }
             }
             [$ok, $msg] = Auth::login($identity, (string)($_POST['password'] ?? ''));
-            Api::json(['ok' => $ok, 'msg' => $msg, 'captcha' => !$ok && Sec::needCaptcha(strtolower($identity) . '|' . Sec::ip())]);
+            Api::json([
+                'ok' => $ok, 'msg' => $msg,
+                'captcha' => !$ok && Sec::needCaptcha($key),
+                'locked' => !$ok && Sec::lockSeconds($key) > 0,
+            ]);
 
         case 'reset':
             [$ok, $msg] = Auth::resetPassword($p('email'), $p('code'), (string)($_POST['password'] ?? ''));

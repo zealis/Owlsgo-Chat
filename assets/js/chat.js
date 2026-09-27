@@ -1144,6 +1144,12 @@
                         + '<div class="ow-form-item"><label>图片消息存储</label>' + sel('image_mode', { 'local': '本地存储（客户端压缩）', 'imgbed': '图床（API 压缩）' }) + '</div>'
                         + '<div class="ow-form-item"><label>密码房通行缓存(秒)</label><input class="ow-input" id="owS_room_pass_ttl" value="' + esc(d.room_pass_ttl || '1800') + '">'
                         + '<p style="font-size:12px;color:#999;margin-top:4px">验证一次密码后，该时间内进入同一房间无需重复输入；填 0 表示每次进入都要输入。</p></div>'
+                        + '<div class="ow-form-row">'
+                        + '<div class="ow-form-item"><label>登录失败几次后要求验证码</label><input class="ow-input" id="owS_login_fail_captcha" value="' + esc(d.login_fail_captcha || '3') + '"></div>'
+                        + '<div class="ow-form-item"><label>登录失败几次后锁定</label><input class="ow-input" id="owS_login_fail_lock" value="' + esc(d.login_fail_lock || '10') + '"></div>'
+                        + '<div class="ow-form-item"><label>锁定时长(分钟)</label><input class="ow-input" id="owS_login_lock_minutes" value="' + esc(d.login_lock_minutes || '15') + '"></div>'
+                        + '</div>'
+                        + '<p style="font-size:12px;color:#999;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
                 });
@@ -1249,6 +1255,9 @@
                 mail_rate_limit: $('owS_mail_rate_limit').value,
                 image_mode: $('owS_image_mode').value,
                 room_pass_ttl: $('owS_room_pass_ttl') ? $('owS_room_pass_ttl').value : '',
+                login_fail_captcha: $('owS_login_fail_captcha') ? $('owS_login_fail_captcha').value : '',
+                login_fail_lock: $('owS_login_fail_lock') ? $('owS_login_fail_lock').value : '',
+                login_lock_minutes: $('owS_login_lock_minutes') ? $('owS_login_lock_minutes').value : '',
                 sound_default: $('owS_sound_default').value
             }, function (r) { toast(r.msg); });
         }
