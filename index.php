@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.13';
+const OWLSGO_VERSION = '1.0.14';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -446,12 +446,20 @@ function renderAuth(string $mode): void
            . '<button class="ow-btn ow-btn-primary ow-btn-block" type="submit">登 录</button><div class="ow-form-msg"></div></form>'
            . '<div class="ow-auth-links"><a href="?page=register">注册账号</a><a href="?page=forgot">忘记密码</a><a href="?page=chat">返回聊天</a></div>';
     } elseif ($mode === 'register') {
+        // 是否要求邮箱验证由后台设置决定：关闭时不再显示验证码输入框与发码按钮
+        $needMail = DB::setting('reg_email_verify', '1') === '1';
         echo '<form class="ow-auth-form" data-mode="register">'
            . Sec::signField($_SESSION['anon_key'], 'register')
            . '<div class="ow-form-item"><label>用户名</label><input class="ow-input" name="username" required placeholder="3-20 位字母、数字或下划线"></div>'
-           . '<div class="ow-form-item"><label>邮箱</label><div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'
-           . '<button type="button" class="ow-btn ow-btn-ghost" data-sendcode="register">发验证码</button></div></div>'
-           . '<div class="ow-form-item"><label>邮箱验证码</label><input class="ow-input" name="code" required></div>'
+           . '<div class="ow-form-item"><label>邮箱</label>'
+           . ($needMail
+               ? '<div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'
+                 . '<button type="button" class="ow-btn ow-btn-ghost" data-sendcode="register">发验证码</button></div>'
+               : '<input class="ow-input" type="email" name="email" required>')
+           . '<p style="font-size:12px;color:#999;margin-top:4px">'
+           . ($needMail ? '注册需要邮箱验证码。' : '当前未开启邮箱验证，邮箱仅用于找回密码。')
+           . '</p></div>'
+           . ($needMail ? '<div class="ow-form-item"><label>邮箱验证码</label><input class="ow-input" name="code" required></div>' : '')
            . '<div class="ow-form-item"><label>密码</label><input class="ow-input" type="password" name="password" required placeholder="至少 6 位"></div>'
            . '<button class="ow-btn ow-btn-primary ow-btn-block" type="submit">注 册</button><div class="ow-form-msg"></div></form>'
            . '<div class="ow-auth-links"><a href="?page=login">已有账号，去登录</a><a href="?page=chat">返回聊天</a></div>';
