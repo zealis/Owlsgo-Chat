@@ -169,9 +169,11 @@ button { font-family: inherit; cursor: pointer; }
 .ow-layout {
     display: flex; display: -webkit-flex;
     height: 100vh;
+    height: 100dvh;          /* 移动端浏览器地址栏场景（支持的浏览器生效） */
     max-width: 1440px;
     margin: 0 auto;
     background: var(--ow-bg);
+    overflow: hidden;        /* 任何情况下都不让页面整体横向/纵向滚动，滚动交给消息区 */
 }
 
 /* 左侧栏 */
@@ -237,13 +239,16 @@ button { font-family: inherit; cursor: pointer; }
     flex: 1; -webkit-flex: 1;
     display: flex; display: -webkit-flex;
     flex-direction: column; -webkit-flex-direction: column;
-    min-width: 0;
+    /* 关键：column 容器里的子项默认 min-height:auto，消息一多就会把 100vh 撑开
+       （表现为整个页面可滚动、输入框被顶出屏幕），必须显式归零 */
+    min-width: 0; min-height: 0;
     position: relative;
 }
 .ow-topbar {
     display: flex; display: -webkit-flex;
     align-items: center; -webkit-align-items: center;
     gap: 10px;
+    flex-shrink: 0; -webkit-flex-shrink: 0;   /* 头部与输入栏不参与压缩 */
     padding: 10px 16px;
     border-bottom: 1px solid var(--ow-border);
     background: var(--ow-bg);
@@ -269,7 +274,10 @@ button { font-family: inherit; cursor: pointer; }
 /* 消息列表 */
 .ow-messages {
     flex: 1; -webkit-flex: 1;
+    min-height: 0;           /* 同上：允许被压缩，滚动条留在消息区内部 */
     overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     padding: 12px 16px;
     background: var(--ow-bg);
 }
@@ -303,7 +311,10 @@ button { font-family: inherit; cursor: pointer; }
     background: var(--ow-bg-sub);
     border: 1px solid var(--ow-border);
     word-break: break-word;
+    word-wrap: break-word;          /* 老内核 */
+    overflow-wrap: anywhere;        /* 超长无空格串（URL/长串数字）强制断行 */
     white-space: pre-wrap;
+    max-width: 100%;
     position: relative;
 }
 .ow-msg.mine { flex-direction: row-reverse; -webkit-flex-direction: row-reverse; }
@@ -368,7 +379,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-ctx-menu a:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
 
 /* 输入区 */
-.ow-inputbar { border-top: 1px solid var(--ow-border); background: var(--ow-bg); padding: 8px 12px 12px; }
+.ow-inputbar { border-top: 1px solid var(--ow-border); background: var(--ow-bg); padding: 8px 12px 12px; flex-shrink: 0; -webkit-flex-shrink: 0; }
 .ow-toolbar { display: flex; display: -webkit-flex; gap: 4px; margin-bottom: 6px; }
 .ow-input-row { display: flex; display: -webkit-flex; gap: 10px; align-items: flex-end; -webkit-align-items: flex-end; }
 .ow-input-row .ow-input { resize: none; max-height: 320px; background: var(--ow-bg-sub); }
