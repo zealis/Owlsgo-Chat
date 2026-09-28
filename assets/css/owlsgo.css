@@ -371,7 +371,23 @@ button { font-family: inherit; cursor: pointer; }
 .ow-inputbar { border-top: 1px solid var(--ow-border); background: var(--ow-bg); padding: 8px 12px 12px; }
 .ow-toolbar { display: flex; display: -webkit-flex; gap: 4px; margin-bottom: 6px; }
 .ow-input-row { display: flex; display: -webkit-flex; gap: 10px; align-items: flex-end; -webkit-align-items: flex-end; }
-.ow-input-row .ow-input { resize: none; max-height: 120px; background: var(--ow-bg-sub); }
+.ow-input-row .ow-input { resize: none; max-height: 320px; background: var(--ow-bg-sub); }
+.ow-input-row { position: relative; }
+/* 输入框拖拽手柄（右下角，避开发送按钮） */
+.ow-input-resize {
+    position: absolute;
+    right: 50px; bottom: 2px;
+    width: 18px; height: 14px;
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    justify-content: center; -webkit-justify-content: center;
+    color: var(--ow-text-sub);
+    opacity: .45;
+    cursor: ns-resize;
+    user-select: none; -webkit-user-select: none;
+}
+.ow-input-resize:hover { opacity: .9; color: var(--ow-primary); }
+@media (max-width: 720px) { .ow-input-resize { display: none; } }
 .ow-send { width: 46px; height: 40px; padding: 0; font-size: 18px; border-radius: 50%; flex-shrink: 0; -webkit-flex-shrink: 0; }
 
 /* 表情面板 */

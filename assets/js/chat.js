@@ -387,6 +387,11 @@
             var self = this;
             $('owBtnSend').onclick = function () { self.send(); };
             var input = $('owInput');
+            // 随内容自动增高；恢复上次手动拖出的高度
+            try { self.inputUserH = parseInt(w.localStorage.getItem('owl_input_h') || '0', 10) || 0; } catch (e) {}
+            self.bindInputResize();
+            self.autoGrow();
+            input.oninput = function () { self.autoGrow(); };
             input.onkeydown = function (e) {
                 e = e || w.event;
                 if (e.keyCode === 13 && !e.shiftKey) { e.preventDefault ? e.preventDefault() : (e.returnValue = false); self.send(); }
@@ -681,7 +686,44 @@
             loop();
         },
 
-        /* ---------- 消息渲染 ---------- */
+        /* ---------- 输入框高度：随内容自动增高 + 拖拽手柄手动拉高 ---------- */
+        inputMaxH: 120,      // 自动增高上限（拖拽可上调）
+        inputUserH: 0,       // 用户手动拖出的高度（0=未设置，走自动增高）
+        autoGrow: function () {
+            var el = $('owInput');
+            if (!el) return;
+            el.style.height = 'auto';
+            var h = el.scrollHeight + 2;
+            var min = 40;
+            if (this.inputUserH > 0) {
+                // 手动设定过高度：内容再多也不超过用户设定，内容少时也不缩回去
+                el.style.height = Math.max(min, Math.min(Math.max(h, this.inputUserH), 320)) + 'px';
+                return;
+            }
+            el.style.height = Math.max(min, Math.min(h, this.inputMaxH)) + 'px';
+        },
+        bindInputResize: function () {
+            var self = this, el = $('owInput'), handle = $('owInputResize');
+            if (!el || !handle) return;
+            handle.onmousedown = function (e) {
+                e = e || w.event;
+                var startY = e.clientY, startH = el.offsetHeight;
+                if (e.preventDefault) e.preventDefault(); else e.returnValue = false;
+                document.onmousemove = function (ev) {
+                    ev = ev || w.event;
+                    var h = startH + ((ev.clientY || 0) - startY);
+                    h = Math.max(40, Math.min(h, 320));
+                    self.inputUserH = h;
+                    el.style.height = h + 'px';
+                    try { w.localStorage.setItem('owl_input_h', String(h)); } catch (err) {}
+                };
+                document.onmouseup = function () {
+                    document.onmousemove = null;
+                    document.onmouseup = null;
+                };
+                return false;
+            };
+        },
         msgCache: {},
 
         // 统一构建消息 DOM：头像一侧依次是「用户组标签、昵称」；
@@ -852,7 +894,7 @@
             }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 if (!opt.type || opt.type === 'text') input.value = '';
-                input.style.height = 'auto';
+                self.autoGrow();   // 发送后回到单行（若手动拉高过则保持用户高度）
             });
         },
 
@@ -899,6 +941,7 @@
             var input = $('owInput');
             input.value += '@' + nick + ' ';
             input.focus();
+            OwChat.autoGrow();
         },
 
         pm: function (nick, uid, gid) {
