@@ -39,7 +39,7 @@ data/              SQLite 数据库与安装锁（运行时生成）
 uploads/           头像 / 贴纸 / 图片（运行时生成）
 ```
 
-## 二次开发（AI 友好）
+## 二次开发
 
 - 所有 API 走 `index.php?action=<动作>`，POST 携带 `ts` + `sign=md5(key|ts|action)`
 - 插件示例：在 `plugins/demo/` 放 `plugin.json` 与 `main.php`，`Plugin::on('message.after_send', fn)` 即可挂载钩子
