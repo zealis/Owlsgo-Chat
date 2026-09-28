@@ -1280,10 +1280,10 @@
             rooms: function (main) {
                 OwApi.post('admin_rooms', {}, function (r) {
                     var h = '<h2>聊天室管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除聊天室，设置访问权限与房主。</p><div class="ow-card">'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
+                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>最低年龄</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id || '-') + '</td>'
+                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.min_age > 0 ? d.min_age + ' 周岁' : '不限') + '</td><td>' + (d.owner_id || '-') + '</td>'
                            + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
                            + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
@@ -1459,25 +1459,38 @@
 
         /* ---------- 房间动作 ---------- */
         roomForm: function (d) {
-            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', owner_id: '', description: '', status: 1 };
+            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', min_age: 0, owner_id: '', description: '', status: 1 };
+            var ageOpts = '';
+            var ages = [0, 12, 14, 16, 18, 21];
+            for (var i = 0; i < ages.length; i++) {
+                var a = ages[i];
+                ageOpts += '<option value="' + a + '"' + ((d.min_age || 0) == a ? ' selected' : '') + '>' + (a ? a + ' 周岁' : '不限') + '</option>';
+            }
             $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '聊天室</h2><div class="ow-card">'
                 + '<input type="hidden" id="owRId" value="' + d.id + '">'
-                + '<div class="ow-form-item"><label>名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '"></div>'
-                + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRType">'
+                + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '" maxlength="30" placeholder="2-30 个字符"></div>'
+                + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRType" onchange="OwAdmin.roomTypeToggle()">'
                 + opts(ROOM_TYPE_CN, ['public', 'password', 'role'], d.type) + '</select></div>'
-                + '<div class="ow-form-item"><label>房间密码（password 类型时有效）</label><input class="ow-input" id="owRPass" value="' + esc(d.password || '') + '"></div>'
-                + '<div class="ow-form-item"><label>最低进入角色（role 类型时有效）</label><select class="ow-input" id="owRRole">'
+                + '<div class="ow-form-item" id="owRPassRow"' + (d.type === 'password' ? '' : ' style="display:none"') + '><label>房间密码</label><input class="ow-input" id="owRPass" value="' + esc(d.password || '') + '" placeholder="密码房必须设置密码"></div>'
+                + '<div class="ow-form-item" id="owRRoleRow"' + (d.type === 'role' ? '' : ' style="display:none"') + '><label>最低进入角色</label><select class="ow-input" id="owRRole">'
                 + opts(ROLE_CN, ['guest', 'member', 'vip', 'admin'], d.min_role) + '</select></div>'
-                + '<div class="ow-form-item"><label>房主用户ID（房主可撤回本房间任意消息）</label><input class="ow-input" id="owROwner" value="' + (d.owner_id || '') + '"></div>'
-                + '<div class="ow-form-item"><label>描述</label><input class="ow-input" id="owRDesc" value="' + esc(d.description || '') + '"></div>'
+                + '<div class="ow-form-item"><label>进入最低年龄</label><select class="ow-input" id="owRAge">' + ageOpts + '</select>'
+                + '<p style="font-size:12px;color:#999;margin-top:4px">低于该年龄的用户将无法进入本群（需注册时填写过出生日期）。</p></div>'
+                + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRDesc" value="' + esc(d.description || '') + '" maxlength="200" placeholder="一句话介绍这个群"></div>'
+                + '<div class="ow-form-item"><label>房主用户ID（可撤回本房间任意消息，留空则为空房主）</label><input class="ow-input" id="owROwner" value="' + (d.owner_id || '') + '"></div>'
                 + '<div class="ow-form-item"><label>状态</label><select class="ow-input" id="owRStatus"><option value="1"' + (d.status == 1 ? ' selected' : '') + '>开启</option><option value="0"' + (d.status == 0 ? ' selected' : '') + '>关闭</option></select></div>'
                 + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomSave()">保存</button> '
                 + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.page(\'rooms\')">返回</button></div>';
         },
+        roomTypeToggle: function () {
+            var t = $('owRType').value;
+            $('owRPassRow').style.display = t === 'password' ? 'block' : 'none';
+            $('owRRoleRow').style.display = t === 'role' ? 'block' : 'none';
+        },
         roomSave: function () {
             OwApi.post('admin_room_save', {
                 id: $('owRId').value, name: $('owRName').value, type: $('owRType').value,
-                password: $('owRPass').value, min_role: $('owRRole').value,
+                password: $('owRPass').value, min_role: $('owRRole').value, min_age: $('owRAge').value,
                 owner_id: $('owROwner').value, description: $('owRDesc').value, status: $('owRStatus').value
             }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('rooms'); });
         },
