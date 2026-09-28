@@ -199,7 +199,9 @@ class DB
         // ---------- 增量迁移（幂等） ----------
         self::addColumn('users', 'points', 'int', '0');   // 用户积分
         self::addColumn('users', 'birthdate', 'varchar(10)', "''");   // 出生日期（年龄限制注册用）
-        self::addColumn('rooms', 'min_age', 'int', '0');             // 进入该房间的最低年龄（0=不限）
+        // 已废弃字段：rooms.min_age（进入该房间的最低年龄）随 1.0.31 下线，应用层已不再读写。
+        // 保留此行仅为兼容历史数据库（列仍存在且幂等），勿在业务代码中重新启用。
+        self::addColumn('rooms', 'min_age', 'int', '0');
 
         // 索引（跨引擎兼容语法）
         $idx = [

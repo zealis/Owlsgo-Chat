@@ -15,7 +15,6 @@ class Chat
                 'id' => (int)$r['id'], 'name' => $r['name'], 'slug' => $r['slug'],
                 'type' => $r['type'], 'need_password' => $r['type'] === 'password',
                 'description' => $r['description'] ?? '',
-                'min_age' => (int)($r['min_age'] ?? 0),
                 'owner_id' => (int)($r['owner_id'] ?? 0),
                 'mine' => (int)($r['owner_id'] ?? 0) === (int)($actor['id'] ?? 0) && $actor['kind'] === 'user',
             ];
@@ -69,35 +68,16 @@ class Chat
     }
 
     /**
-     * 完整进入校验：角色房查角色，密码房必须有有效通行授权（管理员免密），
-     * 设有最低年龄的房间需达到年龄（无出生日期视为不达标）
+     * 完整进入校验：角色房查角色，密码房必须有有效通行授权（管理员免密）
      */
     public static function roomAccessOk(array $room, array $actor): bool
     {
         if (!self::canEnter($room, $actor)) return false;
-        // 年龄门槛最先校验（管理员不受限）——必须放在密码分支之前，
-        // 否则密码房通过密码检查后直接 return，年龄校验永远执行不到
-        $min = (int)($room['min_age'] ?? 0);
-        if ($min > 0 && $actor['role'] !== 'admin') {
-            $age = Auth::age((string)($actor['birthdate'] ?? ''));
-            if ($age < 0 || $age < $min) return false;
-        }
         if ($room['type'] === 'password') {
             if ($actor['role'] === 'admin') return true;      // 管理员免密码
             return self::roomPassCached((int)$room['id']);
         }
         return true;
-    }
-
-    /** 未通过年龄门槛时的提示文案 */
-    public static function ageDenyMsg(array $room, array $actor): string
-    {
-        $min = (int)($room['min_age'] ?? 0);
-        if ($min <= 0) return '';
-        if ($actor['kind'] !== 'user') return '该聊天室需要实名用户并满足年龄要求';
-        $age = Auth::age((string)($actor['birthdate'] ?? ''));
-        if ($age < 0) return '该聊天室要求年满 ' . $min . ' 周岁，请先完善出生日期';
-        return '该聊天室要求年满 ' . $min . ' 周岁（当前 ' . $age . ' 周岁）';
     }
 
     // ---------- 禁言检查 ----------

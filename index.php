@@ -243,15 +243,6 @@ if ($action !== '') {
             if (!$room) Api::json(['ok' => false, 'msg' => '聊天室不存在']);
             if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权进入该聊天室']);
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
-            // 年龄门槛（管理员不受限）：必须在通行授权之前校验
-            $minAge = (int)($room['min_age'] ?? 0);
-            if ($minAge > 0 && $actor['role'] !== 'admin') {
-                $age = Auth::age((string)($actor['birthdate'] ?? ''));
-                if ($age < 0 || $age < $minAge) {
-                    Api::json(['ok' => false, 'msg' => '该群要求年满 ' . $minAge . ' 周岁'
-                        . ($age >= 0 ? '（当前 ' . $age . ' 周岁）' : '，请先在个人资料完善出生日期'), 'need_age' => true]);
-                }
-            }
             // 密码房：已持有有效通行授权则免密；管理员免密码。
             // 是否真的需要密码一律由服务端判定，前端只需先空密码尝试一次，返回 need_password 再弹窗。
             if ($room['type'] === 'password' && !Chat::roomPassCached((int)$room['id'])) {
@@ -272,12 +263,10 @@ if ($action !== '') {
             $roomId = (int)$p('room_id');
             $room = Chat::room($roomId);
             if (!Chat::roomAccessOk($room, $actor)) {
-                $ageMsg = Chat::ageDenyMsg($room, $actor);
                 Api::json([
                     'ok' => false,
-                    'msg' => $ageMsg ?: '无权访问该聊天室',
-                    'need_password' => $room['type'] === 'password' && !$ageMsg,
-                    'need_age' => $ageMsg !== '',
+                    'msg' => '无权访问该聊天室',
+                    'need_password' => $room['type'] === 'password',
                 ]);
             }
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
@@ -288,12 +277,10 @@ if ($action !== '') {
             $room = Chat::room($roomId);
             // 密码房必须持有有效通行授权，否则任何人都能绕过密码读取历史
             if (!Chat::roomAccessOk($room, $actor)) {
-                $ageMsg = Chat::ageDenyMsg($room, $actor);
                 Api::json([
                     'ok' => false,
-                    'msg' => $ageMsg ?: '无权访问该聊天室',
-                    'need_password' => $room['type'] === 'password' && !$ageMsg,
-                    'need_age' => $ageMsg !== '',
+                    'msg' => '无权访问该聊天室',
+                    'need_password' => $room['type'] === 'password',
                 ]);
             }
             Api::json(['ok' => true, 'data' => Chat::history($actor, $roomId, (int)$p('before', '0'))]);
@@ -340,9 +327,6 @@ if ($action !== '') {
             $type = $p('type');
             if (!in_array($type, ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法的群类型']);
             $minRole = in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest';
-            // 最低年龄为自由输入框，非法值直接拒绝并提示，不再静默 clamp
-            [$ageOk, $minAge, $ageErr] = Auth::parseMinAge($p('min_age', '0'));
-            if (!$ageOk) Api::json(['ok' => false, 'msg' => $ageErr]);
             if ($type === 'password' && $p('password') === '') Api::json(['ok' => false, 'msg' => '密码群必须设置密码']);
             if ($type === 'role' && $minRole !== 'guest' && Auth::roleLevel($actor['role']) < Auth::roleLevel($minRole)) {
                 Api::json(['ok' => false, 'msg' => '最低角色不能高于你自己']);
@@ -362,7 +346,6 @@ if ($action !== '') {
                 'type' => $type,
                 'password' => $type === 'password' ? $p('password') : null,
                 'min_role' => $minRole,
-                'min_age' => $minAge,
                 'owner_id' => (int)$actor['id'],
                 'description' => mb_substr($p('description'), 0, 200),
                 'status' => 1,

@@ -65,30 +65,6 @@ class Auth
         return (int)$today->diff($b)->y;
     }
 
-    /**
-     * 解析并校验「进入最低年龄」输入：接受 0-100 的整数，0 表示不限，留空等同于 0。
-     *
-     * 背景（1.0.30）：该字段此前是下拉选项（仅 0/12/14/16/18/21），后端用 (int) 强转
-     * 加 clamp 兜底不会出问题；改为自由数字输入框后，非法输入会被静默改写——
-     * "abc" 变 0、150 变 100，前端提示「已保存」但实际值与用户预期不符。
-     * 因此改为显式校验：不合法时返回明确错误文案，由调用方返回给用户。
-     *
-     * @param string|null $raw 原始输入（来自 POST）
-     * @return array [bool 是否合法, int 归一化后的值, string 错误文案]
-     */
-    public static function parseMinAge(?string $raw): array
-    {
-        $s = trim((string)$raw);
-        // 留空视为不限，避免前端禁用 JS 或未填写时被误判为错误
-        if ($s === '') return [true, 0, ''];
-        // 仅接受纯数字（限长防止超大整数溢出）：借此排除负数（-5）、小数（18.5）
-        // 与字母串（abc、12abc）；前导零（0018）视为 18 予以通过
-        if (!preg_match('/^\d{1,9}$/', $s)) return [false, 0, '进入最低年龄请填 0-100 的整数（0 表示不限）'];
-        $v = (int)$s;
-        if ($v > 100) return [false, 0, '进入最低年龄需在 0-100 之间（0 表示不限）'];
-        return [true, $v, ''];
-    }
-
     public static function register(string $username, string $email, string $password, string $code, string $birthdate = ''): array
     {
         if (DB::setting('allow_register', '1') !== '1') return [false, '站点已关闭注册'];

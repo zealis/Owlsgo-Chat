@@ -792,8 +792,6 @@
                 + '<div class="ow-form-item" id="owRCPassRow" style="display:none"><label>房间密码</label><input class="ow-input" type="password" id="owRCPass" placeholder="密码群必须设置密码"></div>'
                 + '<div class="ow-form-item" id="owRCRoleRow" style="display:none"><label>最低进入角色</label><select class="ow-input" id="owRCRole">'
                 + opts(ROLE, ['guest', 'member', 'vip', 'admin'], 'guest') + '</select></div>'
-                + '<div class="ow-form-item"><label>进入最低年龄</label><input class="ow-input" type="number" id="owRCAge" min="0" max="100" value="0" placeholder="0 = 不限">'
-                + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限；填 18 则低于 18 周岁的用户无法进入本群（需注册时填写过出生日期）。</p></div>'
                 + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRCDesc" maxlength="200" placeholder="一句话介绍这个群"></div>'
                 + '<div class="ow-room-form-tip" id="owRCTip"></div>'
                 + '<div class="ow-form-msg" id="owRCMsg"></div>'
@@ -829,7 +827,7 @@
                 msg.innerHTML = '创建中…';
                 OwApi.post('room_create', {
                     name: name, type: t, password: $('owRCPass') ? $('owRCPass').value : '',
-                    min_role: $('owRCRole').value, min_age: $('owRCAge').value,
+                    min_role: $('owRCRole').value,
                     description: $('owRCDesc').value
                 }, function (r) {
                     if (!r.ok) { msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>'; return; }
@@ -1278,10 +1276,10 @@
             rooms: function (main) {
                 OwApi.post('admin_rooms', {}, function (r) {
                     var h = '<h2>聊天室管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除聊天室，设置访问权限与房主。</p><div class="ow-card">'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>最低年龄</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
+                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.min_age > 0 ? d.min_age + ' 周岁' : '不限') + '</td><td>' + (d.owner_id || '-') + '</td>'
+                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id || '-') + '</td>'
                            + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
                            + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
@@ -1457,7 +1455,7 @@
 
         /* ---------- 房间动作 ---------- */
         roomForm: function (d) {
-            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', min_age: 0, owner_id: '', description: '', status: 1 };
+            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', owner_id: '', description: '', status: 1 };
             $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '聊天室</h2><div class="ow-card">'
                 + '<input type="hidden" id="owRId" value="' + d.id + '">'
                 + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '" maxlength="30" placeholder="2-30 个字符"></div>'
@@ -1466,8 +1464,6 @@
                 + '<div class="ow-form-item" id="owRPassRow"' + (d.type === 'password' ? '' : ' style="display:none"') + '><label>房间密码</label><input class="ow-input" id="owRPass" value="' + esc(d.password || '') + '" placeholder="密码房必须设置密码"></div>'
                 + '<div class="ow-form-item" id="owRRoleRow"' + (d.type === 'role' ? '' : ' style="display:none"') + '><label>最低进入角色</label><select class="ow-input" id="owRRole">'
                 + opts(ROLE_CN, ['guest', 'member', 'vip', 'admin'], d.min_role) + '</select></div>'
-                + '<div class="ow-form-item"><label>进入最低年龄</label><input class="ow-input" type="number" id="owRAge" min="0" max="100" value="' + (d.min_age || 0) + '" placeholder="0 = 不限">'
-                + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限；填 18 则低于 18 周岁的用户无法进入本群（需注册时填写过出生日期）。</p></div>'
                 + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRDesc" value="' + esc(d.description || '') + '" maxlength="200" placeholder="一句话介绍这个群"></div>'
                 + '<div class="ow-form-item"><label>房主用户ID（可撤回本房间任意消息，留空则为空房主）</label><input class="ow-input" id="owROwner" value="' + (d.owner_id || '') + '"></div>'
                 + '<div class="ow-form-item"><label>状态</label><select class="ow-input" id="owRStatus"><option value="1"' + (d.status == 1 ? ' selected' : '') + '>开启</option><option value="0"' + (d.status == 0 ? ' selected' : '') + '>关闭</option></select></div>'
@@ -1482,7 +1478,7 @@
         roomSave: function () {
             OwApi.post('admin_room_save', {
                 id: $('owRId').value, name: $('owRName').value, type: $('owRType').value,
-                password: $('owRPass').value, min_role: $('owRRole').value, min_age: $('owRAge').value,
+                password: $('owRPass').value, min_role: $('owRRole').value,
                 owner_id: $('owROwner').value, description: $('owRDesc').value, status: $('owRStatus').value
             }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('rooms'); });
         },
