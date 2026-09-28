@@ -466,6 +466,8 @@ function ow_icon(string $name, int $size = 18): string
         'close'  => '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>',
         'logout' => '<path d="M14 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H14"/><path d="M10 12h10M17 8.5l3.5 3.5-3.5 3.5"/>',
         'sound'  => '<path d="M4 9.5v5h3.5L13 19V5L7.5 9.5z"/><path d="M16 9a4.5 4.5 0 0 1 0 6"/>',
+        // 展开箭头：菜单分类的折叠指示
+        'chevron' => '<polyline points="6.5 9.5 12 15 17.5 9.5"/>',
     ];
     $d = $paths[$name] ?? $paths['chat'];
     return '<svg class="ow-ico" width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
@@ -694,9 +696,18 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
 function renderAdmin(array $actor): void
 {
     pageHead('管理后台');
-    $pluginPages = '';
-    foreach (Plugin::adminPages() as $slug => $pg) {
-        $pluginPages .= '<li data-apage="plugin:' . Sec::e($slug) . '"><span class="ow-admin-ico">' . ow_icon('puzzle', 16) . '</span>' . Sec::e($pg['title']) . '</li>';
+    // 插件子菜单：仅显示在 main.php 里调用过 Plugin::adminPage() 声明后台页面的插件
+    // （未安装写库、未启用或未声明页面的插件都不会出现在这里）。一个声明 = 一个子页面。
+    $pluginPages = Plugin::adminPages();
+    $pluginMenu = '<li data-apage="plugins"' . ($pluginPages ? ' class="ow-admin-group"' : '') . '>'
+        . '<span class="ow-admin-ico">' . ow_icon('puzzle', 16) . '</span>'
+        . '<span class="ow-admin-label">插件管理</span>'
+        . ($pluginPages ? '<span class="ow-admin-tog">' . ow_icon('chevron', 14) . '</span>' : '')
+        . '</li>';
+    foreach ($pluginPages as $slug => $pg) {
+        $pluginMenu .= '<li class="ow-admin-sub" data-apage="plugin:' . Sec::e($slug) . '">'
+            . '<span class="ow-admin-ico">' . ow_icon('puzzle', 14) . '</span>'
+            . '<span class="ow-admin-label">' . Sec::e($pg['title']) . '</span></li>';
     }
     echo '<body class="ow-admin-body"><div class="ow-admin-layout">'
        . '<aside class="ow-admin-side">'
@@ -708,10 +719,10 @@ function renderAdmin(array $actor): void
        . '<li data-apage="bans"><span class="ow-admin-ico">' . ow_icon('mute', 16) . '</span>禁言管理</li>'
        . '<li data-apage="words"><span class="ow-admin-ico">' . ow_icon('ban', 16) . '</span>敏感词过滤</li>'
        . '<li data-apage="anns"><span class="ow-admin-ico">' . ow_icon('mega', 16) . '</span>系统公告</li>'
-       . '<li data-apage="plugins"><span class="ow-admin-ico">' . ow_icon('puzzle', 16) . '</span>插件管理</li>'
        . '<li data-apage="logs"><span class="ow-admin-ico">' . ow_icon('shield', 16) . '</span>安全日志</li>'
        . '<li data-apage="settings"><span class="ow-admin-ico">' . ow_icon('gear', 16) . '</span>系统设置</li>'
-       . $pluginPages
+       // 插件管理置于系统设置之下，作为分类，其下挂载各插件自己的设置页面
+       . $pluginMenu
        . '</ul></aside>'
        . '<main class="ow-admin-main" id="owAdminMain"></main></div>'
        . '<div class="ow-toast" id="owToast" style="display:none"></div>'

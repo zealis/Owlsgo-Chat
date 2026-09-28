@@ -103,6 +103,8 @@
         clearTimeout(t._tm);
         t._tm = setTimeout(function () { t.style.display = 'none'; }, ms || 2200);
     }
+    /** 归一化 class 字符串：去掉多余空格（增删 class 时避免累积空白） */
+    function trimCls(s) { return String(s || '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
 
     /* 枚举值中文显示（提交时仍用英文原始值，仅界面本地化） */
     var ROOM_TYPE_CN = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
@@ -1243,13 +1245,41 @@
             var items = menu.getElementsByTagName('li'), i;
             for (i = 0; i < items.length; i++) {
                 items[i].onclick = function () {
-                    var all = menu.getElementsByTagName('li'), j;
-                    for (j = 0; j < all.length; j++) all[j].className = '';
-                    this.className = 'active';
-                    self.page(this.getAttribute('data-apage'));
+                    var ap = this.getAttribute('data-apage'), all = menu.getElementsByTagName('li'), j;
+                    // ① 只摘掉选中态，保留分组/子项/展开等布局类（否则子菜单会被一起抹掉）
+                    for (j = 0; j < all.length; j++) {
+                        all[j].className = trimCls(all[j].className.replace(/\bactive\b/g, ''));
+                    }
+                    // ② 插件分类：点标题自行折叠/展开；点插件子页面时保持展开
+                    if (ap === 'plugins') self.togglePluginSub(false);
+                    else if (ap.indexOf('plugin:') === 0) self.togglePluginSub(true);
+                    // ③ 选中态最后加，避免被上面的类名重置覆盖
+                    this.className += ' active';
+                    self.page(ap);
                 };
             }
             this.page('users');
+        },
+
+        /**
+         * 展开/收起「插件管理」下的插件子页面
+         * @param {boolean} forceOpen true=强制展开（点击插件子页面时用），false=切换
+         */
+        togglePluginSub: function (forceOpen) {
+            var menu = $('owAdminMenu'), all = menu.getElementsByTagName('li'), i, el, group = null;
+            for (i = 0; i < all.length; i++) {
+                if (all[i].className.indexOf('ow-admin-group') >= 0) { group = all[i]; break; }
+            }
+            if (!group) return;   // 没有任何插件声明后台页面 → 插件管理是普通菜单项
+            var willOpen = forceOpen ? true : group.className.indexOf('ow-group-open') < 0;
+            group.className = trimCls((group.className.replace(/\bow-group-open\b/g, ''))
+                + (willOpen ? ' ow-group-open' : ''));
+            for (i = 0; i < all.length; i++) {
+                el = all[i];
+                if (el.className.indexOf('ow-admin-sub') < 0) continue;
+                el.className = trimCls((el.className.replace(/\bow-sub-open\b/g, ''))
+                    + (willOpen ? ' ow-sub-open' : ''));
+            }
         },
 
         page: function (name) {

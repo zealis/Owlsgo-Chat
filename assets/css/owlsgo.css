@@ -547,6 +547,13 @@ button { font-family: inherit; cursor: pointer; }
 .ow-admin-menu li:hover { background: var(--ow-bg-sub); }
 .ow-admin-menu li.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
 .ow-admin-ico { font-size: 15px; }
+/* 菜单分类：标题占满剩余宽度，使折叠箭头贴右侧 */
+.ow-admin-label { flex: 1; -webkit-flex: 1; min-width: 0; }
+.ow-admin-tog { display: flex; display: -webkit-flex; color: var(--ow-text-sub); transition: transform .15s; -webkit-transition: -webkit-transform .15s; }
+.ow-admin-group.ow-group-open .ow-admin-tog { transform: rotate(180deg); -webkit-transform: rotate(180deg); }
+/* 插件子页面：默认收起，父项展开后才显示（缩进对齐到图标右侧） */
+.ow-admin-menu li.ow-admin-sub { display: none; padding-left: 34px; font-size: 13.5px; }
+.ow-admin-menu li.ow-admin-sub.ow-sub-open { display: flex; display: -webkit-flex; }
 .ow-admin-main { flex: 1; -webkit-flex: 1; padding: 24px 28px; min-width: 0; }
 .ow-admin-main h2 { font-size: 24px; font-weight: 600; color: var(--ow-text-title); line-height: 1.3; }
 .ow-admin-main .ow-admin-desc { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 20px; }
@@ -608,6 +615,8 @@ button { font-family: inherit; cursor: pointer; }
     .ow-admin-side { width: 100%; border-right: none; border-bottom: 1px solid var(--ow-border); }
     .ow-admin-menu { display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; gap: 4px; }
     .ow-admin-menu li { padding: 6px 10px; font-size: 13px; }
+    /* 移动端菜单横排铺开，子项不再缩进，改用左边框区分层级 */
+    .ow-admin-menu li.ow-admin-sub { padding-left: 10px; border-left: 2px solid var(--ow-border); }
     .ow-admin-main { padding: 16px; }
     .ow-auth-card { padding: 24px 18px; }
     .ow-auth-logo h1 { font-size: 20px; }
