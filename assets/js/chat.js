@@ -792,10 +792,8 @@
                 + '<div class="ow-form-item" id="owRCPassRow" style="display:none"><label>房间密码</label><input class="ow-input" type="password" id="owRCPass" placeholder="密码群必须设置密码"></div>'
                 + '<div class="ow-form-item" id="owRCRoleRow" style="display:none"><label>最低进入角色</label><select class="ow-input" id="owRCRole">'
                 + opts(ROLE, ['guest', 'member', 'vip', 'admin'], 'guest') + '</select></div>'
-                + '<div class="ow-form-item"><label>进入最低年龄</label><select class="ow-input" id="owRCAge">'
-                + '<option value="0">不限</option><option value="12">12 周岁</option><option value="14">14 周岁</option>'
-                + '<option value="16">16 周岁</option><option value="18">18 周岁</option><option value="21">21 周岁</option></select>'
-                + '<p style="font-size:12px;color:#999;margin-top:4px">低于该年龄的用户将无法进入本群（需注册时填写过出生日期）。</p></div>'
+                + '<div class="ow-form-item"><label>进入最低年龄</label><input class="ow-input" type="number" id="owRCAge" min="0" max="100" value="0" placeholder="0 = 不限">'
+                + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限；填 18 则低于 18 周岁的用户无法进入本群（需注册时填写过出生日期）。</p></div>'
                 + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRCDesc" maxlength="200" placeholder="一句话介绍这个群"></div>'
                 + '<div class="ow-room-form-tip" id="owRCTip"></div>'
                 + '<div class="ow-form-msg" id="owRCMsg"></div>'
@@ -1460,12 +1458,6 @@
         /* ---------- 房间动作 ---------- */
         roomForm: function (d) {
             d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', min_age: 0, owner_id: '', description: '', status: 1 };
-            var ageOpts = '';
-            var ages = [0, 12, 14, 16, 18, 21];
-            for (var i = 0; i < ages.length; i++) {
-                var a = ages[i];
-                ageOpts += '<option value="' + a + '"' + ((d.min_age || 0) == a ? ' selected' : '') + '>' + (a ? a + ' 周岁' : '不限') + '</option>';
-            }
             $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '聊天室</h2><div class="ow-card">'
                 + '<input type="hidden" id="owRId" value="' + d.id + '">'
                 + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '" maxlength="30" placeholder="2-30 个字符"></div>'
@@ -1474,8 +1466,8 @@
                 + '<div class="ow-form-item" id="owRPassRow"' + (d.type === 'password' ? '' : ' style="display:none"') + '><label>房间密码</label><input class="ow-input" id="owRPass" value="' + esc(d.password || '') + '" placeholder="密码房必须设置密码"></div>'
                 + '<div class="ow-form-item" id="owRRoleRow"' + (d.type === 'role' ? '' : ' style="display:none"') + '><label>最低进入角色</label><select class="ow-input" id="owRRole">'
                 + opts(ROLE_CN, ['guest', 'member', 'vip', 'admin'], d.min_role) + '</select></div>'
-                + '<div class="ow-form-item"><label>进入最低年龄</label><select class="ow-input" id="owRAge">' + ageOpts + '</select>'
-                + '<p style="font-size:12px;color:#999;margin-top:4px">低于该年龄的用户将无法进入本群（需注册时填写过出生日期）。</p></div>'
+                + '<div class="ow-form-item"><label>进入最低年龄</label><input class="ow-input" type="number" id="owRAge" min="0" max="100" value="' + (d.min_age || 0) + '" placeholder="0 = 不限">'
+                + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限；填 18 则低于 18 周岁的用户无法进入本群（需注册时填写过出生日期）。</p></div>'
                 + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRDesc" value="' + esc(d.description || '') + '" maxlength="200" placeholder="一句话介绍这个群"></div>'
                 + '<div class="ow-form-item"><label>房主用户ID（可撤回本房间任意消息，留空则为空房主）</label><input class="ow-input" id="owROwner" value="' + (d.owner_id || '') + '"></div>'
                 + '<div class="ow-form-item"><label>状态</label><select class="ow-input" id="owRStatus"><option value="1"' + (d.status == 1 ? ' selected' : '') + '>开启</option><option value="0"' + (d.status == 0 ? ' selected' : '') + '>关闭</option></select></div>'
