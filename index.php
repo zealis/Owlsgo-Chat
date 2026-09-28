@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.18';
+const OWLSGO_VERSION = '1.0.19';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -405,7 +405,8 @@ function ow_icon(string $name, int $size = 18): string
         'ban'    => '<circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/>',
         'mega'   => '<path d="M3 11v3l4 .5V10.5z"/><path d="M7 10.5L18 5v13l-11-4.5"/><path d="M9 15.5V18a2 2 0 0 0 4 .5"/>',
         'send'   => '<path d="M3.5 12L21 4l-7.5 17-2.5-7z"/>',
-        'paperclip' => '<path d="M16.5 7.5l-7 7a3.5 3.5 0 0 0 5 5l7-7a5.5 5.5 0 0 0-8-8L6 12a7.5 7.5 0 0 0 11 11"/>',
+        // 回形针：整体内收一点（scale 0.82），否则 16px 下显得比旁边图标壮
+        'paperclip' => '<g transform="scale(0.82) translate(2.6 2.6)"><path d="M16.5 7.5l-7 7a3.5 3.5 0 0 0 5 5l7-7a5.5 5.5 0 0 0-8-8L6 12a7.5 7.5 0 0 0 11 11"/></g>',
         'file'   => '<path d="M13 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V9z"/><path d="M13 3.5V9h5.5"/>',
         'download' => '<path d="M12 4v11"/><path d="M7.5 11L12 15.5 16.5 11"/><path d="M4.5 19.5h15"/>',
         'puzzle' => '<path d="M9 4h6v3.5a2 2 0 1 0 4 .5V4h1v6h-3.5a2 2 0 1 0 .5 4H20v6h-6v-3.5a2 2 0 1 0-4 .5V20H4v-6h3.5a2 2 0 1 0-.5-4H4V4h5z" transform="scale(0.9) translate(1 1)"/>',
@@ -584,10 +585,11 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<div class="ow-messages" id="owMessages"><div class="ow-load-more" id="owLoadMore">加载更早消息…</div></div>'
        . '<div class="ow-inputbar">'
        . '<div class="ow-toolbar">'
-       . '<button class="ow-icon-btn" id="owBtnEmoji" title="表情">' . ow_icon('smile') . '</button>'
-       . '<button class="ow-icon-btn" id="owBtnImage" title="发送图片">' . ow_icon('image') . '</button>'
-       . '<button class="ow-icon-btn" id="owBtnFile" title="发送文件">' . ow_icon('paperclip') . '</button>'
-       . '<button class="ow-icon-btn" id="owBtnSound" title="提示音" data-on="' . Sec::e(ow_icon('bell')) . '" data-off="' . Sec::e(ow_icon('bell-off')) . '">' . ow_icon('bell') . '</button>'
+       // 工具栏图标统一 16px（比消息区图标小一号，避免抢视觉重心）
+       . '<button class="ow-icon-btn" id="owBtnEmoji" title="表情">' . ow_icon('smile', 16) . '</button>'
+       . '<button class="ow-icon-btn" id="owBtnImage" title="发送图片">' . ow_icon('image', 16) . '</button>'
+       . '<button class="ow-icon-btn" id="owBtnFile" title="发送文件">' . ow_icon('paperclip', 16) . '</button>'
+       . '<button class="ow-icon-btn" id="owBtnSound" title="提示音" data-on="' . Sec::e(ow_icon('bell', 16)) . '" data-off="' . Sec::e(ow_icon('bell-off', 16)) . '">' . ow_icon('bell', 16) . '</button>'
        . '<input type="file" id="owFileInput" accept="image/*" style="display:none">'
        . '<input type="file" id="owFileAttach" style="display:none">'
        . '</div>'
