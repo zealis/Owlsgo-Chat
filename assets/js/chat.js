@@ -417,9 +417,15 @@
                 if (this.files && this.files[0]) self.uploadImage(this.files[0]);
                 this.value = '';
             };
+            // 表情面板：按钮切换 + 点击外部/Esc 关闭（原来只能靠再点一次按钮）
+            var setEmoji = function (open) {
+                var p = $('owEmojiPanel');
+                if (!p) return;
+                p.style.display = open ? 'block' : 'none';
+            };
             $('owBtnEmoji').onclick = function () {
                 var p = $('owEmojiPanel');
-                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                setEmoji(getComputedStyle(p).display === 'none');
             };
             $('owBtnSound').onclick = function () {
                 self.sound = !self.sound;
@@ -462,13 +468,15 @@
             $('owMask').onclick = function () { setSide(false); setPanel(false); };
             // 窄屏浮层：点击浮层外部时收起（成员面板 / 左侧栏）
             document.addEventListener ? document.addEventListener('click', function (e) {
-                var o = $('owOnline'), s = $('owSidebar');
+                var o = $('owOnline'), s = $('owSidebar'), em = $('owEmojiPanel');
                 var t = e.target || e.srcElement, inside = false, n = t;
                 while (n) {
-                    if (n === o || n === $('owToggleOnline') || n === s || n === $('owToggleSide')) { inside = true; break; }
+                    if (n === o || n === $('owToggleOnline') || n === s || n === $('owToggleSide')
+                        || n === em || n === $('owBtnEmoji')) { inside = true; break; }
                     n = n.parentNode;
                 }
                 if (inside) return;
+                setEmoji(false);          // 点空白处顺手收起表情面板
                 if (o && o.className.indexOf('open') >= 0) setPanel(false);
                 if (s && s.className.indexOf('open') >= 0) setSide(false);
             }) : (document.onclick = null);
@@ -502,7 +510,7 @@
             };
             document.onkeydown = function (e) {
                 e = e || w.event;
-                if (e.keyCode === 27) self.hideCtxMenu();
+                if (e.keyCode === 27) { self.hideCtxMenu(); setEmoji(false); }
             };
             // 菜单项点击（委托）：执行对应操作后收起菜单
             $('owCtxMenu').onclick = function (e) {
