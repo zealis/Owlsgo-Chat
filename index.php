@@ -627,18 +627,13 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
     // 左侧栏
     echo '<aside class="ow-sidebar" id="owSidebar">'
        . '<div class="ow-brand"><img src="assets/img/logo.svg" alt="logo"><span>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</span></div>'
-       // 左侧栏「聊天室」标题行右侧的「+」下拉菜单（创建群聊）
-       . '<div class="ow-side-title">聊天室 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span>'
-       . '<span class="ow-plus-wrap">'
-       . '<button class="ow-icon-btn" id="owBtnPlus" aria-label="创建群聊" title="创建群聊">' . ow_icon('plus', 14) . '</button>'
-       . '<span class="ow-ctx-menu ow-plus-menu" id="owPlusMenu" style="display:none">'
-       . '<a href="javascript:;" data-act="create-room">创建群聊</a>'
-       . '</span></span></div>'
+       . '<div class="ow-side-title">聊天室 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
        . '<div class="ow-side-actions">'
        . ($user
-           ? '<button class="ow-btn ow-btn-ghost" id="owBtnSettings">设置</button>'
+           ? '<button class="ow-btn ow-btn-ghost" id="owBtnCreateRoom">创建群聊</button>'
+             . '<button class="ow-btn ow-btn-ghost" id="owBtnSettings">设置</button>'
              . ($actor['role'] === 'admin' ? '<a class="ow-btn ow-btn-ghost" href="?page=admin">管理后台</a>' : '')
              . '<button class="ow-btn ow-btn-ghost" id="owBtnLogout">退出</button>'
            : '<a class="ow-btn ow-btn-primary" href="?page=login">登录 / 注册</a>')

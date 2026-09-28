@@ -466,37 +466,22 @@
             $('owToggleOnline').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
             $('owMask').onclick = function () { setSide(false); setPanel(false); };
-            // 顶部「+」下拉菜单：创建群聊等
-            var setPlus = function (open) {
-                var m = $('owPlusMenu');
-                if (m) m.style.display = open ? 'block' : 'none';
-            };
-            $('owBtnPlus').onclick = function () {
-                var m = $('owPlusMenu');
-                setEmoji(false); self.hideCtxMenu();
-                setPlus(m.style.display !== 'block');
-            };
-            var plusMenu = $('owPlusMenu');
-            plusMenu.onclick = function (e) {
-                e = e || w.event;
-                var t = e.target || e.srcElement;
-                if ((t.tagName || '').toUpperCase() !== 'A') return;
-                var act = t.getAttribute('data-act');
-                setPlus(false);
-                if (act === 'create-room') self.roomCreateModal();
+            // 创建群聊：侧栏底部按钮（仅登录用户渲染）→ 弹窗
+            if ($('owBtnCreateRoom')) $('owBtnCreateRoom').onclick = function () {
+                setEmoji(false);
+                self.roomCreateModal();
             };
             // 窄屏浮层：点击浮层外部时收起（成员面板 / 左侧栏 / 表情面板 / 「+」菜单）
             document.addEventListener ? document.addEventListener('click', function (e) {
-                var o = $('owOnline'), s = $('owSidebar'), em = $('owEmojiPanel'), pm = $('owPlusMenu');
+                var o = $('owOnline'), s = $('owSidebar'), em = $('owEmojiPanel');
                 var t = e.target || e.srcElement, inside = false, n = t;
                 while (n) {
                     if (n === o || n === $('owToggleOnline') || n === s || n === $('owToggleSide')
-                        || n === em || n === $('owBtnEmoji') || n === pm || n === $('owBtnPlus')) { inside = true; break; }
+                        || n === em || n === $('owBtnEmoji')) { inside = true; break; }
                     n = n.parentNode;
                 }
                 if (inside) return;
                 setEmoji(false);          // 点空白处顺手收起表情面板
-                setPlus(false);           // 收起「+」菜单
                 if (o && o.className.indexOf('open') >= 0) setPanel(false);
                 if (s && s.className.indexOf('open') >= 0) setSide(false);
             }) : (document.onclick = null);
@@ -530,7 +515,7 @@
             };
             document.onkeydown = function (e) {
                 e = e || w.event;
-                if (e.keyCode === 27) { self.hideCtxMenu(); setEmoji(false); setPlus(false); }
+                if (e.keyCode === 27) { self.hideCtxMenu(); setEmoji(false); }
             };
             // 菜单项点击（委托）：执行对应操作后收起菜单
             $('owCtxMenu').onclick = function (e) {
