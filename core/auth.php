@@ -163,6 +163,7 @@ class Auth
                 'nickname' => $user['nickname'], 'username' => $user['username'],
                 'role' => $user['role'], 'title' => $user['title'] ?? '',
                 'avatar' => $user['avatar'] ?? '', 'key' => $user['client_key'],
+                'birthdate' => (string)($user['birthdate'] ?? ''),
             ];
         }
         if ($guest) {

@@ -199,6 +199,7 @@ class DB
         // ---------- 增量迁移（幂等） ----------
         self::addColumn('users', 'points', 'int', '0');   // 用户积分
         self::addColumn('users', 'birthdate', 'varchar(10)', "''");   // 出生日期（年龄限制注册用）
+        self::addColumn('rooms', 'min_age', 'int', '0');             // 进入该房间的最低年龄（0=不限）
 
         // 索引（跨引擎兼容语法）
         $idx = [
@@ -288,6 +289,9 @@ class DB
             'file_upload'   => '1',      // 是否允许上传文件（0=关闭）
             'file_exts'     => 'zip,rar,7z,pdf,txt,md,doc,docx,xls,xlsx,ppt,pptx,mp3,mp4',
             'file_max_size' => '10',     // 单个文件上限（MB）
+            // 用户创建群聊
+            'room_create_allow' => '1',  // 是否允许普通用户创建群聊（管理员始终可创建）
+            'room_create_cost'  => '0',  // 创建群聊扣除的积分（0=免费；管理员不扣）
         ];
         foreach ($defs as $k => $v) {
             if (self::setting($k) === null) self::setSetting($k, $v);

@@ -466,17 +466,37 @@
             $('owToggleOnline').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
             $('owMask').onclick = function () { setSide(false); setPanel(false); };
-            // 窄屏浮层：点击浮层外部时收起（成员面板 / 左侧栏）
+            // 顶部「+」下拉菜单：创建群聊等
+            var setPlus = function (open) {
+                var m = $('owPlusMenu');
+                if (m) m.style.display = open ? 'block' : 'none';
+            };
+            $('owBtnPlus').onclick = function () {
+                var m = $('owPlusMenu');
+                setEmoji(false); self.hideCtxMenu();
+                setPlus(m.style.display !== 'block');
+            };
+            var plusMenu = $('owPlusMenu');
+            plusMenu.onclick = function (e) {
+                e = e || w.event;
+                var t = e.target || e.srcElement;
+                if ((t.tagName || '').toUpperCase() !== 'A') return;
+                var act = t.getAttribute('data-act');
+                setPlus(false);
+                if (act === 'create-room') self.roomCreateModal();
+            };
+            // 窄屏浮层：点击浮层外部时收起（成员面板 / 左侧栏 / 表情面板 / 「+」菜单）
             document.addEventListener ? document.addEventListener('click', function (e) {
-                var o = $('owOnline'), s = $('owSidebar'), em = $('owEmojiPanel');
+                var o = $('owOnline'), s = $('owSidebar'), em = $('owEmojiPanel'), pm = $('owPlusMenu');
                 var t = e.target || e.srcElement, inside = false, n = t;
                 while (n) {
                     if (n === o || n === $('owToggleOnline') || n === s || n === $('owToggleSide')
-                        || n === em || n === $('owBtnEmoji')) { inside = true; break; }
+                        || n === em || n === $('owBtnEmoji') || n === pm || n === $('owBtnPlus')) { inside = true; break; }
                     n = n.parentNode;
                 }
                 if (inside) return;
                 setEmoji(false);          // 点空白处顺手收起表情面板
+                setPlus(false);           // 收起「+」菜单
                 if (o && o.className.indexOf('open') >= 0) setPanel(false);
                 if (s && s.className.indexOf('open') >= 0) setSide(false);
             }) : (document.onclick = null);
@@ -510,7 +530,7 @@
             };
             document.onkeydown = function (e) {
                 e = e || w.event;
-                if (e.keyCode === 27) { self.hideCtxMenu(); setEmoji(false); }
+                if (e.keyCode === 27) { self.hideCtxMenu(); setEmoji(false); setPlus(false); }
             };
             // 菜单项点击（委托）：执行对应操作后收起菜单
             $('owCtxMenu').onclick = function (e) {
@@ -767,7 +787,102 @@
             };
         },
 
+        /** 创建群聊弹窗（用户也可创建，含后台创建房间的全部选项） */
+        roomCreateModal: function () {
+            var self = this;
+            var TYPE = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
+            var ROLE = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '管理员' };
+            var opts = function (map, keys, cur) {
+                var h = '';
+                for (var i = 0; i < keys.length; i++) {
+                    h += '<option value="' + esc(keys[i]) + '"' + (cur === keys[i] ? ' selected' : '') + '>' + esc(map[keys[i]] || keys[i]) + '</option>';
+                }
+                return h;
+            };
+            this.openModal(
+                '<h3>创建群聊</h3>'
+                + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRCName" maxlength="30" placeholder="2-30 个字符"></div>'
+                + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRCType">'
+                + opts(TYPE, ['public', 'password', 'role'], 'public') + '</select></div>'
+                + '<div class="ow-form-item" id="owRCPassRow" style="display:none"><label>房间密码</label><input class="ow-input" type="password" id="owRCPass" placeholder="密码群必须设置密码"></div>'
+                + '<div class="ow-form-item" id="owRCRoleRow" style="display:none"><label>最低进入角色</label><select class="ow-input" id="owRCRole">'
+                + opts(ROLE, ['guest', 'member', 'vip', 'admin'], 'guest') + '</select></div>'
+                + '<div class="ow-form-item"><label>进入最低年龄</label><select class="ow-input" id="owRCAge">'
+                + '<option value="0">不限</option><option value="12">12 周岁</option><option value="14">14 周岁</option>'
+                + '<option value="16">16 周岁</option><option value="18">18 周岁</option><option value="21">21 周岁</option></select>'
+                + '<p style="font-size:12px;color:#999;margin-top:4px">低于该年龄的用户将无法进入本群（需注册时填写过出生日期）。</p></div>'
+                + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRCDesc" maxlength="200" placeholder="一句话介绍这个群"></div>'
+                + '<div class="ow-room-form-tip" id="owRCTip"></div>'
+                + '<div class="ow-form-msg" id="owRCMsg"></div>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost" id="owRCCancel">取消</button>'
+                + '<button class="ow-btn ow-btn-primary" id="owRCCreate">创 建</button></div>'
+            );
+            var typeSel = $('owRCType'), tip = $('owRCTip'), msg = $('owRCMsg');
+            var refreshTip = function () {
+                var t = typeSel.value;
+                $('owRCPassRow').style.display = t === 'password' ? 'block' : 'none';
+                $('owRCRoleRow').style.display = t === 'role' ? 'block' : 'none';
+            };
+            typeSel.onchange = refreshTip;
+            refreshTip();
+            // 积分提示（创建成本由后台配置，管理员免费）
+            var me = this.cfg.me || {};
+            var cost = parseInt(this.cfg.settings.room_create_cost, 10) || 0;
+            if (cost > 0) {
+                tip.innerHTML = (me.role === 'admin')
+                    ? '管理员创建免费（普通用户需 <b>' + cost + '</b> 积分）。'
+                    : '创建将扣除 <b>' + cost + '</b> 积分，请确认积分充足。';
+            } else {
+                tip.innerHTML = '创建免费。';
+            }
+            var submit = function () {
+                var name = $('owRCName').value.replace(/^\s+|\s+$/g, '');
+                if (name.length < 2) { msg.innerHTML = '<span style="color:#F5222D">群名称至少 2 个字符</span>'; return; }
+                var t = typeSel.value;
+                if (t === 'password' && !$('owRCPass').value) {
+                    msg.innerHTML = '<span style="color:#F5222D">密码群必须设置密码</span>'; return;
+                }
+                msg.innerHTML = '创建中…';
+                OwApi.post('room_create', {
+                    name: name, type: t, password: $('owRCPass') ? $('owRCPass').value : '',
+                    min_role: $('owRCRole').value, min_age: $('owRCAge').value,
+                    description: $('owRCDesc').value
+                }, function (r) {
+                    if (!r.ok) { msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>'; return; }
+                    self.closeModal();
+                    toast('群聊「' + r.name + '」已创建' + (r.cost > 0 ? '，扣除 ' + r.cost + ' 积分' : ''));
+                    self.refreshRooms(r.id, r.name);
+                });
+            };
+            $('owRCCreate').onclick = submit;
+            $('owRCCancel').onclick = function () { self.closeModal(); };
+        },
+
+        /** 重新拉取房间列表并定位到指定房间 */
+        refreshRooms: function (gotoId, gotoName) {
+            var self = this;
+            OwApi.post('rooms', {}, function (r) {
+                if (!r.ok) return;
+                self.cfg.rooms = r.data;
+                self.renderRooms(r.data);
+                var found = null, i, j;
+                for (i = 0; i < r.data.length; i++) if (r.data[i].id === gotoId) found = r.data[i];
+                if (found) {
+                    self.room = gotoId; self.roomName = found.name;
+                    self.switchRoom(gotoId, found.name, null);
+                    var items = $('owRoomList').getElementsByTagName('li');
+                    for (j = 0; j < items.length; j++) {
+                        if (parseInt(items[j].getAttribute('data-room'), 10) === gotoId) items[j].className += ' active';
+                    }
+                } else if (gotoName) {
+                    $('owRoomName').innerHTML = esc(gotoName);
+                }
+            });
+        },
+
         addMessage: function (m, batch) {
+
             var box = $('owMessages');
             var exist = document.getElementById('owMsg' + m.id);
             if (exist) {
@@ -1316,6 +1431,11 @@
                         + '<p style="font-size:12px;color:#999;margin-top:4px">逗号分隔。只有内置安全类型表内登记过的扩展名才会生效；'
                         + 'svg/php/html 等可执行或可内嵌脚本的类型不予登记（即使填了也不会放行）。</p></div>'
                         + '<p style="font-size:12px;color:#999;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
+                        + '<div class="ow-form-row">'
+                        + '<div class="ow-form-item"><label>允许用户创建群聊</label>' + sel('room_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
+                        + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
+                        + '</div>'
+                        + '<p style="font-size:12px;color:#999;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在聊天室管理中调整。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
                 });
@@ -1425,6 +1545,8 @@
                 file_upload: $('owS_file_upload') ? $('owS_file_upload').value : '',
                 file_max_size: $('owS_file_max_size') ? $('owS_file_max_size').value : '',
                 file_exts: $('owS_file_exts') ? $('owS_file_exts').value : '',
+                room_create_allow: $('owS_room_create_allow') ? $('owS_room_create_allow').value : '',
+                room_create_cost: $('owS_room_create_cost') ? $('owS_room_create_cost').value : '',
                 login_fail_captcha: $('owS_login_fail_captcha') ? $('owS_login_fail_captcha').value : '',
                 login_fail_lock: $('owS_login_fail_lock') ? $('owS_login_fail_lock').value : '',
                 login_lock_minutes: $('owS_login_lock_minutes') ? $('owS_login_lock_minutes').value : '',

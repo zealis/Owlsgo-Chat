@@ -243,6 +243,15 @@ if ($action !== '') {
             if (!$room) Api::json(['ok' => false, 'msg' => '聊天室不存在']);
             if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权进入该聊天室']);
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
+            // 年龄门槛（管理员不受限）：必须在通行授权之前校验
+            $minAge = (int)($room['min_age'] ?? 0);
+            if ($minAge > 0 && $actor['role'] !== 'admin') {
+                $age = Auth::age((string)($actor['birthdate'] ?? ''));
+                if ($age < 0 || $age < $minAge) {
+                    Api::json(['ok' => false, 'msg' => '该群要求年满 ' . $minAge . ' 周岁'
+                        . ($age >= 0 ? '（当前 ' . $age . ' 周岁）' : '，请先在个人资料完善出生日期'), 'need_age' => true]);
+                }
+            }
             // 密码房：已持有有效通行授权则免密；管理员免密码。
             // 是否真的需要密码一律由服务端判定，前端只需先空密码尝试一次，返回 need_password 再弹窗。
             if ($room['type'] === 'password' && !Chat::roomPassCached((int)$room['id'])) {
@@ -262,8 +271,14 @@ if ($action !== '') {
         case 'poll':
             $roomId = (int)$p('room_id');
             $room = Chat::room($roomId);
-            if (!$room || !Chat::roomAccessOk($room, $actor)) {
-                Api::json(['ok' => false, 'msg' => '无权访问该聊天室', 'need_password' => $room && $room['type'] === 'password']);
+            if (!Chat::roomAccessOk($room, $actor)) {
+                $ageMsg = Chat::ageDenyMsg($room, $actor);
+                Api::json([
+                    'ok' => false,
+                    'msg' => $ageMsg ?: '无权访问该聊天室',
+                    'need_password' => $room['type'] === 'password' && !$ageMsg,
+                    'need_age' => $ageMsg !== '',
+                ]);
             }
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
             Api::json(['ok' => true] + Chat::poll($actor, $roomId, (int)$p('since', '0')));
@@ -272,8 +287,14 @@ if ($action !== '') {
             $roomId = (int)$p('room_id');
             $room = Chat::room($roomId);
             // 密码房必须持有有效通行授权，否则任何人都能绕过密码读取历史
-            if (!$room || !Chat::roomAccessOk($room, $actor)) {
-                Api::json(['ok' => false, 'msg' => '无权访问该聊天室', 'need_password' => $room && $room['type'] === 'password']);
+            if (!Chat::roomAccessOk($room, $actor)) {
+                $ageMsg = Chat::ageDenyMsg($room, $actor);
+                Api::json([
+                    'ok' => false,
+                    'msg' => $ageMsg ?: '无权访问该聊天室',
+                    'need_password' => $room['type'] === 'password' && !$ageMsg,
+                    'need_age' => $ageMsg !== '',
+                ]);
             }
             Api::json(['ok' => true, 'data' => Chat::history($actor, $roomId, (int)$p('before', '0'))]);
 
@@ -308,7 +329,48 @@ if ($action !== '') {
             Sec::log('upload_file', $actor['nickname'], ['size' => $res['size'], 'ext' => $res['ext']]);
             Api::json(['ok' => true, 'file' => $res]);
 
-        // 文件附件下载：必须能进入该房间才允许下载（密码房/角色房同样受控），
+        // 用户创建群聊（管理员始终可创建；普通用户受后台开关与积分限制）
+        case 'room_create':
+            if ($actor['kind'] !== 'user') Api::json(['ok' => false, 'msg' => '请登录后再创建群聊']);
+            if ($actor['role'] !== 'admin' && DB::setting('room_create_allow', '1') !== '1') {
+                Api::json(['ok' => false, 'msg' => '站点未开放用户创建群聊']);
+            }
+            $name = trim($p('name'));
+            if (mb_strlen($name) < 2 || mb_strlen($name) > 30) Api::json(['ok' => false, 'msg' => '群名称需 2-30 个字符']);
+            $type = $p('type');
+            if (!in_array($type, ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法的群类型']);
+            $minRole = in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest';
+            $minAge = max(0, min(100, (int)$p('min_age', '0')));
+            if ($type === 'password' && $p('password') === '') Api::json(['ok' => false, 'msg' => '密码群必须设置密码']);
+            if ($type === 'role' && $minRole !== 'guest' && Auth::roleLevel($actor['role']) < Auth::roleLevel($minRole)) {
+                Api::json(['ok' => false, 'msg' => '最低角色不能高于你自己']);
+            }
+            // 积分：管理员免费，普通用户按后台设置扣除
+            $cost = (int)DB::setting('room_create_cost', '0');
+            $me = null;
+            if ($cost > 0 && $actor['role'] !== 'admin') {
+                $me = DB::one('SELECT id,points FROM users WHERE id=?', [(int)$actor['id']]);
+                if (!$me || (int)$me['points'] < $cost) {
+                    Api::json(['ok' => false, 'msg' => '积分不足，创建群聊需要 ' . $cost . ' 积分（当前 ' . (int)($me['points'] ?? 0) . '）']);
+                }
+            }
+            $id = DB::insert('rooms', [
+                'name' => $name,
+                'slug' => 'g' . time() . bin2hex(random_bytes(3)),
+                'type' => $type,
+                'password' => $type === 'password' ? $p('password') : null,
+                'min_role' => $minRole,
+                'min_age' => $minAge,
+                'owner_id' => (int)$actor['id'],
+                'description' => mb_substr($p('description'), 0, 200),
+                'status' => 1,
+                'created_at' => time(),
+            ]);
+            if ($cost > 0 && $actor['role'] !== 'admin') {
+                DB::run('UPDATE users SET points=points-? WHERE id=?', [$cost, (int)$actor['id']]);
+            }
+            Sec::log('room_create', $actor['nickname'], ['id' => $id, 'name' => $name, 'cost' => $cost]);
+            Api::json(['ok' => true, 'msg' => '群聊已创建', 'id' => $id, 'name' => $name, 'cost' => $cost]);
         // 且强制 attachment，避免 html/svg 之类被浏览器内联解析导致 XSS
         case 'file_download':
             // 下载走 GET 链接（带签名），这里直接读 $_GET
@@ -411,6 +473,7 @@ function ow_icon(string $name, int $size = 18): string
         'download' => '<path d="M12 4v11"/><path d="M7.5 11L12 15.5 16.5 11"/><path d="M4.5 19.5h15"/>',
         // 拖拽手柄：两条斜线
         'resize'  => '<path d="M5 13l7-7"/><path d="M10 15l7-7"/>',
+        'plus'    => '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
         'puzzle' => '<path d="M9 4h6v3.5a2 2 0 1 0 4 .5V4h1v6h-3.5a2 2 0 1 0 .5 4H20v6h-6v-3.5a2 2 0 1 0-4 .5V20H4v-6h3.5a2 2 0 1 0-.5-4H4V4h5z" transform="scale(0.9) translate(1 1)"/>',
         'shield' => '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
         'gear'   => '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/>',
@@ -555,6 +618,7 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         'guest_chat' => DB::setting('guest_chat', '1'),
         'sound' => DB::setting('sound_default', '1'),
         'image_mode' => DB::setting('image_mode', 'local'),
+        'room_create_cost' => DB::setting('room_create_cost', '0'),   // 创建群聊扣分（前端提示用）
     ];
     pageHead('聊天室');
     echo '<body class="ow-chat-body">';
@@ -581,6 +645,12 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<h2 class="ow-room-name" id="owRoomName">' . Sec::e($first['name']) . '</h2>'
        . '<span class="ow-tag ow-tag-green" id="owSpeakTag">可发言</span>'
        . '<span class="ow-latency" id="owLatency"></span>'
+       // 右侧「+」下拉菜单（创建群聊等）
+       . '<div class="ow-plus-wrap">'
+       . '<button class="ow-icon-btn" id="owBtnPlus" aria-label="更多" title="更多">' . ow_icon('plus', 16) . '</button>'
+       . '<div class="ow-ctx-menu ow-plus-menu" id="owPlusMenu" style="display:none">'
+       . '<a href="javascript:;" data-act="create-room">创建群聊</a>'
+       . '</div></div>'
        . '<button class="ow-icon-btn" id="owToggleOnline" aria-label="在线成员">' . ow_icon('users') . '</button>'
        . '</header>'
        . '<div class="ow-announce" id="owAnnounce" style="display:none"><div class="ow-announce-track" id="owAnnounceTrack"></div></div>'

@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "前后端代码安全审核AI提示词.md",
+                "file": "其他选择.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "前后端代码安全审核AI提示词"
+              "title": "其他选择"
             }
           }
         ],
@@ -205,10 +205,10 @@
   },
   "active": "3b9ce0cc3edec015",
   "lastOpenFiles": [
-    "插件.md",
     "开发文档.md",
-    "其他选择.md",
     "前后端代码安全审核AI提示词.md",
+    "插件.md",
+    "其他选择.md",
     "失控的防御系统图片API文档.md",
     "index.svg",
     "Pasted image 20260908155620.png",
