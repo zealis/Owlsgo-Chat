@@ -365,9 +365,10 @@ button { font-family: inherit; cursor: pointer; }
 .ow-file-dl svg { display: block; }
 .ow-file-dl:hover { color: var(--ow-primary-dark); }
 
-/* 顶部「+」下拉菜单（复用右键菜单样式，定位在按钮下方） */
-.ow-plus-wrap { position: relative; margin-left: auto; }
-.ow-plus-menu { position: absolute; right: 0; top: 34px; }
+/* 侧栏「聊天室」标题行右侧的「+」菜单 */
+.ow-plus-wrap { position: relative; float: right; margin-top: 1px; }
+.ow-plus-wrap .ow-icon-btn { padding: 2px; }
+.ow-plus-menu { position: absolute; right: 0; top: 26px; min-width: 110px; }
 .ow-plus-menu a { padding: 8px 16px; }
 /* 群聊创建弹窗的提示条 */
 .ow-room-form-tip {

@@ -627,7 +627,13 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
     // 左侧栏
     echo '<aside class="ow-sidebar" id="owSidebar">'
        . '<div class="ow-brand"><img src="assets/img/logo.svg" alt="logo"><span>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</span></div>'
-       . '<div class="ow-side-title">聊天室 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
+       // 左侧栏「聊天室」标题行右侧的「+」下拉菜单（创建群聊）
+       . '<div class="ow-side-title">聊天室 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span>'
+       . '<span class="ow-plus-wrap">'
+       . '<button class="ow-icon-btn" id="owBtnPlus" aria-label="创建群聊" title="创建群聊">' . ow_icon('plus', 14) . '</button>'
+       . '<span class="ow-ctx-menu ow-plus-menu" id="owPlusMenu" style="display:none">'
+       . '<a href="javascript:;" data-act="create-room">创建群聊</a>'
+       . '</span></span></div>'
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
        . '<div class="ow-side-actions">'
@@ -646,11 +652,6 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<span class="ow-tag ow-tag-green" id="owSpeakTag">可发言</span>'
        . '<span class="ow-latency" id="owLatency"></span>'
        // 右侧「+」下拉菜单（创建群聊等）
-       . '<div class="ow-plus-wrap">'
-       . '<button class="ow-icon-btn" id="owBtnPlus" aria-label="更多" title="更多">' . ow_icon('plus', 16) . '</button>'
-       . '<div class="ow-ctx-menu ow-plus-menu" id="owPlusMenu" style="display:none">'
-       . '<a href="javascript:;" data-act="create-room">创建群聊</a>'
-       . '</div></div>'
        . '<button class="ow-icon-btn" id="owToggleOnline" aria-label="在线成员">' . ow_icon('users') . '</button>'
        . '</header>'
        . '<div class="ow-announce" id="owAnnounce" style="display:none"><div class="ow-announce-track" id="owAnnounceTrack"></div></div>'
