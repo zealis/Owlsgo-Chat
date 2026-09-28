@@ -353,6 +353,8 @@ button { font-family: inherit; cursor: pointer; }
 .ow-file-dl { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary); text-decoration: none; }
 .ow-file-dl svg { display: block; }
 .ow-file-dl:hover { color: var(--ow-primary-dark); }
+/* 浮层遮罩：默认隐藏，仅窄屏（<=720px）由 .show 显示 */
+.ow-mask { display: none; }
 .ow-ctx-menu {
     position: fixed;
     z-index: 400;
@@ -528,6 +530,15 @@ button { font-family: inherit; cursor: pointer; }
 .ow-only-mobile { display: none; }
 
 @media (max-width: 960px) {
+    /* 浮层遮罩：成员面板为浮层模式，遮罩跟随同一断点 */
+    .ow-mask {
+        display: none;
+        position: fixed;
+        left: 0; right: 0; top: 52px; bottom: 0;
+        background: rgba(0, 0, 0, .25);
+        z-index: 85;
+    }
+    .ow-mask.show { display: block; }
     .ow-online {
         position: fixed;
         /* 顶部留出工具栏高度，避免浮层盖住「成员」按钮导致无法收起 */
@@ -544,7 +555,8 @@ button { font-family: inherit; cursor: pointer; }
     .ow-only-mobile { display: block; }
     .ow-sidebar {
         position: fixed;
-        left: -260px; top: 0; bottom: 0;
+        /* 顶部留出工具栏高度，避免侧栏盖住「菜单」按钮导致无法收起 */
+        left: -260px; top: 52px; bottom: 0;
         z-index: 90;
         transition: left .2s;
         width: 250px;

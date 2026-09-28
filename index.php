@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.19';
+const OWLSGO_VERSION = '1.0.20';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -610,6 +610,7 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
     echo '<div class="ow-modal-mask" id="owModalMask" style="display:none"><div class="ow-modal" id="owModal"></div></div>';
     echo '<div class="ow-img-viewer" id="owImgViewer" style="display:none"><img id="owImgViewerImg" alt="预览"></div>';
     echo '<div class="ow-ctx-menu" id="owCtxMenu" style="display:none"></div>';
+    echo '<div class="ow-mask" id="owMask"></div>';
     echo '<div class="ow-toast" id="owToast" style="display:none"></div>';
 
     $boot = [

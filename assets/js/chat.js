@@ -421,7 +421,23 @@
                 this.innerHTML = this.getAttribute(self.sound ? 'data-on' : 'data-off');
                 toast(self.sound ? '提示音已开启' : '提示音已关闭');
             };
-            $('owToggleSide').onclick = function () { $('owSidebar').className += ($('owSidebar').className.indexOf('open') >= 0 ? '' : ' open'); };
+            // 窄屏浮层遮罩：侧栏或成员面板打开时显示
+            var syncMask = function () {
+                var m = $('owMask');
+                if (!m) return;
+                var open = $('owSidebar').className.indexOf('open') >= 0 || $('owOnline').className.indexOf('open') >= 0;
+                m.className = open ? 'ow-mask show' : 'ow-mask';
+            };
+            // 侧栏开关：真正的切换（原写法只加不减，打开后无法关闭）
+            var setSide = function (open) {
+                var s = $('owSidebar');
+                var c = s.className.replace(' open', '');
+                s.className = c + (open ? ' open' : '');
+                syncMask();
+            };
+            $('owToggleSide').onclick = function () {
+                setSide($('owSidebar').className.indexOf('open') < 0);
+            };
             // 成员面板：宽屏用 hidden 收起（常驻侧栏），窄屏用 open 浮层（默认收起）
             var isNarrow = function () { return (document.documentElement.clientWidth || w.innerWidth || 1024) <= 960; };
             var setPanel = function (open) {
@@ -429,6 +445,7 @@
                 var c = o.className.replace(' open', '').replace(' hidden', '');
                 var narrow = isNarrow();
                 o.className = c + (open ? (narrow ? ' open' : '') : (narrow ? '' : ' hidden'));
+                syncMask();
             };
             var togglePanel = function () {
                 var o = $('owOnline');
@@ -437,13 +454,18 @@
             };
             $('owToggleOnline').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
-            // 窄屏浮层：点击面板外部时收起
+            $('owMask').onclick = function () { setSide(false); setPanel(false); };
+            // 窄屏浮层：点击浮层外部时收起（成员面板 / 左侧栏）
             document.addEventListener ? document.addEventListener('click', function (e) {
-                var o = $('owOnline');
-                if (!o || o.className.indexOf('open') < 0) return;
+                var o = $('owOnline'), s = $('owSidebar');
                 var t = e.target || e.srcElement, inside = false, n = t;
-                while (n) { if (n === o || n === $('owToggleOnline')) { inside = true; break; } n = n.parentNode; }
-                if (!inside) setPanel(false);
+                while (n) {
+                    if (n === o || n === $('owToggleOnline') || n === s || n === $('owToggleSide')) { inside = true; break; }
+                    n = n.parentNode;
+                }
+                if (inside) return;
+                if (o && o.className.indexOf('open') >= 0) setPanel(false);
+                if (s && s.className.indexOf('open') >= 0) setSide(false);
             }) : (document.onclick = null);
             $('owMessages').onscroll = function () {
                 if (this.scrollTop < 40 && !self.historyDone && !self.loadingHistory) self.loadHistory();
