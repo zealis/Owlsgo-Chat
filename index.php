@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.15';
+const OWLSGO_VERSION = '1.0.16';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -562,7 +562,8 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '</main>';
 
     // 右侧在线列表
-    echo '<aside class="ow-online" id="owOnline"><div class="ow-side-title">所有成员 <span class="ow-badge-num" id="owOnlineCount">0</span></div>'
+    echo '<aside class="ow-online" id="owOnline"><div class="ow-side-title">所有成员 <span class="ow-badge-num" id="owOnlineCount">0</span>'
+       . '<button class="ow-online-close" id="owOnlineClose" aria-label="收起成员列表" title="收起">×</button></div>'
        . '<ul class="ow-online-list" id="owOnlineList"></ul></aside>';
     echo '</div>';
 

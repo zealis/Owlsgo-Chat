@@ -374,10 +374,29 @@
                 toast(self.sound ? '提示音已开启' : '提示音已关闭');
             };
             $('owToggleSide').onclick = function () { $('owSidebar').className += ($('owSidebar').className.indexOf('open') >= 0 ? '' : ' open'); };
-            $('owToggleOnline').onclick = function () {
+            // 成员面板：宽屏用 hidden 收起（常驻侧栏），窄屏用 open 浮层（默认收起）
+            var isNarrow = function () { return (document.documentElement.clientWidth || w.innerWidth || 1024) <= 960; };
+            var setPanel = function (open) {
                 var o = $('owOnline');
-                o.className = o.className.indexOf('open') >= 0 ? o.className.replace(' open', '') : o.className + ' open';
+                var c = o.className.replace(' open', '').replace(' hidden', '');
+                var narrow = isNarrow();
+                o.className = c + (open ? (narrow ? ' open' : '') : (narrow ? '' : ' hidden'));
             };
+            var togglePanel = function () {
+                var o = $('owOnline');
+                var open = isNarrow() ? (o.className.indexOf('open') >= 0) : (o.className.indexOf('hidden') < 0);
+                setPanel(!open);
+            };
+            $('owToggleOnline').onclick = togglePanel;
+            $('owOnlineClose').onclick = function () { setPanel(false); };
+            // 窄屏浮层：点击面板外部时收起
+            document.addEventListener ? document.addEventListener('click', function (e) {
+                var o = $('owOnline');
+                if (!o || o.className.indexOf('open') < 0) return;
+                var t = e.target || e.srcElement, inside = false, n = t;
+                while (n) { if (n === o || n === $('owToggleOnline')) { inside = true; break; } n = n.parentNode; }
+                if (!inside) setPanel(false);
+            }) : (document.onclick = null);
             $('owMessages').onscroll = function () {
                 if (this.scrollTop < 40 && !self.historyDone && !self.loadingHistory) self.loadHistory();
             };
