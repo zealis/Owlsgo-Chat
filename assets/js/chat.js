@@ -124,7 +124,7 @@
         var s = OwApi.sign('file_download');
         var dl = '?action=file_download&id=' + m.id + '&ts=' + s.ts + '&sign=' + s.sign;
         return '<div class="ow-file-card">'
-            + '<span class="ow-file-ico">' + owSvg('file', 26) + '</span>'
+            + '<span class="ow-file-ico">' + owSvg('file', 20) + '</span>'
             + '<span class="ow-file-meta"><span class="ow-file-name">' + esc(info.name || '文件') + '</span>'
             + '<span class="ow-file-size">' + esc(String(info.ext || '').toUpperCase()) + ' · ' + esc(sizeText(info.size)) + '</span></span>'
             + '<a class="ow-file-dl" href="' + dl + '" title="下载">' + owSvg('download', 18) + '</a></div>';
