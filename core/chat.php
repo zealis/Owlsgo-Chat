@@ -153,10 +153,23 @@ class Chat
             if (!$toUserId && !$toGuestId) return [false, '私信缺少接收对象'];
         } elseif ($type === 'text' && preg_match('/(^|\s)@[^\s@]+/u', $content)) {
             $type = 'mention';
-        } elseif (!in_array($type, ['text', 'image', 'system'], true)) {
+        } elseif (!in_array($type, ['text', 'image', 'file', 'system'], true)) {
             $type = 'text';
         }
-        if ($type !== 'image') {
+        if ($type === 'file') {
+            // 文件消息 content 是 JSON：只允许 name/size/ext/path 四个字段，
+            // 且 path 必须来自上传接口返回（Upload::fileAbs 会再校验一次）
+            $info = json_decode($content, true);
+            if (!is_array($info) || !Upload::fileAbs((string)($info['path'] ?? ''))) {
+                return [false, '文件信息无效'];
+            }
+            $content = json_encode([
+                'name' => mb_substr(preg_replace('/[\\\\\/\x00-\x1F\x7F]/u', '', (string)($info['name'] ?? 'file')), 0, 120),
+                'size' => (int)($info['size'] ?? 0),
+                'ext'  => strtolower(preg_replace('/[^a-z0-9]/i', '', (string)($info['ext'] ?? ''))),
+                'path' => (string)$info['path'],
+            ], JSON_UNESCAPED_UNICODE);
+        } elseif ($type !== 'image') {
             $content = trim($content);
             if ($content === '') return [false, '消息不能为空'];
             if (mb_strlen($content) > 2000) return [false, '消息过长（最多 2000 字）'];

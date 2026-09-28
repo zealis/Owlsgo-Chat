@@ -284,6 +284,10 @@ class DB
             'login_fail_lock'    => '10', // 连续失败达此次数后临时锁定（0=不锁定）
             'login_lock_minutes' => '15', // 锁定时长（分钟）
             'min_register_age' => '0',   // 注册最低年龄（周岁），0=不限制
+            // 文件附件上传
+            'file_upload'   => '1',      // 是否允许上传文件（0=关闭）
+            'file_exts'     => 'zip,rar,7z,pdf,txt,md,doc,docx,xls,xlsx,ppt,pptx,mp3,mp4',
+            'file_max_size' => '10',     // 单个文件上限（MB）
         ];
         foreach ($defs as $k => $v) {
             if (self::setting($k) === null) self::setSetting($k, $v);

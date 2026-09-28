@@ -319,6 +319,38 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg-sticker { max-width: 120px; max-height: 120px; border-radius: 6px; cursor: zoom-in; }
 .ow-birth-row { display: flex; display: -webkit-flex; gap: 8px; }
 .ow-birth-row .ow-input { flex: 1; -webkit-flex: 1; min-width: 0; }
+
+/* 圆形发送按钮 + 文件消息卡片 */
+.ow-send-round {
+    width: 40px; height: 40px;
+    min-width: 40px; max-width: 40px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    justify-content: center; -webkit-justify-content: center;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+}
+.ow-send-round svg { display: block; }
+.ow-file-card {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 10px;
+    min-width: 200px; max-width: 280px;
+    padding: 10px 12px;
+    background: var(--ow-bg);
+    border: 1px solid var(--ow-border);
+    border-radius: 8px;
+}
+.ow-file-ico { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary); }
+.ow-file-meta { flex: 1; -webkit-flex: 1; min-width: 0; }
+.ow-file-name {
+    font-size: 13px; color: var(--ow-text-title);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ow-file-size { font-size: 12px; color: var(--ow-text-sub); margin-top: 2px; }
+.ow-file-dl { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary); text-decoration: none; }
+.ow-file-dl:hover { color: var(--ow-primary-dark); }
 .ow-ctx-menu {
     position: fixed;
     z-index: 400;

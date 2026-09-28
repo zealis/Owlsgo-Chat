@@ -148,7 +148,8 @@ class Admin
                 $allow = ['site_name', 'allow_register', 'reg_email_verify', 'guest_browse', 'guest_chat',
                           'guest_daily_limit', 'msg_rate_window', 'msg_rate_max', 'mail_rate_limit',
                           'sound_default', 'image_mode', 'room_pass_ttl',
-                          'login_fail_captcha', 'login_fail_lock', 'login_lock_minutes', 'min_register_age'];
+                          'login_fail_captcha', 'login_fail_lock', 'login_lock_minutes', 'min_register_age',
+                          'file_upload', 'file_exts', 'file_max_size'];
                 foreach ($allow as $k) {
                     if (isset($_POST[$k])) DB::setSetting($k, $p($k));
                 }

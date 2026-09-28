@@ -116,6 +116,36 @@
         return h;
     }
 
+    /* 文件消息卡片：图标 + 文件名 + 大小 + 下载（下载链接带签名，服务端再校验房间权限） */
+    function fileCardHtml(m) {
+        var info = null;
+        try { info = JSON.parse(m.content); } catch (e) { info = null; }
+        if (!info) return '<span class="ow-file-card">文件内容已失效</span>';
+        var s = OwApi.sign('file_download');
+        var dl = '?action=file_download&id=' + m.id + '&ts=' + s.ts + '&sign=' + s.sign;
+        return '<div class="ow-file-card">'
+            + '<span class="ow-file-ico">' + owSvg('file', 26) + '</span>'
+            + '<span class="ow-file-meta"><span class="ow-file-name">' + esc(info.name || '文件') + '</span>'
+            + '<span class="ow-file-size">' + esc(String(info.ext || '').toUpperCase()) + ' · ' + esc(sizeText(info.size)) + '</span></span>'
+            + '<a class="ow-file-dl" href="' + dl + '" title="下载">' + owSvg('download', 18) + '</a></div>';
+    }
+    function sizeText(n) {
+        n = parseInt(n, 10) || 0;
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+        return (n / 1048576).toFixed(1) + ' MB';
+    }
+    /** 生成 ow 线性 SVG 图标（与服务端 ow_icon 保持一致的描边风格） */
+    var OW_SVG_PATHS = {
+        'file': '<path d="M13 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V9z"/><path d="M13 3.5V9h5.5"/>',
+        'download': '<path d="M12 4v11"/><path d="M7.5 11L12 15.5 16.5 11"/><path d="M4.5 19.5h15"/>'
+    };
+    function owSvg(name, size) {
+        var p = OW_SVG_PATHS[name] || '';
+        return '<svg class="ow-icon" width="' + (size || 18) + '" height="' + (size || 18) + '" viewBox="0 0 24 24" fill="none" '
+            + 'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+    }
+
     var OwApi = {
         key: '',
         tsOffset: 0,   // 客户端时钟与服务器的偏差（秒），由页面下发的服务器时间校正
@@ -128,6 +158,32 @@
             var ts = Math.floor(new Date().getTime() / 1000) + this.tsOffset;
             return { ts: ts, sign: md5(this.key + '|' + ts + '|' + action) };
         },
+        // 带文件的 multipart 上传：upload(action, file, cb) 或 upload(action, file, extraFields, cb)
+        upload: function (action, file, extra, cb) {
+            if (typeof extra === 'function') { cb = extra; extra = null; }
+            var s = this.sign(action), fd, x, k;
+            try { fd = new FormData(); } catch (e) { cb({ ok: false, msg: '当前浏览器不支持文件上传' }); return; }
+            fd.append('ts', s.ts);
+            fd.append('sign', s.sign);
+            if (extra) { for (k in extra) if (extra.hasOwnProperty(k)) fd.append(k, extra[k]); }
+            fd.append('file', file);
+            x = new XMLHttpRequest();
+            x.open('POST', '?action=' + action, true);
+            x.onreadystatechange = function () {
+                if (x.readyState !== 4) return;
+                var r = null;
+                try { r = JSON.parse(x.responseText); } catch (e) {}
+                r = r || { ok: false, msg: '网络错误（' + x.status + '）' };
+                if (r.ok === false && r.msg && r.msg.indexOf('签名验证失败') >= 0) {
+                    OwApi.onSignExpired(function () { cb(r, x.status); });
+                    return;
+                }
+                cb(r, x.status);
+            };
+            x.send(fd);
+            return x;
+        },
+
         /* 签名失效自愈：会话重建/页面为旧缓存时密钥对不上，自动刷新一次取新密钥 */
         onSignExpired: function (cb) {
             var flag = 'owl_sig_reload_at', now = new Date().getTime(), last = 0;
@@ -157,20 +213,6 @@
             x.send(body);
             return x;
         },
-        upload: function (action, file, extra, cb) {
-            var s = this.sign(action), fd = new FormData(), k;
-            fd.append('ts', s.ts); fd.append('sign', s.sign); fd.append('file', file);
-            for (k in (extra || {})) if (extra.hasOwnProperty(k)) fd.append(k, extra[k]);
-            var x = new XMLHttpRequest();
-            x.open('POST', '?action=' + encodeURIComponent(action), true);
-            x.onreadystatechange = function () {
-                if (x.readyState !== 4) return;
-                var r = null;
-                try { r = JSON.parse(x.responseText); } catch (e) {}
-                cb(r || { ok: false, msg: '上传失败' });
-            };
-            x.send(fd);
-        }
     };
 
     /* 客户端图片压缩（本地存储模式；旧浏览器无 canvas 时自动跳过直接上传） */
@@ -358,6 +400,12 @@
                         if (f) self.uploadImage(f);
                     }
                 }
+            };
+            $('owBtnFile').onclick = function () { $('owFileAttach').click(); };
+            $('owFileAttach').onchange = function () {
+                var f = this.files && this.files[0];
+                this.value = '';
+                if (f) self.uploadFile(f);
             };
             $('owBtnImage').onclick = function () { $('owFileInput').click(); };
             $('owFileInput').onchange = function () {
@@ -626,6 +674,7 @@
 
             var content;
             if (m.recalled) content = '<span class="ow-msg-content">此消息已撤回</span>';
+            else if (m.type === 'file') content = '<span class="ow-msg-content" style="padding:4px">' + fileCardHtml(m) + '</span>';
             else if (m.type === 'image') content = '<span class="ow-msg-content" style="padding:4px"><img class="ow-msg-img" src="' + esc(m.content) + '" onclick="OwChat.viewImg(this.src)" alt="图片"></span>';
             else content = '<span class="ow-msg-content">' + esc(m.content) + '</span>';
 
@@ -782,6 +831,22 @@
                 if (!r.ok) { toast(r.msg); return; }
                 if (!opt.type || opt.type === 'text') input.value = '';
                 input.style.height = 'auto';
+            });
+        },
+
+        /** 上传文件附件，并作为一条 file 消息发送 */
+        uploadFile: function (file) {
+            var self = this;
+            toast('文件上传中…');
+            OwApi.upload('upload_file', file, {}, function (r) {
+                if (!r.ok) { toast(r.msg); return; }
+                self.send({
+                    type: 'file',
+                    content: JSON.stringify({
+                        name: r.file.name, size: r.file.size,
+                        ext: r.file.ext, path: r.file.path
+                    })
+                });
             });
         },
 
@@ -1170,6 +1235,13 @@
                         + '</div>'
                         + '<div class="ow-form-item"><label>注册最低年龄(周岁)</label><input class="ow-input" id="owS_min_register_age" value="' + esc(d.min_register_age || '0') + '">'
                         + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限制；填 18 则注册时必须选择出生日期且年满 18 周岁（按日期精确计算）。</p></div>'
+                        + '<div class="ow-form-row">'
+                        + '<div class="ow-form-item"><label>允许上传文件</label>' + sel('file_upload', { '1': '允许', '0': '禁止' }) + '</div>'
+                        + '<div class="ow-form-item"><label>单文件大小上限(MB)</label><input class="ow-input" id="owS_file_max_size" value="' + esc(d.file_max_size || '10') + '"></div>'
+                        + '</div>'
+                        + '<div class="ow-form-item"><label>允许的文件扩展名</label><input class="ow-input" id="owS_file_exts" value="' + esc(d.file_exts || 'zip,rar,7z,pdf,txt,md,doc,docx,xls,xlsx,ppt,pptx,mp3,mp4') + '">'
+                        + '<p style="font-size:12px;color:#999;margin-top:4px">逗号分隔。只有内置安全类型表内登记过的扩展名才会生效；'
+                        + 'svg/php/html 等可执行或可内嵌脚本的类型不予登记（即使填了也不会放行）。</p></div>'
                         + '<p style="font-size:12px;color:#999;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
@@ -1277,6 +1349,9 @@
                 image_mode: $('owS_image_mode').value,
                 room_pass_ttl: $('owS_room_pass_ttl') ? $('owS_room_pass_ttl').value : '',
                 min_register_age: $('owS_min_register_age') ? $('owS_min_register_age').value : '',
+                file_upload: $('owS_file_upload') ? $('owS_file_upload').value : '',
+                file_max_size: $('owS_file_max_size') ? $('owS_file_max_size').value : '',
+                file_exts: $('owS_file_exts') ? $('owS_file_exts').value : '',
                 login_fail_captcha: $('owS_login_fail_captcha') ? $('owS_login_fail_captcha').value : '',
                 login_fail_lock: $('owS_login_fail_lock') ? $('owS_login_fail_lock').value : '',
                 login_lock_minutes: $('owS_login_lock_minutes') ? $('owS_login_lock_minutes').value : '',

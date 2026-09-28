@@ -6,7 +6,7 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.16';
+const OWLSGO_VERSION = '1.0.17';
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -296,6 +296,37 @@ if ($action !== '') {
             [$ok, $urlOrMsg] = Upload::handle($_FILES['file'], $kind);
             Api::json($ok ? ['ok' => true, 'url' => $urlOrMsg] : ['ok' => false, 'msg' => $urlOrMsg]);
 
+        // 文件附件上传（聊天文件消息）：安全校验见 Upload::storeFile
+        case 'upload_file':
+            if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录']);
+            if (empty($_FILES['file'])) Api::json(['ok' => false, 'msg' => '没有选择文件']);
+            if (!Sec::rateLimit('upload_file', $actor['kind'] . ($actor['id'] ?? '') . '|' . Sec::ip(), 60, 20)) {
+                Api::json(['ok' => false, 'msg' => '上传过于频繁，请稍后再试']);
+            }
+            [$ok, $res] = Upload::storeFile($_FILES['file']);
+            if (!$ok) Api::json(['ok' => false, 'msg' => $res]);
+            Sec::log('upload_file', $actor['nickname'], ['size' => $res['size'], 'ext' => $res['ext']]);
+            Api::json(['ok' => true, 'file' => $res]);
+
+        // 文件附件下载：必须能进入该房间才允许下载（密码房/角色房同样受控），
+        // 且强制 attachment，避免 html/svg 之类被浏览器内联解析导致 XSS
+        case 'file_download':
+            // 下载走 GET 链接（带签名），这里直接读 $_GET
+            $msg = DB::one('SELECT * FROM messages WHERE id=?', [(int)($_GET['id'] ?? 0)]);
+            if (!$msg || $msg['type'] !== 'file') Api::json(['ok' => false, 'msg' => '文件不存在']);
+            $room = Chat::room((int)$msg['room_id']);
+            if (!$room || !Chat::roomAccessOk($room, $actor)) Api::json(['ok' => false, 'msg' => '无权访问']);
+            $info = json_decode((string)$msg['content'], true);
+            $abs  = Upload::fileAbs((string)($info['path'] ?? ''));
+            if (!$abs) Api::json(['ok' => false, 'msg' => '文件不存在']);
+            $name = preg_replace('/[\r\n"]/', '', (string)($info['name'] ?? 'file'));
+            header('Content-Type: application/octet-stream');
+            header('Content-Length: ' . filesize($abs));
+            header('Content-Disposition: attachment; filename="' . $name . '"; filename*=UTF-8\'\'' . rawurlencode($name));
+            header('X-Content-Type-Options: nosniff');
+            readfile($abs);
+            exit;
+
         // ---------- 贴纸 ----------
         case 'stickers':
             Api::json(['ok' => true, 'data' => Upload::stickers($actor)]);
@@ -373,6 +404,10 @@ function ow_icon(string $name, int $size = 18): string
         'mute'   => '<path d="M8 6.5A6 6 0 0 1 18 10c0 4 1.5 5.5 2 6h-3M6.2 8.5C6.1 9 6 9.5 6 10c0 4-1.5 5.5-2 6h11"/><line x1="4" y1="4" x2="20" y2="20"/>',
         'ban'    => '<circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/>',
         'mega'   => '<path d="M3 11v3l4 .5V10.5z"/><path d="M7 10.5L18 5v13l-11-4.5"/><path d="M9 15.5V18a2 2 0 0 0 4 .5"/>',
+        'send'   => '<path d="M3.5 12L21 4l-7.5 17-2.5-7z"/>',
+        'paperclip' => '<path d="M16.5 7.5l-7 7a3.5 3.5 0 0 0 5 5l7-7a5.5 5.5 0 0 0-8-8L6 12a7.5 7.5 0 0 0 11 11"/>',
+        'file'   => '<path d="M13 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V9z"/><path d="M13 3.5V9h5.5"/>',
+        'download' => '<path d="M12 4v11"/><path d="M7.5 11L12 15.5 16.5 11"/><path d="M4.5 19.5h15"/>',
         'puzzle' => '<path d="M9 4h6v3.5a2 2 0 1 0 4 .5V4h1v6h-3.5a2 2 0 1 0 .5 4H20v6h-6v-3.5a2 2 0 1 0-4 .5V20H4v-6h3.5a2 2 0 1 0-.5-4H4V4h5z" transform="scale(0.9) translate(1 1)"/>',
         'shield' => '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
         'gear'   => '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/>',
@@ -551,12 +586,14 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<div class="ow-toolbar">'
        . '<button class="ow-icon-btn" id="owBtnEmoji" title="表情">' . ow_icon('smile') . '</button>'
        . '<button class="ow-icon-btn" id="owBtnImage" title="发送图片">' . ow_icon('image') . '</button>'
+       . '<button class="ow-icon-btn" id="owBtnFile" title="发送文件">' . ow_icon('paperclip') . '</button>'
        . '<button class="ow-icon-btn" id="owBtnSound" title="提示音" data-on="' . Sec::e(ow_icon('bell')) . '" data-off="' . Sec::e(ow_icon('bell-off')) . '">' . ow_icon('bell') . '</button>'
        . '<input type="file" id="owFileInput" accept="image/*" style="display:none">'
+       . '<input type="file" id="owFileAttach" style="display:none">'
        . '</div>'
        . '<div class="ow-input-row">'
        . '<textarea class="ow-input" id="owInput" rows="1" placeholder="输入消息，按 Enter 发送，Ctrl+V 粘贴图片"></textarea>'
-       . '<button class="ow-btn ow-btn-primary ow-send" id="owBtnSend" aria-label="发送">↑</button>'
+       . '<button class="ow-btn ow-btn-primary ow-send ow-send-round" id="owBtnSend" aria-label="发送" title="发送">' . ow_icon('send', 18) . '</button>'
        . '</div></div>'
        . '<div class="ow-emoji-panel" id="owEmojiPanel" style="display:none"></div>'
        . '</main>';
