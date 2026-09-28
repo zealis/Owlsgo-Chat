@@ -90,12 +90,15 @@ class Admin
             case 'admin_room_save':
                 $id = (int)$p('id', '0');
                 if (!in_array($p('type'), ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法类型']);
+                // 最低年龄与前台创建弹窗共用同一套校验：非法值拒绝保存并给出明确提示
+                [$ageOk, $minAge, $ageErr] = Auth::parseMinAge($p('min_age', '0'));
+                if (!$ageOk) Api::json(['ok' => false, 'msg' => $ageErr]);
                 $data = [
                     'name' => $p('name') ?: '未命名房间',
                     'type' => $p('type'),
                     'password' => $p('type') === 'password' ? $p('password') : null,
                     'min_role' => in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest',
-                    'min_age' => max(0, min(100, (int)$p('min_age', '0'))),
+                    'min_age' => $minAge,
                     'owner_id' => (int)$p('owner_id', '0') ?: null,
                     'description' => $p('description'),
                     'status' => (int)$p('status', '1'),

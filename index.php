@@ -340,7 +340,9 @@ if ($action !== '') {
             $type = $p('type');
             if (!in_array($type, ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法的群类型']);
             $minRole = in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest';
-            $minAge = max(0, min(100, (int)$p('min_age', '0')));
+            // 最低年龄为自由输入框，非法值直接拒绝并提示，不再静默 clamp
+            [$ageOk, $minAge, $ageErr] = Auth::parseMinAge($p('min_age', '0'));
+            if (!$ageOk) Api::json(['ok' => false, 'msg' => $ageErr]);
             if ($type === 'password' && $p('password') === '') Api::json(['ok' => false, 'msg' => '密码群必须设置密码']);
             if ($type === 'role' && $minRole !== 'guest' && Auth::roleLevel($actor['role']) < Auth::roleLevel($minRole)) {
                 Api::json(['ok' => false, 'msg' => '最低角色不能高于你自己']);
