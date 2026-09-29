@@ -73,15 +73,24 @@ class Auth
      * 禁止 @：避免与 @提及 前缀冲突。
      * 允许重名：昵称不再承担唯一性职责，区分用户一律使用 id。
      *
+     * 插件钩子（v1.0.46）：内置规则通过后触发 nickname.before_save，
+     * 回调签名 function (&$nick, &$err, $ctx)——插件可改写 $nick，
+     * 或把 $err 设为非空字符串表示拒绝（$err 即展示给用户的文案）。
+     * $ctx['scene']：register / profile / install。
+     *
      * @return array [bool 是否合法, string 归一化值或错误文案]
      */
-    public static function checkNickname(string $nick): array
+    public static function checkNickname(string $nick, array $ctx = []): array
     {
         $s = trim($nick);
         if ($s === '') return [false, '请填写昵称'];
         if (!preg_match('/^[\p{L}\p{N}_\-]{2,20}$/u', $s)) {
             return [false, '昵称需 2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @'];
         }
+        // 插件校验：可改写昵称（引用）或通过 $err 拦截
+        $err = null;
+        Plugin::fire('nickname.before_save', [&$s, &$err, $ctx]);
+        if (is_string($err) && $err !== '') return [false, $err];
         return [true, $s];
     }
 
@@ -125,7 +134,7 @@ class Auth
     public static function register(string $nickname, string $email, string $password, string $code, string $birthdate = ''): array
     {
         if (DB::setting('allow_register', '1') !== '1') return [false, '站点已关闭注册'];
-        [$nickOk, $nick] = self::checkNickname($nickname);
+        [$nickOk, $nick] = self::checkNickname($nickname, ['scene' => 'register']);
         if (!$nickOk) return [false, $nick];
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return [false, '邮箱格式不正确'];
         if (strlen($password) < 6) return [false, '密码至少 6 位'];
@@ -221,7 +230,7 @@ class Auth
      */
     public static function updateProfile(array $user, string $nickname, string $avatar): array
     {
-        [$ok, $nick] = self::checkNickname($nickname);
+        [$ok, $nick] = self::checkNickname($nickname, ['scene' => 'profile']);
         if (!$ok) return [false, $nick];
         $uid = (int)$user['id'];
         DB::run('UPDATE users SET nickname=?, avatar=? WHERE id=?', [$nick, $avatar, $uid]);

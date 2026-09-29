@@ -2,7 +2,7 @@
 
 本文件是 AI 新建、修改和审查 Owlsgo-Chat 插件时的规范。开始工作前先读完本文件，再检查核心文件（`core/plugin.php`）和功能最接近的现有插件（`plugins/user-manager/`）；实现时以当前代码为准，不臆造接口。
 
-> 与其他系统的插件体系无关：本文档只描述 Owlsgo-Chat 自身的插件机制，全部内容以 `core/plugin.php` 与现有插件的实际代码为准。
+> 本文档只描述 Owlsgo-Chat 自身的插件机制，全部内容以 `core/plugin.php` 与现有插件的实际代码为准。
 
 ## 执行顺序
 
@@ -97,13 +97,14 @@ Plugin::asset('js', 'user-manager/admin.js');   // 相对插件目录；css 同�
 
 当前核心提供的钩子（以源码 `Plugin::fire()` 调用点为准，不臆造）：
 
-| 钩子 | 触发时机 | 参数 |
-| --- | --- | --- |
-| `message.before_send` | 消息入库前（`Chat::send` 内） | `[&$content, $actor, $roomId]` —— `$content` 按引用传入，可改写（敏感词过滤之后、入库之前） |
-| `message.after_send` | 消息入库后 | `[$msgId, $actor, $roomId]` |
-| `page.head` | 各页面 `<head>` 输出时（`pageHead()` 内） | 无参，可直接 echo |
-| `page.footer` | 聊天页 / 后台页 body 输出末尾 | 无参，可直接 echo |
-| `cron.minute` | 统一计划任务（每分钟至多一次） | 无参 |
+| 钩子                    | 触发时机                             | 参数                                                                   |
+| --------------------- | -------------------------------- | -------------------------------------------------------------------- |
+| `message.before_send` | 消息入库前（`Chat::send` 内）            | `[&$content, $actor, $roomId]` —— `$content` 按引用传入，可改写（敏感词过滤之后、入库之前） |
+| `message.after_send`  | 消息入库后                            | `[$msgId, $actor, $roomId]`                                          |
+| `page.head`           | 各页面 `<head>` 输出时（`pageHead()` 内） | 无参，可直接 echo                                                          |
+| `page.footer`         | 聊天页 / 后台页 body 输出末尾              | 无参，可直接 echo                                                          |
+| `cron.minute`         | 统一计划任务（每分钟至多一次）                  | 无参                                                                   |
+| `nickname.before_save` | 昵称校验（注册 / 改资料 / 安装向导，`Auth::checkNickname` 内） | `[&$nick, &$err, $ctx]` —— 可改写 `$nick`，或把 `$err` 设为非空字符串拦截（即用户看到的文案）；`$ctx['scene']` 为 `register` / `profile` / `install`。参考实现：`plugins/nickname-guard/` |
 
 计划任务由长轮询驱动（`Plugin::cronTick()`），也可用系统计划任务调 `?action=cron` 强制触发；回调内自行判断是否到达执行周期，保证可重复运行。
 

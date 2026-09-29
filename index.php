@@ -118,7 +118,7 @@ if (!$installed) {
             $e = trim($_POST['email'] ?? '');
             $pw = (string)($_POST['password'] ?? '');
             // 取消用户名后，账号显示名就是昵称；规则与注册/改资料共用 Auth::checkNickname
-            [$nickOk, $nickRes] = Auth::checkNickname($n);   // 通过时返回归一化昵称，失败时返回错误文案
+            [$nickOk, $nickRes] = Auth::checkNickname($n, ['scene' => 'install']);   // 通过时返回归一化昵称，失败时返回错误文案
             if (!$nickOk) throw new RuntimeException($nickRes);
             if (!filter_var($e, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('管理员邮箱格式不正确');
             if (strlen($pw) < 6) throw new RuntimeException('管理员密码至少 6 位');
