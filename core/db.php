@@ -137,8 +137,8 @@ class DB
         $tables = [
             "CREATE TABLE IF NOT EXISTS settings (k $str PRIMARY KEY, v $text)",
             "CREATE TABLE IF NOT EXISTS users (
-                id $id, username $str NOT NULL UNIQUE, email $str NOT NULL,
-                password $str NOT NULL, nickname $str NOT NULL, avatar $text,
+                id $id, nickname $str NOT NULL, email $str NOT NULL,
+                password $str NOT NULL, avatar $text,
                 role $str NOT NULL DEFAULT 'member', title $str,
                 client_key $str, status $int NOT NULL DEFAULT 1,
                 email_verified $int NOT NULL DEFAULT 0,
@@ -203,6 +203,14 @@ class DB
         // 保留此行仅为兼容历史数据库（列仍存在且幂等），勿在业务代码中重新启用。
         self::addColumn('rooms', 'min_age', 'int', '0');
 
+        // v1.0.33 起取消「用户名」：账号不再有独立登录名，显示名统一为 nickname（昵称）。
+        // 迁移策略（一次性、幂等）：先把昵称回填为原用户名（原 nickname 里用户自定义的值按需求丢弃），
+        // 再物理删除 username 列——必须真删，否则新插入语句会因该列 NOT NULL UNIQUE 且无默认值而失败。
+        if (self::hasColumn('users', 'username')) {
+            self::$pdo->exec('UPDATE users SET nickname=username');
+            self::dropColumn('users', 'username');
+        }
+
         // 索引（跨引擎兼容语法）
         $idx = [
             'CREATE INDEX IF NOT EXISTS idx_msg_room ON messages (room_id, id)',
@@ -253,6 +261,74 @@ class DB
         if (self::hasColumn($table, $col)) return;
         $t = self::t($type);
         self::$pdo->exec("ALTER TABLE $table ADD COLUMN $col $t NOT NULL DEFAULT $default");
+    }
+
+    /**
+     * 幂等删列：已不存在则跳过。
+     *
+     * SQLite 拒绝删除带 UNIQUE 约束的列（"cannot drop UNIQUE column"），
+     * MySQL / PostgreSQL 无此限制。因此 SQLite 失败时退化为「建新表 → 拷数据 → 换名」重建，
+     * 并在重建后恢复原表的显式索引（隐式 unique 索引随列一起消失，无需处理）。
+     */
+    private static function dropColumn(string $table, string $col): void
+    {
+        if (!self::hasColumn($table, $col)) return;
+        try {
+            self::$pdo->exec("ALTER TABLE $table DROP COLUMN $col");
+            return;
+        } catch (Throwable $e) {
+            if (self::$driver !== 'sqlite') throw $e;
+            self::rebuildTableWithout($table, $col);
+        }
+    }
+
+    /** SQLite 专用：重建表以移除列（保留其余列定义、主键自增与显式索引） */
+    private static function rebuildTableWithout(string $table, string $col): void
+    {
+        $pdo = self::$pdo;
+        // 先取结构与索引定义：DROP TABLE 之后 sqlite_master 里就没了
+        $keep = [];
+        foreach (self::all("PRAGMA table_info($table)") as $c) {
+            if (($c['name'] ?? '') !== $col) $keep[] = $c;
+        }
+        $idx = self::all(
+            "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+            [$table]
+        );
+
+        $defs = [];
+        foreach ($keep as $c) {
+            $t = $c['type'] ?: 'TEXT';
+            $d = '"' . $c['name'] . '" ' . $t;
+            if ((int)$c['pk'] === 1) {
+                // INTEGER 主键需显式声明 AUTOINCREMENT，否则重建后 rowid 复用旧值语义变化
+                $d .= ' PRIMARY KEY' . (strtolower($t) === 'integer' ? ' AUTOINCREMENT' : '');
+            } elseif ((int)$c['notnull'] === 1) {
+                $d .= ' NOT NULL';
+            }
+            if ($c['dflt_value'] !== null) $d .= ' DEFAULT ' . $c['dflt_value'];
+            $defs[] = $d;
+        }
+        $names = implode(',', array_map(fn($c) => '"' . $c['name'] . '"', $keep));
+        $tmp = $table . '__new';
+
+        $oldFk = (int)$pdo->query('PRAGMA foreign_keys')->fetchColumn();
+        $pdo->exec('PRAGMA foreign_keys=OFF');
+        $pdo->beginTransaction();
+        try {
+            $pdo->exec('DROP TABLE IF EXISTS "' . $tmp . '"');
+            $pdo->exec('CREATE TABLE "' . $tmp . '" (' . implode(',', $defs) . ')');
+            $pdo->exec('INSERT INTO "' . $tmp . '" (' . $names . ') SELECT ' . $names . ' FROM "' . $table . '"');
+            $pdo->exec('DROP TABLE "' . $table . '"');
+            $pdo->exec('ALTER TABLE "' . $tmp . '" RENAME TO "' . $table . '"');
+            foreach ($idx as $ix) $pdo->exec($ix['sql']);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            $pdo->exec('PRAGMA foreign_keys=' . ($oldFk ? 'ON' : 'OFF'));
+            throw $e;
+        }
+        $pdo->exec('PRAGMA foreign_keys=' . ($oldFk ? 'ON' : 'OFF'));
     }
 
     // ---------- 站点设置 ----------

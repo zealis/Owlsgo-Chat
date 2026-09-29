@@ -19,13 +19,13 @@ class Admin
         switch ($action) {
             // ---------- 用户管理 ----------
             case 'admin_users':
+                // v1.0.33 起用户搜索仅支持数字用户 ID 精确查询：
+                // 用户名已取消，昵称允许重名，昵称/邮箱均不可作为区分用户的依据。
                 $q = $p('q');
-                if ($q === '') Api::json(['ok' => true, 'data' => [], 'hint' => '请输入关键词']);
-                $like = '%' . $q . '%';
-                $cast = DB::driver() === 'mysql' ? 'CAST(id AS CHAR)' : 'CAST(id AS TEXT)';
-                $rows = DB::all("SELECT id,username,email,nickname,role,title,points,status,created_at,last_login FROM users
-                    WHERE username LIKE ? OR nickname LIKE ? OR email LIKE ? OR $cast LIKE ? LIMIT 50",
-                    [$like, $like, $like, $like]);
+                if ($q === '') Api::json(['ok' => true, 'data' => [], 'hint' => '请输入用户 ID']);
+                if (!preg_match('/^\d{1,19}$/', $q)) Api::json(['ok' => false, 'msg' => '用户搜索仅支持数字用户 ID']);
+                $rows = DB::all("SELECT id,nickname,email,role,title,points,status,created_at,last_login FROM users
+                    WHERE id=? LIMIT 1", [(int)$q]);
                 Api::json(['ok' => true, 'data' => $rows]);
 
             case 'admin_user_set':

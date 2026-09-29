@@ -6,7 +6,9 @@
  */
 declare(strict_types=1);
 
-const OWLSGO_VERSION = '1.0.21';
+// 版本号以根目录 VERSION 文件为准（历次发版只改 VERSION，此处不再硬编码，
+// 避免 CSS/JS 缓存参数 ?v= 永远停在旧版本）；文件缺失时兜底 1.0.33
+define('OWLSGO_VERSION', trim((string)@file_get_contents(__DIR__ . '/VERSION')) ?: '1.0.33');
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
@@ -115,16 +117,18 @@ if (!$installed) {
             DB::migrate();
             DB::defaults();
 
-            $u = trim($_POST['username'] ?? '');
+            $n = trim($_POST['nickname'] ?? '');
             $e = trim($_POST['email'] ?? '');
             $pw = (string)($_POST['password'] ?? '');
-            if (!preg_match('/^[a-zA-Z0-9_]{3,20}$/', $u)) throw new RuntimeException('管理员用户名需 3-20 位字母数字下划线');
+            // 取消用户名后，账号显示名就是昵称；规则与注册/改资料共用 Auth::checkNickname
+            [$nickOk, $nickRes] = Auth::checkNickname($n);   // 通过时返回归一化昵称，失败时返回错误文案
+            if (!$nickOk) throw new RuntimeException($nickRes);
             if (!filter_var($e, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('管理员邮箱格式不正确');
             if (strlen($pw) < 6) throw new RuntimeException('管理员密码至少 6 位');
             DB::insert('users', [
-                'username' => $u, 'email' => $e,
+                'nickname' => $nickRes, 'email' => $e,
                 'password' => password_hash($pw, PASSWORD_DEFAULT),
-                'nickname' => $u, 'avatar' => '', 'role' => 'admin',
+                'avatar' => '', 'role' => 'admin',
                 'client_key' => Sec::clientKey(), 'status' => 1,
                 'email_verified' => 1, 'created_at' => time(),
             ]);
@@ -197,7 +201,7 @@ if ($action !== '') {
             $bm = (int)$p('birth_m');
             $bd = (int)$p('birth_d');
             $birthdate = ($by && $bm && $bd) ? sprintf('%04d-%02d-%02d', $by, $bm, $bd) : '';
-            [$ok, $msg] = Auth::register($p('username'), $p('email'), (string)($_POST['password'] ?? ''), $p('code'), $birthdate);
+            [$ok, $msg] = Auth::register($p('nickname'), $p('email'), (string)($_POST['password'] ?? ''), $p('code'), $birthdate);
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         case 'login':
@@ -393,7 +397,7 @@ if ($action !== '') {
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         case 'user_card':
-            $u = DB::one('SELECT id,username,nickname,role,title,avatar,points,created_at,last_login FROM users WHERE id=?', [(int)$p('id')]);
+            $u = DB::one('SELECT id,nickname,role,title,avatar,points,created_at,last_login FROM users WHERE id=?', [(int)$p('id')]);
             if (!$u) Api::json(['ok' => false, 'msg' => '用户不存在']);
             Api::json(['ok' => true, 'data' => $u]);
 
@@ -527,7 +531,7 @@ function renderInstall(string $err): void
        . '<div class="ow-form-item"><label>数据库名</label><input class="ow-input" name="db_name" value="owlsgo"></div>'
        . '<div class="ow-form-item"><label>数据库用户</label><input class="ow-input" name="db_user" value="root"></div>'
        . '<div class="ow-form-item"><label>数据库密码</label><input class="ow-input" type="password" name="db_pass"></div></div>'
-       . '<div class="ow-form-item"><label>管理员用户名</label><input class="ow-input" name="username" required></div>'
+       . '<div class="ow-form-item"><label>管理员昵称</label><input class="ow-input" name="nickname" required placeholder="2-20 个字符"></div>'
        . '<div class="ow-form-item"><label>管理员邮箱</label><input class="ow-input" type="email" name="email" required></div>'
        . '<div class="ow-form-item"><label>管理员密码</label><input class="ow-input" type="password" name="password" required></div>'
        . '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#0078D4;font-size:13px">SMTP 邮件配置（可选，稍后可在 config.php 修改）</summary>'
@@ -554,7 +558,7 @@ function renderAuth(string $mode): void
     if ($mode === 'login') {
         echo '<form class="ow-auth-form" data-mode="login">'
            . Sec::signField($_SESSION['anon_key'], 'login')
-           . '<div class="ow-form-item"><label>用户名或邮箱</label><input class="ow-input" name="identity" required autocomplete="username"></div>'
+           . '<div class="ow-form-item"><label>邮箱或用户 ID</label><input class="ow-input" name="identity" required autocomplete="username" placeholder="注册邮箱或纯数字用户 ID"></div>'
            . '<div class="ow-form-item"><label>密码</label><input class="ow-input" type="password" name="password" required autocomplete="current-password"></div>'
            . '<div class="ow-form-item" id="owCaptchaRow" style="display:none"><label>图形验证码</label>'
            . '<div class="ow-captcha-row"><input class="ow-input" name="captcha"><img src="?action=captcha" id="owCaptchaImg" alt="验证码" title="点击刷新"></div></div>'
@@ -565,7 +569,8 @@ function renderAuth(string $mode): void
         $needMail = DB::setting('reg_email_verify', '1') === '1';
         echo '<form class="ow-auth-form" data-mode="register">'
            . Sec::signField($_SESSION['anon_key'], 'register')
-           . '<div class="ow-form-item"><label>用户名</label><input class="ow-input" name="username" required placeholder="3-20 位字母、数字或下划线"></div>'
+           . '<div class="ow-form-item"><label>昵称</label><input class="ow-input" name="nickname" required placeholder="2-20 个字符，支持中英文">'
+           . '<p style="font-size:12px;color:#999;margin-top:4px">昵称即你的账号显示名，支持中英文重名，区分用户请以用户 ID 为准。</p></div>'
            . '<div class="ow-form-item"><label>邮箱</label>'
            . ($needMail
                ? '<div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'
@@ -680,7 +685,7 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         'room' => $first['id'],
         'settings' => $settings,
         'me' => $user ? [
-            'nickname' => $user['nickname'], 'username' => $user['username'],
+            'nickname' => $user['nickname'], 'id' => (int)$user['id'],
             'role' => $user['role'], 'title' => $user['title'] ?? '',
             'avatar' => $user['avatar'] ?? '', 'points' => (int)($user['points'] ?? 0),
         ] : null,

@@ -1080,7 +1080,8 @@
                     + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname)
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
                     + '<div style="margin-top:4px">' + roleTag(u.role, u.title) + '</div></div>'
-                    + '<p style="font-size:13px;color:#999">账号：' + esc(u.username) + '<br>'
+                    // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
+                    + '<p style="font-size:13px;color:#999">用户 ID：' + esc(u.id) + '<br>'
                     + '积分：' + esc(u.points || 0) + '<br>'
                     + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
                 );
@@ -1177,9 +1178,10 @@
             var me = this.cfg.me, el = $('owMe');
             if (!el) return;
             if (me) {
+                // 昵称可重名，身份一律以用户 ID 为准，故侧栏同时展示 ID
                 el.innerHTML = avatarHtml(me.avatar, me.nickname)
                     + '<div><div class="ow-me-name">' + esc(me.nickname) + '</div>' + roleTag(me.role, me.title)
-                    + '<div style="font-size:11px;color:var(--ow-text-sub)">积分 ' + esc(me.points || 0) + '</div></div>';
+                    + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(me.id || 0) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
             } else {
                 el.innerHTML = avatarHtml('', this.cfg.actor.nickname)
                     + '<div><div class="ow-me-name">' + esc(this.cfg.actor.nickname) + '</div>' + roleTag('guest', '') + '</div>';
@@ -1191,7 +1193,9 @@
             if (!me) return;
             this.openModal(
                 '<h3>个人设置</h3>'
-                + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '"></div>'
+                + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
+                + '<p style="font-size:12px;color:#999;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
+                + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id || '-') + '</div>'
                 + '<div class="ow-form-item"><label>头像</label><div class="ow-captcha-row">'
                 + '<span id="owSetAvatarPreview">' + avatarHtml(me.avatar, me.nickname) + '</span>'
                 + '<button class="ow-btn ow-btn-ghost" onclick="document.getElementById(\'owSetAvatarFile\').click()">上传头像</button>'
@@ -1298,9 +1302,9 @@
             users: function (main) {
                 main.innerHTML = '<h2>用户管理</h2><p class="ow-admin-desc">搜索用户，管理身份与头衔。</p>'
                     + '<div class="ow-card"><h3 style="margin-bottom:10px">用户搜索</h3>'
-                    + '<div class="ow-form-row"><div class="ow-form-item" style="flex:1"><input class="ow-input" id="owAQ" placeholder="输入 user_id、昵称或用户名"></div>'
+                    + '<div class="ow-form-row"><div class="ow-form-item" style="flex:1"><input class="ow-input" id="owAQ" placeholder="输入用户 ID（纯数字）"></div>'
                     + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.searchUsers()">搜索用户</button></div>'
-                    + '<p style="font-size:12px;color:#999">支持按 user_id、昵称或用户名模糊搜索。请输入关键词后再搜索，不再默认展示全部用户。</p></div>'
+                    + '<p style="font-size:12px;color:#999">用户名已取消、昵称允许重名，因此搜索仅支持按用户 ID 精确查询。</p></div>'
                     + '<div id="owAResult"></div>';
             },
             rooms: function (main) {
@@ -1456,10 +1460,13 @@
         /* ---------- 用户管理动作 ---------- */
         searchUsers: function () {
             OwApi.post('admin_users', { q: $('owAQ').value }, function (r) {
-                var h = '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>用户名</th><th>昵称</th><th>邮箱</th><th>角色</th><th>称号</th><th>积分</th><th>状态</th><th>操作</th></tr>';
+                // 搜索仅限纯数字用户 ID，非法输入服务端返回 {ok:false} 且不带 data，
+                // 必须先拦截——直接读 r.data.length 会抛错且用户收不到任何提示
+                if (!r.ok) { toast(r.msg); $('owAResult').innerHTML = ''; return; }
+                var h = '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>昵称</th><th>邮箱</th><th>角色</th><th>称号</th><th>积分</th><th>状态</th><th>操作</th></tr>';
                 for (var i = 0; i < r.data.length; i++) {
                     var d = r.data[i];
-                    h += '<tr><td>' + d.id + '</td><td>' + esc(d.username) + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
+                    h += '<tr><td>' + d.id + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
                        + '<td><select class="ow-input" id="owUR' + d.id + '">'
                        + opts(ROLE_CN, ['member', 'vip', 'admin'], d.role)
                        + '</select></td>'
@@ -1469,7 +1476,10 @@
                        + '<td><a href="javascript:;" onclick="OwAdmin.userSave(' + d.id + ')">保存</a> '
                        + '<a href="javascript:;" onclick="OwAdmin.userStatus(' + d.id + ',' + (d.status == 1 ? 0 : 1) + ')">' + (d.status == 1 ? '禁用' : '启用') + '</a></td></tr>';
                 }
-                if (!r.data.length) h += '<tr><td colspan="9" style="color:#999">无匹配结果</td></tr>';
+                if (!r.data.length) {
+                    if (r.hint) toast(r.hint);
+                    h += '<tr><td colspan="8" style="color:#999">无匹配用户</td></tr>';
+                }
                 $('owAResult').innerHTML = h + '</table></div>';
             });
         },

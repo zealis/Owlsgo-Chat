@@ -65,13 +65,33 @@ class Auth
         return (int)$today->diff($b)->y;
     }
 
-    public static function register(string $username, string $email, string $password, string $code, string $birthdate = ''): array
+    /**
+     * 昵称（v1.0.33 起是唯一的账号显示名，不再有独立用户名）合法性校验。
+     *
+     * 约束：2-20 个字符，仅允许中英文、数字、下划线与短横线。
+     * 禁止空格：@提及在服务端按 (^|\s)@[^\s@]+ 切词，含空格会导致无法被提及。
+     * 禁止 @：避免与 @提及 前缀冲突。
+     * 允许重名：昵称不再承担唯一性职责，区分用户一律使用 id。
+     *
+     * @return array [bool 是否合法, string 归一化值或错误文案]
+     */
+    public static function checkNickname(string $nick): array
+    {
+        $s = trim($nick);
+        if ($s === '') return [false, '请填写昵称'];
+        if (!preg_match('/^[\p{L}\p{N}_\-]{2,20}$/u', $s)) {
+            return [false, '昵称需 2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @'];
+        }
+        return [true, $s];
+    }
+
+    public static function register(string $nickname, string $email, string $password, string $code, string $birthdate = ''): array
     {
         if (DB::setting('allow_register', '1') !== '1') return [false, '站点已关闭注册'];
-        if (!preg_match('/^[a-zA-Z0-9_]{3,20}$/', $username)) return [false, '用户名需 3-20 位字母、数字或下划线'];
+        [$nickOk, $nick] = self::checkNickname($nickname);
+        if (!$nickOk) return [false, $nick];
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return [false, '邮箱格式不正确'];
         if (strlen($password) < 6) return [false, '密码至少 6 位'];
-        if (DB::one('SELECT id FROM users WHERE username=?', [$username])) return [false, '用户名已被占用'];
         if (DB::one('SELECT id FROM users WHERE email=?', [$email])) return [false, '该邮箱已注册'];
         if (DB::setting('reg_email_verify', '1') === '1' && !Mailer::verifyCode($email, 'register', $code)) {
             return [false, '邮箱验证码错误或已过期'];
@@ -84,35 +104,43 @@ class Auth
             if ($age < $minAge) return [false, '注册需年满 ' . $minAge . ' 周岁（当前 ' . $age . ' 周岁）'];
         }
         $id = DB::insert('users', [
-            'username' => $username, 'email' => $email,
+            'nickname' => $nick, 'email' => $email,
             'password' => password_hash($password, PASSWORD_DEFAULT),
-            'nickname' => $username, 'avatar' => '', 'role' => 'member',
+            'avatar' => '', 'role' => 'member',
             'client_key' => Sec::clientKey(), 'status' => 1,
             'email_verified' => DB::setting('reg_email_verify', '1') === '1' ? 1 : 0,
             'birthdate' => $birthdate,
             'created_at' => time(),
         ]);
-        Sec::log('register', $username, ['email' => $email]);
+        Sec::log('register', $nick, ['email' => $email]);
         return [true, '注册成功', $id];
     }
 
+    /**
+     * 登录：$identity 可为注册邮箱或数字用户 ID（取消用户名后的两种入口）。
+     * ID 优先于邮箱匹配，保证纯数字身份不会被同名邮箱干扰；均为一次索引命中。
+     */
     public static function login(string $identity, string $password): array
     {
         $key = strtolower($identity) . '|' . Sec::ip();
         if (Sec::loginLocked($key)) return [false, '失败次数过多，账号已临时锁定 15 分钟', 'locked'];
-        $user = DB::one('SELECT * FROM users WHERE username=? OR email=?', [$identity, $identity]);
+        $user = null;
+        if (preg_match('/^\d{1,19}$/', $identity)) {
+            $user = DB::one('SELECT * FROM users WHERE id=?', [(int)$identity]);
+        }
+        if (!$user) $user = DB::one('SELECT * FROM users WHERE email=?', [$identity]);
         if (!$user || !password_verify($password, $user['password'])) {
             Sec::loginFail($key);
             Sec::log('login_fail', $identity);
             $left = 10 - Sec::loginFails($key);
-            return [false, '用户名或密码错误' . ($left <= 3 ? "，剩余 $left 次尝试机会" : ''), 'fail'];
+            return [false, '邮箱或用户 ID 不正确，或密码错误' . ($left <= 3 ? "，剩余 $left 次尝试机会" : ''), 'fail'];
         }
         if ((int)$user['status'] !== 1) return [false, '账号已被禁用'];
         Sec::loginOk($key);
         session_regenerate_id(true);
         $_SESSION['uid'] = $user['id'];
         DB::run('UPDATE users SET last_login=? WHERE id=?', [time(), $user['id']]);
-        Sec::log('login', $user['username']);
+        Sec::log('login', $user['nickname']);
         return [true, '登录成功', $user];
     }
 
@@ -130,16 +158,19 @@ class Auth
         if (strlen($password) < 6) return [false, '密码至少 6 位'];
         if (!Mailer::verifyCode($email, 'reset', $code)) return [false, '验证码错误或已过期'];
         DB::run('UPDATE users SET password=? WHERE id=?', [password_hash($password, PASSWORD_DEFAULT), $user['id']]);
-        Sec::log('reset_password', $user['username']);
+        Sec::log('reset_password', $user['nickname']);
         return [true, '密码已重置，请重新登录'];
     }
 
-    /** 资料更新：昵称 / 头像 */
+    /**
+     * 资料更新：昵称 / 头像。
+     * 昵称已是账号显示名，规则与注册保持一致（见 checkNickname），避免注册能填、改资料填不了的割裂。
+     */
     public static function updateProfile(array $user, string $nickname, string $avatar): array
     {
-        $nickname = trim($nickname);
-        if (mb_strlen($nickname) < 1 || mb_strlen($nickname) > 24) return [false, '昵称需 1-24 个字符'];
-        DB::run('UPDATE users SET nickname=?, avatar=? WHERE id=?', [$nickname, $avatar, $user['id']]);
+        [$ok, $nick] = self::checkNickname($nickname);
+        if (!$ok) return [false, $nick];
+        DB::run('UPDATE users SET nickname=?, avatar=? WHERE id=?', [$nick, $avatar, $user['id']]);
         return [true, '资料已更新'];
     }
 
@@ -160,7 +191,7 @@ class Auth
         if ($user) {
             return [
                 'kind' => 'user', 'id' => (int)$user['id'],
-                'nickname' => $user['nickname'], 'username' => $user['username'],
+                'nickname' => $user['nickname'],
                 'role' => $user['role'], 'title' => $user['title'] ?? '',
                 'avatar' => $user['avatar'] ?? '', 'key' => $user['client_key'],
                 'birthdate' => (string)($user['birthdate'] ?? ''),
@@ -169,7 +200,7 @@ class Auth
         if ($guest) {
             return [
                 'kind' => 'guest', 'id' => (int)$guest['id'],
-                'nickname' => $guest['nickname'], 'username' => '',
+                'nickname' => $guest['nickname'],
                 'role' => 'guest', 'title' => '', 'avatar' => '',
                 'key' => $guest['client_key'],
             ];
