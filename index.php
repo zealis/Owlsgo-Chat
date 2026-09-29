@@ -731,12 +731,10 @@ function renderAdmin(array $actor): void
        . '<div class="ow-admin-bar">'
        . '<button class="ow-icon-btn" id="owAdminToggle" aria-label="菜单">' . ow_icon('menu') . '</button>'
        . '<span class="ow-admin-bar-title">管理后台</span>'
-       . '<a class="ow-admin-bar-link" href="?page=chat">返回前台</a>'
        . '</div>'
        . '<div class="ow-admin-layout">'
        . '<aside class="ow-admin-side" id="owAdminSide">'
        . '<div class="ow-admin-brand">ADMIN CONSOLE<br><strong>管理后台</strong></div>'
-       . '<a class="ow-btn ow-btn-ghost ow-btn-block" href="?page=chat">返回前台</a>'
        . '<ul class="ow-admin-menu" id="owAdminMenu">'
        . '<li data-apage="users" class="active"><span class="ow-admin-ico">' . ow_icon('user', 16) . '</span>用户管理</li>'
        . '<li data-apage="rooms"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>聊天室管理</li>'
@@ -747,7 +745,10 @@ function renderAdmin(array $actor): void
        . '<li data-apage="settings"><span class="ow-admin-ico">' . ow_icon('gear', 16) . '</span>系统设置</li>'
        // 插件管理置于系统设置之下，作为分类，其下挂载各插件自己的设置页面
        . $pluginMenu
-       . '</ul></aside>'
+       . '</ul>'
+       // 返回前台沉在侧栏底部（桌面常驻、移动端展开抽屉可见）
+       . '<a class="ow-btn ow-btn-ghost ow-btn-block ow-admin-exit" href="?page=chat">返回前台</a>'
+       . '</aside>'
        . '<main class="ow-admin-main" id="owAdminMain"></main></div>'
        // 移动端抽屉遮罩：点空白收起侧栏（桌面端不显示）
        . '<div class="ow-admin-mask" id="owAdminMask" style="display:none"></div>'
