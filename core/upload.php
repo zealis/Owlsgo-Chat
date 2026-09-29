@@ -1,6 +1,6 @@
 <?php
 /**
- * 上传与媒体：头像/贴纸（本地，不用图床）；图片消息按配置走本地（客户端压缩）或图床（API 压缩）
+ * 上传与媒体：头像 / 贴纸 / 图片消息一律本地原样存储，不做任何压缩，也不走图床
  */
 class Upload
 {
@@ -59,7 +59,7 @@ class Upload
         return [true, $ext];
     }
 
-    /** 本地存储：头像 / 贴纸 / 图片消息（客户端已压缩） */
+    /** 本地存储：头像 / 贴纸 / 图片消息（原图直存，不压缩） */
     public static function local(array $f, string $kind): array
     {
         [$ok, $extOrMsg] = self::checkImage($f);
@@ -71,37 +71,11 @@ class Upload
         return [true, self::$cfg['url'] . '/' . $kind . '/' . $name];
     }
 
-    /** 图床上传（图片消息）：服务端转发到图床 API，由图床压缩 */
-    public static function imgbed(array $f): array
-    {
-        [$ok, $extOrMsg] = self::checkImage($f);
-        if (!$ok) return [false, $extOrMsg];
-        $api = self::$cfg['imgbed_api'];
-        $post = ['image' => new CURLFile($f['tmp_name'], mime_content_type($f['tmp_name']), $f['name'])];
-        if (self::$cfg['imgbed_cdn']) $post['cdn_domain'] = self::$cfg['imgbed_cdn'];
-        $ch = curl_init($api);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post,
-            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
-        ]);
-        $resp = curl_exec($ch);
-        $err = curl_error($ch);
-        curl_close($ch);
-        if ($err || !$resp) return [false, '图床请求失败：' . $err];
-        $data = json_decode($resp, true);
-        if (!($data['success'] ?? false)) return [false, '图床拒绝：' . ($data['message'] ?? '未知错误')];
-        return [true, $data['data']['url'] ?? $data['url']];
-    }
-
     /**
-     * 统一上传入口
-     * 分流规则（硬性约束）：avatar/sticker 永远本地；image 按 image_mode 配置
+     * 统一上传入口：全部走本地原样存储（不压缩、不转码、不转发图床）
      */
     public static function handle(array $f, string $kind): array
     {
-        if ($kind === 'image' && self::$cfg['image_mode'] === 'imgbed') {
-            return self::imgbed($f);
-        }
         return self::local($f, $kind);
     }
 

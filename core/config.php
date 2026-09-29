@@ -39,9 +39,6 @@ return [
         'dir'        => __DIR__ . '/../uploads',
         'url'        => 'uploads',
         'max_size'   => 10 * 1024 * 1024,       // 服务端兜底 10MB
-        'image_mode' => 'local',                // local（客户端压缩+本地存储）| imgbed（图床 API 压缩）
-        'imgbed_api' => 'https://img.scdn.io/api/v1.php',
-        'imgbed_cdn' => '',                     // 留空使用图床默认 CDN，或填 cdn_domain 参数
     ],
 
     // ---------- 路径 ----------

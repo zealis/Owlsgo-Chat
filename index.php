@@ -60,9 +60,6 @@ try {
     if ($installed) {
         DB::migrate();
         DB::defaults();
-        // 站点设置可覆盖图片存储模式
-        $mode = DB::setting('image_mode');
-        if ($mode) $CFG['upload']['image_mode'] = $mode;
     }
 } catch (Throwable $e) {
     $dbOk = false;
@@ -608,7 +605,6 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
     $settings = [
         'guest_chat' => DB::setting('guest_chat', '1'),
         'sound' => DB::setting('sound_default', '1'),
-        'image_mode' => DB::setting('image_mode', 'local'),
         'room_create_cost' => DB::setting('room_create_cost', '0'),   // 创建群聊扣分（前端提示用）
     ];
     pageHead('聊天室');

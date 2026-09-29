@@ -1,3 +1,6 @@
+> ⚠️ 历史资料：本项目的图床链路（`image_mode` / `Upload::imgbed()`）已于 v1.0.35 移除，
+> 图片一律本地原图直存。以下为第三方图床 API 的外部文档，仅作存档，项目代码已不再调用。
+
 来自[API 文档 - 图床](https://img.scdn.io/api_docs.php)
 公共 API 文档
 上传图片（POST）、按 ID/文件名查询元数据（GET），或按标签随机获取壁纸级图片（/api/random.php）。

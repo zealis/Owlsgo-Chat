@@ -217,29 +217,6 @@
         },
     };
 
-    /* 客户端图片压缩（本地存储模式；旧浏览器无 canvas 时自动跳过直接上传） */
-    function compressImage(file, cb) {
-        if (!w.FileReader || !document.createElement('canvas').getContext || !file.type.match(/^image\/(jpeg|png|webp)/)) { cb(file); return; }
-        var img = new Image(), reader = new FileReader();
-        reader.onload = function (e) {
-            img.onload = function () {
-                var max = 1280, width = img.width, height = img.height;
-                if (width <= max && height <= max && file.size < 300 * 1024) { cb(file); return; }
-                if (width > height) { if (width > max) { height = Math.round(height * max / width); width = max; } }
-                else { if (height > max) { width = Math.round(width * max / height); height = max; } }
-                var c = document.createElement('canvas'); c.width = width; c.height = height;
-                c.getContext('2d').drawImage(img, 0, 0, width, height);
-                if (c.toBlob) {
-                    c.toBlob(function (b) { cb(b || file); }, 'image/jpeg', 0.85);
-                } else cb(file);
-            };
-            img.onerror = function () { cb(file); };
-            img.src = e.target.result;
-        };
-        reader.onerror = function () { cb(file); };
-        reader.readAsDataURL(file);
-    }
-
     /* 提示音（内置短音 data URI，旧浏览器静默降级） */
     var BEEP = 'data:audio/wav;base64,UklGRl9vT1dQV0ZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAD//w==';
     function beep() {
@@ -1023,14 +1000,10 @@
         uploadImage: function (file) {
             var self = this;
             toast('图片上传中…');
-            var doUpload = function (f) {
-                OwApi.upload('upload', f, { kind: 'image' }, function (r) {
-                    if (r.ok) self.send({ type: 'image', content: r.url });
-                    else toast(r.msg);
-                });
-            };
-            if (this.cfg.settings.image_mode === 'local') compressImage(file, doUpload);
-            else doUpload(file); // 图床模式由 API 压缩，本地不处理
+            OwApi.upload('upload', file, { kind: 'image' }, function (r) {
+                if (r.ok) self.send({ type: 'image', content: r.url });
+                else toast(r.msg);
+            });
         },
 
         recall: function (id) {
@@ -1205,14 +1178,12 @@
             var self = this;
             $('owSetAvatarFile').onchange = function () {
                 if (!this.files || !this.files[0]) return;
-                compressImage(this.files[0], function (f) {
-                    OwApi.upload('upload', f, { kind: 'avatar' }, function (r) {
-                        if (r.ok) {
-                            self.cfg.me.avatar = r.url;
-                            $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname);
-                            toast('头像已上传，点击保存生效');
-                        } else toast(r.msg);
-                    });
+                OwApi.upload('upload', this.files[0], { kind: 'avatar' }, function (r) {
+                    if (r.ok) {
+                        self.cfg.me.avatar = r.url;
+                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname);
+                        toast('头像已上传，点击保存生效');
+                    } else toast(r.msg);
                 });
                 this.value = '';
             };
@@ -1427,7 +1398,6 @@
                         + '<div class="ow-form-item"><label>窗口内最大条数</label><input class="ow-input" id="owS_msg_rate_max" value="' + esc(d.msg_rate_max || '8') + '"></div>'
                         + '<div class="ow-form-item"><label>邮件发送间隔(秒)</label><input class="ow-input" id="owS_mail_rate_limit" value="' + esc(d.mail_rate_limit || '60') + '"></div>'
                         + '</div>'
-                        + '<div class="ow-form-item"><label>图片消息存储</label>' + sel('image_mode', { 'local': '本地存储（客户端压缩）', 'imgbed': '图床（API 压缩）' }) + '</div>'
                         + '<div class="ow-form-item"><label>密码房通行缓存(秒)</label><input class="ow-input" id="owS_room_pass_ttl" value="' + esc(d.room_pass_ttl || '1800') + '">'
                         + '<p style="font-size:12px;color:#999;margin-top:4px">验证一次密码后，该时间内进入同一房间无需重复输入；填 0 表示每次进入都要输入。</p></div>'
                         + '<div class="ow-form-row">'
@@ -1564,7 +1534,6 @@
                 msg_rate_window: $('owS_msg_rate_window').value,
                 msg_rate_max: $('owS_msg_rate_max').value,
                 mail_rate_limit: $('owS_mail_rate_limit').value,
-                image_mode: $('owS_image_mode').value,
                 room_pass_ttl: $('owS_room_pass_ttl') ? $('owS_room_pass_ttl').value : '',
                 min_register_age: $('owS_min_register_age') ? $('owS_min_register_age').value : '',
                 file_upload: $('owS_file_upload') ? $('owS_file_upload').value : '',
