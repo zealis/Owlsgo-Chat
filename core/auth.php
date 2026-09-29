@@ -85,6 +85,43 @@ class Auth
         return [true, $s];
     }
 
+    /**
+     * 分配新用户 ID：随机 3 位数字（001-999），该段占满后自动升为随机 4 位
+     * （1000-9999），依此类推。管理员固定 001（安装向导显式指定 id=1）。
+     *
+     * 设计要点：
+     * - 应用层分配、INSERT 时显式指定 id。SQLite / MySQL / PostgreSQL 的自增
+     *   主键都接受显式值，无需改表结构；已有用户的 id 一律保持不变。
+     * - 先随机试探（段内空位多时碰撞率极低），试探失败再收集段内空位精确
+     *   随机取一个，避免段快满时随机反复撞车。
+     * - 并发注册同时分到同一 id 撞主键时，由 register() 捕获并重试。
+     *
+     * @return int 可用的用户 ID
+     */
+    public static function nextUserId(): int
+    {
+        $max    = (int)(DB::val('SELECT MAX(id) FROM users') ?: 0);
+        $digits = max(3, strlen((string)$max));          // 至少 3 位（001-999）
+        while (true) {
+            $lo = $digits === 3 ? 1 : 10 ** ($digits - 1);   // 3 位段 1-999；4 位段 1000 起
+            $hi = 10 ** $digits - 1;
+            $occupied = (int)DB::val('SELECT COUNT(*) FROM users WHERE id BETWEEN ? AND ?', [$lo, $hi]);
+            if ($occupied < $hi - $lo + 1) break;        // 当前位段未满，可用
+            $digits++;                                   // 段满自动升一位
+        }
+        // 随机试探 32 次；失败（段接近占满）时收集全部空位精确随机
+        for ($i = 0; $i < 32; $i++) {
+            $id = random_int($lo, $hi);
+            if (!DB::one('SELECT id FROM users WHERE id=?', [$id])) return $id;
+        }
+        $used = array_map('intval', array_column(
+            DB::all('SELECT id FROM users WHERE id BETWEEN ? AND ?', [$lo, $hi]), 'id'
+        ));
+        $free = array_values(array_diff(range($lo, $hi), $used));
+        if (!$free) return self::nextUserId();           // 理论不可达（上方已判满），防御性递归
+        return (int)$free[array_rand($free)];
+    }
+
     public static function register(string $nickname, string $email, string $password, string $code, string $birthdate = ''): array
     {
         if (DB::setting('allow_register', '1') !== '1') return [false, '站点已关闭注册'];
@@ -103,7 +140,9 @@ class Auth
             if ($age < 0) return [false, '请选择有效的出生日期'];
             if ($age < $minAge) return [false, '注册需年满 ' . $minAge . ' 周岁（当前 ' . $age . ' 周岁）'];
         }
-        $id = DB::insert('users', [
+        // 随机 ID 分配（nextUserId）：并发注册同时分到同一 id 会撞主键，
+        // PDO 异常模式下捕获后重试（重新随机），最多 5 次
+        $data = [
             'nickname' => $nick, 'email' => $email,
             'password' => password_hash($password, PASSWORD_DEFAULT),
             'avatar' => '', 'role' => 'member',
@@ -111,8 +150,18 @@ class Auth
             'email_verified' => DB::setting('reg_email_verify', '1') === '1' ? 1 : 0,
             'birthdate' => $birthdate,
             'created_at' => time(),
-        ]);
-        Sec::log('register', $nick, ['email' => $email]);
+        ];
+        $attempts = 0;
+        while (true) {
+            try {
+                $data['id'] = self::nextUserId();
+                $id = DB::insert('users', $data);
+                break;
+            } catch (Throwable $e) {
+                if (++$attempts >= 5) throw $e;
+            }
+        }
+        Sec::log('register', $nick, ['email' => $email, 'id' => $id]);
         return [true, '注册成功', $id];
     }
 

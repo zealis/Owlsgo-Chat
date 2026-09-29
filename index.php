@@ -123,6 +123,8 @@ if (!$installed) {
             if (!filter_var($e, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('管理员邮箱格式不正确');
             if (strlen($pw) < 6) throw new RuntimeException('管理员密码至少 6 位');
             DB::insert('users', [
+                // 管理员固定占用 001（v1.0.37 起新用户 ID 为随机 3 位起步）
+                'id' => 1,
                 'nickname' => $nickRes, 'email' => $e,
                 'password' => password_hash($pw, PASSWORD_DEFAULT),
                 'avatar' => '', 'role' => 'admin',

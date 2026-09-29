@@ -103,6 +103,14 @@
         clearTimeout(t._tm);
         t._tm = setTimeout(function () { t.style.display = 'none'; }, ms || 2200);
     }
+    /* 用户 ID 展示补零：至少 3 位（001），超出 3 位按实际位数（1000 起）。
+       仅影响显示，传输与存储始终是数字，后端搜索兼容 001 输入（(int) 归一）。 */
+    function fmtUid(id) {
+        var s = String(id == null ? 0 : id);
+        var w = s.length > 3 ? s.length : 3;
+        while (s.length < w) s = '0' + s;
+        return s;
+    }
     /** 归一化 class 字符串：去掉多余空格（增删 class 时避免累积空白） */
     function trimCls(s) { return String(s || '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
 
@@ -1062,7 +1070,7 @@
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
                     + '<div style="margin-top:4px">' + roleTag(u.role, u.title) + '</div></div>'
                     // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
-                    + '<p style="font-size:13px;color:#999">用户 ID：' + esc(u.id) + '<br>'
+                    + '<p style="font-size:13px;color:#999">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
                     + '积分：' + esc(u.points || 0) + '<br>'
                     + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
                 );
@@ -1162,7 +1170,7 @@
                 // 昵称可重名，身份一律以用户 ID 为准，故侧栏同时展示 ID
                 el.innerHTML = avatarHtml(me.avatar, me.nickname)
                     + '<div><div class="ow-me-name">' + esc(me.nickname) + '</div>' + roleTag(me.role, me.title)
-                    + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(me.id || 0) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
+                    + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(fmtUid(me.id || 0)) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
             } else {
                 el.innerHTML = avatarHtml('', this.cfg.actor.nickname)
                     + '<div><div class="ow-me-name">' + esc(this.cfg.actor.nickname) + '</div>' + roleTag('guest', '') + '</div>';
@@ -1176,7 +1184,7 @@
                 '<h3>个人设置</h3>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
                 + '<p style="font-size:12px;color:#999;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
-                + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id || '-') + '</div>'
+                + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id ? fmtUid(me.id) : '-') + '</div>'
                 + '<div class="ow-form-item"><label>头像</label><div class="ow-captcha-row">'
                 + '<span id="owSetAvatarPreview">' + avatarHtml(me.avatar, me.nickname) + '</span>'
                 + '<button class="ow-btn ow-btn-ghost" onclick="document.getElementById(\'owSetAvatarFile\').click()">上传头像</button>'
@@ -1291,7 +1299,7 @@
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id || '-') + '</td>'
+                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
                            + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
                            + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
@@ -1443,7 +1451,7 @@
                 var h = '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>昵称</th><th>邮箱</th><th>角色</th><th>称号</th><th>积分</th><th>状态</th><th>操作</th></tr>';
                 for (var i = 0; i < r.data.length; i++) {
                     var d = r.data[i];
-                    h += '<tr><td>' + d.id + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
+                    h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
                        + '<td><select class="ow-input" id="owUR' + d.id + '">'
                        + opts(ROLE_CN, ['member', 'vip', 'admin'], d.role)
                        + '</select></td>'
