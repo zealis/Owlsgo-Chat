@@ -558,7 +558,7 @@ function renderAuth(string $mode): void
     if ($mode === 'login') {
         echo '<form class="ow-auth-form" data-mode="login">'
            . Sec::signField($_SESSION['anon_key'], 'login')
-           . '<div class="ow-form-item"><label>邮箱或用户 ID</label><input class="ow-input" name="identity" required autocomplete="username" placeholder="注册邮箱或纯数字用户 ID"></div>'
+           . '<div class="ow-form-item"><label>邮箱或用户 ID</label><input class="ow-input" name="identity" required autocomplete="username" placeholder="注册邮箱或用户 ID"></div>'
            . '<div class="ow-form-item"><label>密码</label><input class="ow-input" type="password" name="password" required autocomplete="current-password"></div>'
            . '<div class="ow-form-item" id="owCaptchaRow" style="display:none"><label>图形验证码</label>'
            . '<div class="ow-captcha-row"><input class="ow-input" name="captcha"><img src="?action=captcha" id="owCaptchaImg" alt="验证码" title="点击刷新"></div></div>'
@@ -569,8 +569,7 @@ function renderAuth(string $mode): void
         $needMail = DB::setting('reg_email_verify', '1') === '1';
         echo '<form class="ow-auth-form" data-mode="register">'
            . Sec::signField($_SESSION['anon_key'], 'register')
-           . '<div class="ow-form-item"><label>昵称</label><input class="ow-input" name="nickname" required placeholder="2-20 个字符，支持中英文">'
-           . '<p style="font-size:12px;color:#999;margin-top:4px">昵称即你的账号显示名，支持中英文重名，区分用户请以用户 ID 为准。</p></div>'
+           . '<div class="ow-form-item"><label>昵称</label><input class="ow-input" name="nickname" required placeholder="2-20 个字符，支持中英文"></div>'
            . '<div class="ow-form-item"><label>邮箱</label>'
            . ($needMail
                ? '<div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'

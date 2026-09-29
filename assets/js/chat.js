@@ -1303,8 +1303,7 @@
                 main.innerHTML = '<h2>用户管理</h2><p class="ow-admin-desc">搜索用户，管理身份与头衔。</p>'
                     + '<div class="ow-card"><h3 style="margin-bottom:10px">用户搜索</h3>'
                     + '<div class="ow-form-row"><div class="ow-form-item" style="flex:1"><input class="ow-input" id="owAQ" placeholder="输入用户 ID（纯数字）"></div>'
-                    + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.searchUsers()">搜索用户</button></div>'
-                    + '<p style="font-size:12px;color:#999">用户名已取消、昵称允许重名，因此搜索仅支持按用户 ID 精确查询。</p></div>'
+                    + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.searchUsers()">搜索用户</button></div></div>'
                     + '<div id="owAResult"></div>';
             },
             rooms: function (main) {
