@@ -578,6 +578,9 @@ button { font-family: inherit; cursor: pointer; }
 .ow-table .ow-input { padding: 4px 8px; font-size: 13px; }
 .ow-form-row { display: flex; display: -webkit-flex; gap: 10px; flex-wrap: wrap; -webkit-flex-wrap: wrap; align-items: flex-end; -webkit-align-items: flex-end; }
 .ow-form-row .ow-form-item { margin-bottom: 10px; min-width: 140px; }
+/* 表单行内的裸按钮与输入框等高：输入框 padding 9px，按钮默认 8px，
+   底对齐时顶部会差 4px（用户搜索框问题，v1.0.43） */
+.ow-form-row > .ow-btn { padding-top: 9px; padding-bottom: 9px; margin-bottom: 10px; }
 
 /* ---------- 响应式 ---------- */
 .ow-only-mobile { display: none; }
