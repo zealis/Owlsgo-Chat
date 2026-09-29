@@ -332,31 +332,41 @@ if ($action !== '') {
             if ($type === 'role' && $minRole !== 'guest' && Auth::roleLevel($actor['role']) < Auth::roleLevel($minRole)) {
                 Api::json(['ok' => false, 'msg' => '最低角色不能高于你自己']);
             }
-            // 积分：管理员免费，普通用户按后台设置扣除
-            $cost = (int)DB::setting('room_create_cost', '0');
-            $me = null;
+            // 积分：管理员免费；普通用户先原子扣款，再创建房间（失败退还）
+            // cost 归一化：负数 / 小数 / 脏数据一律按 0 处理，避免 (int) 转换后
+            // 跳过整段校验（"-5" 会被当成免费）——这是此前可被绕过的一个口子。
+            $cost    = max(0, (int)DB::setting('room_create_cost', '0'));
+            $charged = 0;   // 实际扣除的积分（管理员为 0，用于返回给前端准确提示）
+            $uid     = (int)$actor['id'];
             if ($cost > 0 && $actor['role'] !== 'admin') {
-                $me = DB::one('SELECT id,points FROM users WHERE id=?', [(int)$actor['id']]);
-                if (!$me || (int)$me['points'] < $cost) {
-                    Api::json(['ok' => false, 'msg' => '积分不足，创建群聊需要 ' . $cost . ' 积分（当前 ' . (int)($me['points'] ?? 0) . '）']);
+                // 条件更新：points 不足时影响 0 行，同时杜绝并发下扣成负数
+                $st = DB::run('UPDATE users SET points=points-? WHERE id=? AND points>=?', [$cost, $uid, $cost]);
+                if ($st->rowCount() === 0) {
+                    $pts = (int)DB::val('SELECT points FROM users WHERE id=?', [$uid]);
+                    Api::json(['ok' => false, 'msg' => '积分不足，创建群聊需要 ' . $cost . ' 积分（当前 ' . $pts . '）']);
                 }
+                $charged = $cost;
             }
-            $id = DB::insert('rooms', [
-                'name' => $name,
-                'slug' => 'g' . time() . bin2hex(random_bytes(3)),
-                'type' => $type,
-                'password' => $type === 'password' ? $p('password') : null,
-                'min_role' => $minRole,
-                'owner_id' => (int)$actor['id'],
-                'description' => mb_substr($p('description'), 0, 200),
-                'status' => 1,
-                'created_at' => time(),
-            ]);
-            if ($cost > 0 && $actor['role'] !== 'admin') {
-                DB::run('UPDATE users SET points=points-? WHERE id=?', [$cost, (int)$actor['id']]);
+            try {
+                $id = DB::insert('rooms', [
+                    'name' => $name,
+                    'slug' => 'g' . time() . bin2hex(random_bytes(3)),
+                    'type' => $type,
+                    'password' => $type === 'password' ? $p('password') : null,
+                    'min_role' => $minRole,
+                    'owner_id' => $uid,
+                    'description' => mb_substr($p('description'), 0, 200),
+                    'status' => 1,
+                    'created_at' => time(),
+                ]);
+            } catch (Throwable $e) {
+                // 房间入库失败必须退还已扣积分，否则用户白白损失
+                if ($charged > 0) DB::run('UPDATE users SET points=points+? WHERE id=?', [$charged, $uid]);
+                throw $e;
             }
-            Sec::log('room_create', $actor['nickname'], ['id' => $id, 'name' => $name, 'cost' => $cost]);
-            Api::json(['ok' => true, 'msg' => '群聊已创建', 'id' => $id, 'name' => $name, 'cost' => $cost]);
+            Sec::log('room_create', $actor['nickname'], ['id' => $id, 'name' => $name, 'cost' => $charged]);
+            // 返回实际扣除额（管理员免费时为 0），前端提示才与真实扣费一致
+            Api::json(['ok' => true, 'msg' => '群聊已创建', 'id' => $id, 'name' => $name, 'cost' => $charged]);
         // 且强制 attachment，避免 html/svg 之类被浏览器内联解析导致 XSS
         case 'file_download':
             // 下载走 GET 链接（带签名），这里直接读 $_GET

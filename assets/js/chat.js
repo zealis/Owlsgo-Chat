@@ -789,14 +789,22 @@
             // 积分提示（创建成本由后台配置，管理员免费）
             var me = this.cfg.me || {};
             var cost = parseInt(this.cfg.settings.room_create_cost, 10) || 0;
-            if (cost > 0) {
+            var pts = parseInt(me.points, 10) || 0;
+            var notEnough = cost > 0 && me.role !== 'admin' && pts < cost;   // 管理员免费
+            if (notEnough) {
+                tip.innerHTML = '<span style="color:#F5222D">积分不足：创建需要 <b>' + cost + '</b> 积分，当前 <b>' + pts + '</b>。</span>';
+                $('owRCCreate').disabled = true;
+                $('owRCCreate').style.opacity = '.5';
+                $('owRCCreate').style.cursor = 'not-allowed';
+            } else if (cost > 0) {
                 tip.innerHTML = (me.role === 'admin')
-                    ? '管理员创建免费（普通用户需 <b>' + cost + '</b> 积分）。'
-                    : '创建将扣除 <b>' + cost + '</b> 积分，请确认积分充足。';
+                    ? '管理员创建免费（普通用户需 <b>' + cost + '</b> 积分，当前 ' + pts + '）。'
+                    : '创建将扣除 <b>' + cost + '</b> 积分（当前 ' + pts + '）。';
             } else {
                 tip.innerHTML = '创建免费。';
             }
             var submit = function () {
+                if (notEnough) { msg.innerHTML = '<span style="color:#F5222D">积分不足，无法创建</span>'; return; }
                 var name = $('owRCName').value.replace(/^\s+|\s+$/g, '');
                 if (name.length < 2) { msg.innerHTML = '<span style="color:#F5222D">群名称至少 2 个字符</span>'; return; }
                 var t = typeSel.value;

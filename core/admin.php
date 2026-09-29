@@ -145,6 +145,13 @@ class Admin
                 Api::json(['ok' => true, 'data' => array_column($rows, 'v', 'k')]);
 
             case 'admin_settings_save':
+                // 创建群聊扣分必须是 0-999999 的整数：填负数或小数会被 (int) 转成一个
+                // 「看起来设了、实际不生效」的值（如 -5 → 整个校验被跳过），这里直接拒绝
+                if (isset($_POST['room_create_cost']) && trim((string)$_POST['room_create_cost']) !== '') {
+                    if (!preg_match('/^\d{1,6}$/', trim((string)$_POST['room_create_cost']))) {
+                        Api::json(['ok' => false, 'msg' => '创建群聊扣除积分需填 0-999999 的整数（0 表示免费）']);
+                    }
+                }
                 $allow = ['site_name', 'allow_register', 'reg_email_verify', 'guest_browse', 'guest_chat',
                           'guest_daily_limit', 'msg_rate_window', 'msg_rate_max', 'mail_rate_limit',
                           'sound_default', 'room_pass_ttl',
