@@ -557,6 +557,8 @@ button { font-family: inherit; cursor: pointer; }
 /* 插件子页面：默认收起，父项展开后才显示（缩进对齐到图标右侧） */
 .ow-admin-menu li.ow-admin-sub { display: none; padding-left: 34px; font-size: 13.5px; }
 .ow-admin-menu li.ow-admin-sub.ow-sub-open { display: flex; display: -webkit-flex; }
+/* 未启用插件的子项：置灰提示（点进去提供一键启用，v1.0.45） */
+.ow-admin-menu li.ow-admin-sub.ow-admin-off { color: var(--ow-text-sub); opacity: .75; }
 .ow-admin-main { flex: 1; -webkit-flex: 1; padding: 24px 28px; min-width: 0; }
 /* 移动端顶栏与抽屉遮罩：桌面端隐藏（见 720px 媒体查询） */
 .ow-admin-bar { display: none; }

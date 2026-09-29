@@ -1518,7 +1518,13 @@
         },
         annToggle: function (id, en) { OwApi.post('admin_ann_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('anns'); }); },
         annDel: function (id) { OwApi.post('admin_ann_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('anns'); }); },
-        pluginToggle: function (name, en) { OwApi.post('admin_plugin_toggle', { name: name, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('plugins'); }); },
+        pluginToggle: function (name, en) {
+            OwApi.post('admin_plugin_toggle', { name: name, enabled: en }, function (r) {
+                toast(r.msg);
+                // 启停改变侧栏子菜单与可用页面，整页刷新保证状态一致
+                setTimeout(function () { location.reload(); }, 500);
+            });
+        },
         pluginInstall: function () {
             var f = $('owPluginZip');
             if (!f.files || !f.files[0]) { toast('请选择 zip 文件'); return; }

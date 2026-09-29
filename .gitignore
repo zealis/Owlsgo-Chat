@@ -5,6 +5,8 @@
 !/uploads/.gitkeep
 # 站点配置属于部署环境（含本机绝对路径），不纳入源码仓库
 /nginx-server.conf
+# 插件目录不上传 GitHub：插件随部署环境安装与维护（v1.0.45）
+/plugins/
 *.log
 .DS_Store
 Thumbs.db

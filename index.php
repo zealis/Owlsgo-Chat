@@ -720,7 +720,13 @@ function renderAdmin(array $actor): void
     // 插件子菜单：仅显示在 main.php 里调用过 Plugin::adminPage() 声明后台页面的插件
     // （未安装写库、未启用或未声明页面的插件都不会出现在这里）。一个声明 = 一个子页面。
     $pluginPages = Plugin::adminPages();
-    $pluginMenu = '<li data-apage="plugins"' . ($pluginPages ? ' class="ow-admin-group"' : '') . '>'
+    // 已安装但未启用的插件：main.php 不加载（无设置页），仍显示为灰色子项，
+    // 点进去提供一键启用（v1.0.45）
+    $offPlugins = [];
+    foreach (Plugin::listAll() as $pl) {
+        if (!$pl['enabled'] && !isset($pluginPages[$pl['id']])) $offPlugins[] = $pl['id'];
+    }
+    $pluginMenu = '<li data-apage="plugins"' . (($pluginPages || $offPlugins) ? ' class="ow-admin-group"' : '') . '>'
         . '<span class="ow-admin-ico">' . ow_icon('puzzle', 16) . '</span>'
         . '<span class="ow-admin-label">插件管理</span>'
         . ($pluginPages ? '<span class="ow-admin-tog">' . ow_icon('chevron', 14) . '</span>' : '')
@@ -729,6 +735,11 @@ function renderAdmin(array $actor): void
         $pluginMenu .= '<li class="ow-admin-sub" data-apage="plugin:' . Sec::e($slug) . '">'
             . '<span class="ow-admin-ico">' . ow_icon('puzzle', 14) . '</span>'
             . '<span class="ow-admin-label">' . Sec::e($pg['title']) . '</span></li>';
+    }
+    foreach ($offPlugins as $offName) {
+        $pluginMenu .= '<li class="ow-admin-sub ow-admin-off" data-apage="plugin:' . Sec::e($offName) . '">'
+            . '<span class="ow-admin-ico">' . ow_icon('puzzle', 14) . '</span>'
+            . '<span class="ow-admin-label">' . Sec::e($offName) . '（未启用）</span></li>';
     }
     echo '<body class="ow-admin-body">'
        // 移动端顶栏：汉堡开关 + 标题 + 返回前台（桌面端隐藏，侧栏常驻）

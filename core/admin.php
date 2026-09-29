@@ -155,7 +155,17 @@ class Admin
             case 'admin_plugin_page':
                 $slug = $p('slug');
                 $pages = Plugin::adminPages();
-                if (!isset($pages[$slug])) Api::json(['ok' => false, 'msg' => '页面不存在'], 404);
+                if (!isset($pages[$slug])) {
+                    // 已安装但未启用的插件：显示未启用占位页 + 一键启用按钮（v1.0.45）
+                    $installed = array_column(Plugin::listAll(), null, 'id');
+                    if (isset($installed[$slug])) {
+                        Api::json(['ok' => true, 'html' =>
+                            '<h2>' . Sec::e($installed[$slug]['name']) . '</h2>'
+                            . '<div class="ow-card"><p style="margin:0 0 12px">该插件当前处于<b>停用</b>状态，设置页面不可用。启用后即可使用其功能与设置页。</p>'
+                            . '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.pluginToggle(\'' . Sec::e($slug) . '\',1)">启用插件</button></div>']);
+                    }
+                    Api::json(['ok' => false, 'msg' => '页面不存在'], 404);
+                }
                 // 兼容两种插件页面写法：fn 内 echo 输出，或 fn 返回 HTML 字符串（v1.0.44）
                 ob_start();
                 $ret = call_user_func($pages[$slug]['fn']);
