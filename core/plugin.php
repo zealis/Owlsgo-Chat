@@ -13,6 +13,7 @@ class Plugin
     private static array $routes = [];
     private static array $adminPages = [];
     private static array $assets = ['css' => [], 'js' => []];
+    private static array $stats = [];   // 每个插件的注册计数：hooks / routes / pages
     private static string $dir = '';
     private static int $lastCron = 0;
 
@@ -23,10 +24,50 @@ class Plugin
         foreach (DB::all('SELECT name FROM plugins WHERE enabled=1') as $row) {
             $main = $dir . '/' . $row['name'] . '/main.php';
             if (is_file($main)) {
-                try { require $main; }
-                catch (Throwable $e) { Sec::log('plugin_error', $row['name'], ['error' => $e->getMessage()]); }
+                $before = self::snapshot();
+                try { require $main; } catch (Throwable $e) { Sec::log('plugin_error', $row['name'], ['error' => $e->getMessage()]); }
+                self::$stats[$row['name']] = self::countReg($before);
             }
         }
+    }
+
+    /** 注册计数快照：加载插件前后对比，得到该插件注册的钩子/路由/后台页数量 */
+    private static function snapshot(): array
+    {
+        return ['hooks' => self::$hooks, 'routes' => self::$routes, 'pages' => self::$adminPages];
+    }
+
+    private static function countReg(array $before): array
+    {
+        $h = 0;
+        foreach (self::$hooks as $list) $h += count($list);
+        $h0 = 0;
+        foreach ($before['hooks'] as $list) $h0 += count($list);
+        return ['hooks' => $h - $h0, 'routes' => count(self::$routes) - count($before['routes']), 'pages' => count(self::$adminPages) - count($before['pages'])];
+    }
+
+    /** 已启用插件的注册计数（Plugin::init 时记录） */
+    public static function stats(string $name): array
+    {
+        return self::$stats[$name] ?? ['hooks' => 0, 'routes' => 0, 'pages' => 0];
+    }
+
+    /**
+     * 探测未启用插件的注册计数：临时加载 main.php 统计后完整回滚注册。
+     * 仅用于后台列表展示；插件应保证 main.php 只做 Plugin::* 注册（见 PLUGIN.md）。
+     */
+    public static function inspect(string $name): array
+    {
+        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $name)) return ['hooks' => 0, 'routes' => 0, 'pages' => 0];
+        $main = self::$dir . '/' . $name . '/main.php';
+        if (!is_file($main)) return ['hooks' => 0, 'routes' => 0, 'pages' => 0];
+        $before = self::snapshot();
+        try { require $main; $stats = self::countReg($before); }
+        catch (Throwable $e) { $stats = ['hooks' => 0, 'routes' => 0, 'pages' => 0]; }
+        self::$hooks = $before['hooks'];
+        self::$routes = $before['routes'];
+        self::$adminPages = $before['pages'];
+        return $stats;
     }
 
     public static function on(string $hook, callable $fn): void { self::$hooks[$hook][] = $fn; }
@@ -90,16 +131,62 @@ class Plugin
         foreach (glob(self::$dir . '/*/plugin.json') ?: [] as $file) {
             $name = basename(dirname($file));
             $meta = json_decode((string)file_get_contents($file), true) ?: [];
+            $on = (int)($enabled[$name] ?? 0);
+            // 注册计数：已启用用 init 时的实测值；未启用临时加载探测后回滚
+            $stats = $on ? self::stats($name) : self::inspect($name);
             $out[] = [
                 'id' => $name,
                 'name' => $meta['name'] ?? $name,
                 'version' => $meta['version'] ?? '?',
                 'description' => $meta['description'] ?? '',
                 'author' => $meta['author'] ?? '',
-                'enabled' => (int)($enabled[$name] ?? 0),
+                'source' => $meta['source'] ?? '本地',
+                'enabled' => $on,
+                'hooks' => (int)$stats['hooks'],
+                'routes' => (int)$stats['routes'],
+                'pages' => (int)$stats['pages'],
             ];
         }
         return $out;
+    }
+
+    /** 卸载：删除注册记录并递归删除插件目录（仅限已安装插件，名称白名单） */
+    public static function uninstall(string $name): bool
+    {
+        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $name)) return false;
+        $dir = self::$dir . '/' . $name;
+        if (!is_file($dir . '/plugin.json')) return false;
+        // 先删注册（不是停用：卸载后列表不应留任何痕迹），再删目录
+        DB::run('DELETE FROM plugins WHERE name=?', [$name]);
+        self::rrmdir($dir);
+        Sec::log('plugin_uninstall', '', ['plugin' => $name]);
+        return true;
+    }
+
+    private static function rrmdir(string $dir): void
+    {
+        foreach (glob($dir . '/*') ?: [] as $f) {
+            is_dir($f) ? self::rrmdir($f) : @unlink($f);
+        }
+        @rmdir($dir);
+    }
+
+    /** 打包插件目录为 zip（返回临时文件路径；调用方负责输出与删除） */
+    public static function packageZip(string $name): ?string
+    {
+        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $name)) return null;
+        $dir = self::$dir . '/' . $name;
+        if (!is_file($dir . '/plugin.json') || !class_exists('ZipArchive')) return null;
+        $tmp = tempnam(sys_get_temp_dir(), 'owplug_');
+        $zip = new ZipArchive();
+        if ($zip->open($tmp, ZipArchive::OVERWRITE) !== true) return null;
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $f) {
+            $rel = substr(str_replace('\\', '/', $f->getPathname()), strlen(str_replace('\\', '/', $dir)) + 1);
+            $zip->addFile($f->getPathname(), $name . '/' . $rel);
+        }
+        $zip->close();
+        return $tmp;
     }
 
     public static function toggle(string $name, bool $enable): void

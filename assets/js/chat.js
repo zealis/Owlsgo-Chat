@@ -1386,17 +1386,26 @@
             },
             plugins: function (main) {
                 OwApi.post('admin_plugins', {}, function (r) {
-                    var h = '<h2>插件管理</h2><p class="ow-admin-desc">安装（上传 zip）、启用 / 停用插件。插件存放于 plugins/ 目录。</p>'
+                    var h = '<h2>插件管理</h2><p class="ow-admin-desc">安装（上传 zip）、启用 / 停用、下载与卸载插件。插件存放于 plugins/ 目录。</p>'
                         + '<div class="ow-card"><input type="file" id="owPluginZip" accept=".zip"> <button class="ow-btn ow-btn-primary" onclick="OwAdmin.pluginInstall()">上传安装</button></div>'
-                        + '<div class="ow-card"><table class="ow-table"><tr><th>标识</th><th>名称</th><th>版本</th><th>说明</th><th>状态</th><th>操作</th></tr>';
+                        + '<div class="ow-plugin-list">';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + esc(d.id) + '</td><td>' + esc(d.name) + '</td><td>' + esc(d.version) + '</td><td>' + esc(d.description) + '</td>'
-                           + '<td>' + (d.enabled ? '<span class="ow-tag ow-tag-green">启用</span>' : '<span class="ow-tag ow-tag-guest">停用</span>') + '</td>'
-                           + '<td><a href="javascript:;" onclick="OwAdmin.pluginToggle(\'' + esc(d.id) + '\',' + (d.enabled ? 0 : 1) + ')">' + (d.enabled ? '停用' : '启用') + '</a></td></tr>';
+                        h += '<div class="ow-plugin-card">'
+                           + '<div class="ow-plugin-head"><b>' + esc(d.name) + '</b>'
+                           + (d.enabled ? '<span class="ow-tag ow-tag-green">启用</span>' : '<span class="ow-tag ow-tag-guest">未启用</span>') + '</div>'
+                           + '<div class="ow-plugin-meta">' + esc(d.id) + ' · v' + esc(d.version) + ' · ' + esc(d.source || '本地')
+                           + ' · 钩子 ' + (d.hooks || 0) + ' · 路由 ' + (d.routes || 0) + ' · 后台页 ' + (d.pages || 0) + '</div>'
+                           + '<div class="ow-plugin-desc">' + esc(d.description || '') + '</div>'
+                           + '<div class="ow-plugin-actions">'
+                           + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.pluginToggle(\'' + esc(d.id) + '\',1)"' + (d.enabled ? ' disabled' : '') + '>启用</button>'
+                           + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.pluginToggle(\'' + esc(d.id) + '\',0)"' + (d.enabled ? '' : ' disabled') + '>停用</button>'
+                           + '<a class="ow-btn ow-btn-ghost" href="?action=admin_plugin_download&name=' + esc(d.id) + '">下载</a>'
+                           + '<button class="ow-btn ow-btn-danger" onclick="OwAdmin.pluginUninstall(\'' + esc(d.id) + '\')">卸载</button>'
+                           + '</div></div>';
                     }
-                    if (!r.data.length) h += '<tr><td colspan="6" style="color:#999">暂无插件</td></tr>';
-                    main.innerHTML = h + '</table></div>';
+                    if (!r.data.length) h += '<div class="ow-card" style="color:#999">暂无插件</div>';
+                    main.innerHTML = h + '</div>';
                 });
             },
             logs: function (main) {
@@ -1522,6 +1531,14 @@
             OwApi.post('admin_plugin_toggle', { name: name, enabled: en }, function (r) {
                 toast(r.msg);
                 // 启停改变侧栏子菜单与可用页面，整页刷新保证状态一致
+                setTimeout(function () { location.reload(); }, 500);
+            });
+        },
+        /* 卸载：删除插件目录，二次确认后执行 */
+        pluginUninstall: function (name) {
+            if (!window.confirm('确定卸载插件「' + name + '」吗？\n将停用并删除 plugins/' + name + ' 目录，不可恢复！')) return;
+            OwApi.post('admin_plugin_uninstall', { name: name }, function (r) {
+                toast(r.msg);
                 setTimeout(function () { location.reload(); }, 500);
             });
         },

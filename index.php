@@ -165,6 +165,21 @@ if ($action !== '') {
         Api::json(['ok' => true]);
     }
 
+    // 插件打包下载（GET 免签名：只读操作；鉴权在下方校验管理员会话）
+    if ($action === 'admin_plugin_download') {
+        if (($actor['role'] ?? '') !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
+        $name = (string)($_GET['name'] ?? '');
+        $tmp = Plugin::packageZip($name);
+        if (!$tmp) Api::json(['ok' => false, 'msg' => '打包失败（插件不存在或缺少 ZipArchive）'], 500);
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . preg_replace('/[^a-zA-Z0-9_-]/', '', $name) . '.zip"');
+        header('Content-Length: ' . (string)filesize($tmp));
+        header('Cache-Control: no-store');
+        readfile($tmp);
+        @unlink($tmp);
+        exit;
+    }
+
     // 插件静态资源合并输出（GET 引用，无敏感数据、无写操作）：与 captcha 同样免签名放行，
     // 否则 <script src="?action=assets&type=js"> 无法在页面加载
     if ($action === 'assets') {

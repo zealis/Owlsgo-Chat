@@ -152,6 +152,10 @@ class Admin
                 [$ok, $msg] = Plugin::installZip($_FILES['file']);
                 Api::json(['ok' => $ok, 'msg' => $msg]);
 
+            case 'admin_plugin_uninstall':
+                if (!Plugin::uninstall($p('name'))) Api::json(['ok' => false, 'msg' => '卸载失败（插件不存在或名称非法）']);
+                Api::json(['ok' => true, 'msg' => '已卸载']);
+
             case 'admin_plugin_page':
                 $slug = $p('slug');
                 $pages = Plugin::adminPages();
