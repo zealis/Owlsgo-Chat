@@ -251,12 +251,18 @@
         return h;
     }
 
-    function avatarHtml(url, name, sm) {
+    /* 头像：有图用图；无图时游客固定米金底（#E5D5A0，深字保证可读），
+       用户按昵称长度从色盘取色 */
+    function avatarHtml(url, name, sm, role) {
         var cls = 'ow-avatar' + (sm ? ' ow-avatar-sm' : '');
         if (url) return '<span class="' + cls + '"><img src="' + esc(url) + '" alt=""></span>';
+        var ch = esc((name || '?').charAt(0));
+        if (role === 'guest') {
+            return '<span class="' + cls + '" style="background:#E5D5A0;color:#7A5E12">' + ch + '</span>';
+        }
         var colors = ['#00A0E9', '#0078D4', '#FF7D00', '#52C41A', '#722ed1'];
-        var ch = (name || '?').charAt(0), ci = (name || '').length % colors.length;
-        return '<span class="' + cls + '" style="background:' + colors[ci] + '">' + esc(ch) + '</span>';
+        var ci = (name || '').length % colors.length;
+        return '<span class="' + cls + '" style="background:' + colors[ci] + '">' + ch + '</span>';
     }
 
     /* ==========================================================================
@@ -759,7 +765,7 @@
 
             return {
                 cls: cls,
-                html: (isSys ? '' : avatarHtml(m.avatar, m.nickname))
+                html: (isSys ? '' : avatarHtml(m.avatar, m.nickname, false, m.role))
                     + '<div class="ow-msg-body">' + meta + content + '</div>'
             };
         },
@@ -1071,7 +1077,7 @@
                 var u = r.data;
                 OwChat.openModal(
                     '<h3>用户资料</h3>'
-                    + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname)
+                    + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname, false, u.role)
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
                     + '<div style="margin-top:4px">' + roleTag(u.role, u.title) + '</div></div>'
                     // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
@@ -1091,7 +1097,7 @@
             for (i = 0; i < list.length; i++) {
                 var o = list[i];
                 html += '<li class="ow-online-item"><span class="ow-online-dot"></span>'
-                      + avatarHtml(o.avatar, o.nickname, true)
+                      + avatarHtml(o.avatar, o.nickname, true, o.role)
                       + '<span class="ow-online-name" onclick="OwChat.userCard(' + (o.uid || 0) + ',\'' + esc(o.nickname) + '\')">' + esc(o.nickname) + '</span>'
                       + roleTag(o.role, '') + '</li>';
             }
@@ -1173,11 +1179,11 @@
             if (!el) return;
             if (me) {
                 // 昵称可重名，身份一律以用户 ID 为准，故侧栏同时展示 ID
-                el.innerHTML = avatarHtml(me.avatar, me.nickname)
+                el.innerHTML = avatarHtml(me.avatar, me.nickname, false, me.role)
                     + '<div><div class="ow-me-name">' + esc(me.nickname) + '</div>' + roleTag(me.role, me.title)
                     + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(fmtUid(me.id || 0)) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
             } else {
-                el.innerHTML = avatarHtml('', this.cfg.actor.nickname)
+                el.innerHTML = avatarHtml('', this.cfg.actor.nickname, false, 'guest')
                     + '<div><div class="ow-me-name">' + esc(this.cfg.actor.nickname) + '</div>' + roleTag('guest', '') + '</div>';
             }
         },
@@ -1191,7 +1197,7 @@
                 + '<p style="font-size:12px;color:#999;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
                 + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id ? fmtUid(me.id) : '-') + '</div>'
                 + '<div class="ow-form-item"><label>头像</label><div class="ow-captcha-row">'
-                + '<span id="owSetAvatarPreview">' + avatarHtml(me.avatar, me.nickname) + '</span>'
+                + '<span id="owSetAvatarPreview">' + avatarHtml(me.avatar, me.nickname, false, me.role) + '</span>'
                 + '<button class="ow-btn ow-btn-ghost" onclick="document.getElementById(\'owSetAvatarFile\').click()">上传头像</button>'
                 + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none"></div></div>'
                 + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.saveSettings()">保存</button>'
