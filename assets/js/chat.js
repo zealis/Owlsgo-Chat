@@ -1401,7 +1401,7 @@
                            + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.pluginToggle(\'' + esc(d.id) + '\',1)"' + (d.enabled ? ' disabled' : '') + '>启用</button>'
                            + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.pluginToggle(\'' + esc(d.id) + '\',0)"' + (d.enabled ? '' : ' disabled') + '>停用</button>'
                            + '<a class="ow-btn ow-btn-ghost" href="?action=admin_plugin_download&name=' + esc(d.id) + '">下载</a>'
-                           + '<button class="ow-btn ow-btn-danger" onclick="OwAdmin.pluginUninstall(\'' + esc(d.id) + '\')">卸载</button>'
+                           + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.pluginUninstall(\'' + esc(d.id) + '\')">卸载</button>'
                            + '</div></div>';
                     }
                     if (!r.data.length) h += '<div class="ow-card" style="color:#999">暂无插件</div>';
