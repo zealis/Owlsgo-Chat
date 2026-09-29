@@ -555,6 +555,11 @@ button { font-family: inherit; cursor: pointer; }
 .ow-admin-menu li.ow-admin-sub { display: none; padding-left: 34px; font-size: 13.5px; }
 .ow-admin-menu li.ow-admin-sub.ow-sub-open { display: flex; display: -webkit-flex; }
 .ow-admin-main { flex: 1; -webkit-flex: 1; padding: 24px 28px; min-width: 0; }
+/* 移动端顶栏与抽屉遮罩：桌面端隐藏（见 720px 媒体查询） */
+.ow-admin-bar { display: none; }
+.ow-admin-bar-title { flex: 1; -webkit-flex: 1; font-size: 15px; font-weight: 600; color: var(--ow-text-title); }
+.ow-admin-bar-link { font-size: 13px; color: var(--ow-primary); text-decoration: none; }
+.ow-admin-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.35); z-index: 89; }
 .ow-admin-main h2 { font-size: 24px; font-weight: 600; color: var(--ow-text-title); line-height: 1.3; }
 .ow-admin-main .ow-admin-desc { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 20px; }
 .ow-card {
@@ -611,12 +616,20 @@ button { font-family: inherit; cursor: pointer; }
     .ow-msg-body { max-width: 85%; }
     .ow-msg-img { max-width: 180px; max-height: 180px; }
     .ow-emoji-panel { width: 92%; left: 4%; }
-    .ow-admin-layout { flex-direction: column; -webkit-flex-direction: column; }
-    .ow-admin-side { width: 100%; border-right: none; border-bottom: 1px solid var(--ow-border); }
-    .ow-admin-menu { display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; gap: 4px; }
-    .ow-admin-menu li { padding: 6px 10px; font-size: 13px; }
-    /* 移动端菜单横排铺开，子项不再缩进，改用左边框区分层级 */
-    .ow-admin-menu li.ow-admin-sub { padding-left: 10px; border-left: 2px solid var(--ow-border); }
+    /* 后台：移动端沿用侧边栏设计——固定顶栏 + 滑出抽屉 + 遮罩 */
+    .ow-admin-bar {
+        display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center;
+        gap: 10px; position: fixed; top: 0; left: 0; right: 0; height: 52px;
+        padding: 0 12px; background: var(--ow-bg); border-bottom: 1px solid var(--ow-border); z-index: 95;
+    }
+    .ow-admin-layout { padding-top: 52px; min-height: 100vh; }
+    .ow-admin-side {
+        position: fixed; left: -260px; top: 52px; bottom: 0; width: 250px;
+        border-right: 1px solid var(--ow-border); transition: left .2s; -webkit-transition: left .2s;
+        z-index: 90; overflow-y: auto;
+    }
+    .ow-admin-side.open { left: 0; }
+    .ow-admin-menu li { padding: 10px 12px; font-size: 13.5px; }
     .ow-admin-main { padding: 16px; }
     .ow-auth-card { padding: 24px 18px; }
     .ow-auth-logo h1 { font-size: 20px; }

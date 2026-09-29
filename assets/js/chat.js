@@ -1244,6 +1244,18 @@
             OwApi.key = opt.key;
             OwApi.setServerTime(opt.ts);
             var menu = $('owAdminMenu'), self = this;
+            // 移动端抽屉：顶栏汉堡开合 + 遮罩点击收起 + 回到桌面宽度自动复位
+            var side = $('owAdminSide'), mask = $('owAdminMask');
+            var setSide = function (open) {
+                if (!side) return;
+                side.className = 'ow-admin-side' + (open ? ' open' : '');
+                if (mask) mask.style.display = open ? 'block' : 'none';
+            };
+            if ($('owAdminToggle')) $('owAdminToggle').onclick = function () { setSide(side.className.indexOf('open') < 0); };
+            if (mask) mask.onclick = function () { setSide(false); };
+            window.onresize = function () {
+                if ((document.documentElement.clientWidth || window.innerWidth || 1024) > 720) setSide(false);
+            };
             var items = menu.getElementsByTagName('li'), i;
             for (i = 0; i < items.length; i++) {
                 items[i].onclick = function () {
@@ -1258,6 +1270,7 @@
                     // ③ 选中态最后加，避免被上面的类名重置覆盖
                     this.className += ' active';
                     self.page(ap);
+                    setSide(false);   // 移动端点完菜单收起抽屉
                 };
             }
             this.page('users');

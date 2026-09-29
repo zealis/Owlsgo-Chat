@@ -726,8 +726,15 @@ function renderAdmin(array $actor): void
             . '<span class="ow-admin-ico">' . ow_icon('puzzle', 14) . '</span>'
             . '<span class="ow-admin-label">' . Sec::e($pg['title']) . '</span></li>';
     }
-    echo '<body class="ow-admin-body"><div class="ow-admin-layout">'
-       . '<aside class="ow-admin-side">'
+    echo '<body class="ow-admin-body">'
+       // 移动端顶栏：汉堡开关 + 标题 + 返回前台（桌面端隐藏，侧栏常驻）
+       . '<div class="ow-admin-bar">'
+       . '<button class="ow-icon-btn" id="owAdminToggle" aria-label="菜单">' . ow_icon('menu') . '</button>'
+       . '<span class="ow-admin-bar-title">管理后台</span>'
+       . '<a class="ow-admin-bar-link" href="?page=chat">返回前台</a>'
+       . '</div>'
+       . '<div class="ow-admin-layout">'
+       . '<aside class="ow-admin-side" id="owAdminSide">'
        . '<div class="ow-admin-brand">ADMIN CONSOLE<br><strong>管理后台</strong></div>'
        . '<a class="ow-btn ow-btn-ghost ow-btn-block" href="?page=chat">返回前台</a>'
        . '<ul class="ow-admin-menu" id="owAdminMenu">'
@@ -742,6 +749,8 @@ function renderAdmin(array $actor): void
        . $pluginMenu
        . '</ul></aside>'
        . '<main class="ow-admin-main" id="owAdminMain"></main></div>'
+       // 移动端抽屉遮罩：点空白收起侧栏（桌面端不显示）
+       . '<div class="ow-admin-mask" id="owAdminMask" style="display:none"></div>'
        . '<div class="ow-toast" id="owToast" style="display:none"></div>'
        . '<script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
        . '<script>OwAdmin.init(' . json_encode(['key' => $actor['key'], 'ts' => time()]) . ');</script>'
