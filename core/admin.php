@@ -22,26 +22,9 @@ class Admin
             // 原搜索/角色/积分/禁用接口随迁：plugin_user_manager_search/save/status
 
             // ---------- 禁言管理 ----------
-            case 'admin_ban_add':
-                $type = $p('type');
-                if (!in_array($type, ['user', 'guest', 'ip'], true)) Api::json(['ok' => false, 'msg' => '非法类型']);
-                $target = trim($p('target'));
-                if ($target === '') Api::json(['ok' => false, 'msg' => '请填写禁言目标']);
-                DB::insert('bans', [
-                    'type' => $type, 'target' => $target,
-                    'room_id' => (int)$p('room_id', '0'), 'reason' => $p('reason'),
-                    'expires_at' => (int)$p('hours', '0') > 0 ? time() + (int)$p('hours') * 3600 : null,
-                    'created_by' => $actor['nickname'], 'created_at' => time(),
-                ]);
-                Sec::log('admin_ban', $actor['nickname'], ['type' => $type, 'target' => $p('target')]);
-                Api::json(['ok' => true, 'msg' => '已禁言']);
-
-            case 'admin_bans':
-                Api::json(['ok' => true, 'data' => DB::all('SELECT * FROM bans ORDER BY id DESC LIMIT 100')]);
-
-            case 'admin_ban_del':
-                DB::run('DELETE FROM bans WHERE id=?', [(int)$p('id')]);
-                Api::json(['ok' => true, 'msg' => '已解除']);
+            // 禁言管理自 v1.0.52 起剥离为插件 ban-manager（plugins/ban-manager/），
+            // 原列表/添加/解除接口随迁：plugin_ban_manager_list/add/del。
+            // 运行时拦截（Chat::isBanned）与 bans 表保留在核心。
 
             // ---------- 敏感词 ----------
             case 'admin_words':

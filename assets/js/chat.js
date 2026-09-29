@@ -1363,41 +1363,7 @@
         },
 
         pages: {
-            /* 用户管理自 v1.0.44 起剥离为插件 user-manager，页面与交互见 plugins/user-manager/ */
-            rooms: function (main) {
-                OwApi.post('admin_rooms', {}, function (r) {
-                    var h = '<h2>聊天室管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除聊天室，设置访问权限与房主。</p><div class="ow-card">'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
-                    for (var i = 0; i < r.data.length; i++) {
-                        var d = r.data[i];
-                        h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
-                           + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
-                           + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
-                           + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
-                    }
-                    main.innerHTML = h + '</table></div>';
-                });
-            },
-            bans: function (main) {
-                OwApi.post('admin_bans', {}, function (r) {
-                    var h = '<h2>禁言管理</h2><p class="ow-admin-desc">按用户 / 游客昵称 / IP 禁言，可按房间隔离，支持过期时间。</p>'
-                        + '<div class="ow-card"><div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owBType"><option value="user">用户ID</option><option value="guest">游客昵称</option><option value="ip">IP 地址</option></select></div>'
-                        + '<div class="ow-form-item"><label>目标</label><input class="ow-input" id="owBTarget"></div>'
-                        + '<div class="ow-form-item"><label>房间ID（0=全局）</label><input class="ow-input" id="owBRoom" value="0"></div>'
-                        + '<div class="ow-form-item"><label>时长（小时，0=永久）</label><input class="ow-input" id="owBHours" value="24"></div>'
-                        + '<div class="ow-form-item"><label>原因</label><input class="ow-input" id="owBReason"></div>'
-                        + '<button class="ow-btn ow-btn-danger" onclick="OwAdmin.banAdd()">添加禁言</button></div></div>'
-                        + '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>类型</th><th>目标</th><th>房间</th><th>原因</th><th>过期时间</th><th>操作</th></tr>';
-                    for (var i = 0; i < r.data.length; i++) {
-                        var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.type === 'user' ? '用户' : d.type === 'guest' ? '游客' : 'IP') + '</td><td>' + esc(d.target) + '</td><td>' + (d.room_id == 0 ? '全局' : d.room_id) + '</td><td>' + esc(d.reason || '') + '</td>'
-                           + '<td>' + (d.expires_at ? new Date(d.expires_at * 1000).toLocaleString() : '永久') + '</td>'
-                           + '<td><a href="javascript:;" onclick="OwAdmin.banDel(' + d.id + ')">解除</a></td></tr>';
-                    }
-                    main.innerHTML = h + '</table></div>';
-                });
-            },
+            /* 用户管理（v1.0.44）、禁言管理（v1.0.52）已剥离为插件，见 plugins/ 对应目录 */
             words: function (main) {
                 OwApi.post('admin_words', {}, function (r) {
                     var h = '<h2>敏感词过滤</h2><p class="ow-admin-desc">添加敏感词及替换词，支持启用 / 停用。</p>'
@@ -1460,66 +1426,21 @@
                     main.innerHTML = h + '</div>';
                 });
             },
-            logs: function (main) {
-                OwApi.post('admin_logs', {}, function (r) {
-                    var h = '<h2>安全日志</h2><p class="ow-admin-desc">记录登录、注册等关键操作的 IP 与请求数据（已脱敏）。</p>'
-                        + '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>动作</th><th>操作者</th><th>IP</th><th>数据</th><th>时间</th></tr>';
+            rooms: function (main) {
+                OwApi.post('admin_rooms', {}, function (r) {
+                    var h = '<h2>聊天室管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除聊天室，设置访问权限与房主。</p><div class="ow-card">'
+                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.action) + '</td><td>' + esc(d.actor || '') + '</td><td>' + esc(d.ip || '') + '</td>'
-                           + '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.data || '') + '</td>'
-                           + '<td>' + new Date(d.created_at * 1000).toLocaleString() + '</td></tr>';
+                        h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
+                           + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
+                           + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
+                           + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
                     }
                     main.innerHTML = h + '</table></div>';
                 });
             },
-            settings: function (main) {
-                OwApi.post('admin_settings_get', {}, function (r) {
-                    var d = r.data;
-                    function sel(k, opts) {
-                        var h = '<select class="ow-input" id="owS_' + k + '">';
-                        for (var v in opts) h += '<option value="' + v + '"' + (d[k] === v ? ' selected' : '') + '>' + opts[v] + '</option>';
-                        return h + '</select>';
-                    }
-                    main.innerHTML = '<h2>系统设置</h2><p class="ow-admin-desc">站点、注册控制、游客与发言限制、存储方式。</p><div class="ow-card">'
-                        + '<div class="ow-form-item"><label>站点名称</label><input class="ow-input" id="owS_site_name" value="' + esc(d.site_name || '') + '"></div>'
-                        + '<div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>开放注册</label>' + sel('allow_register', { '1': '开放', '0': '关闭' }) + '</div>'
-                        + '<div class="ow-form-item"><label>注册需邮箱验证</label>' + sel('reg_email_verify', { '1': '需要', '0': '不需要' }) + '</div>'
-                        + '<div class="ow-form-item"><label>游客可浏览</label>' + sel('guest_browse', { '1': '允许', '0': '禁止' }) + '</div>'
-                        + '<div class="ow-form-item"><label>游客可发言</label>' + sel('guest_chat', { '1': '允许', '0': '禁止' }) + '</div>'
-                        + '</div><div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>游客每日发言限额</label><input class="ow-input" id="owS_guest_daily_limit" value="' + esc(d.guest_daily_limit || '50') + '"></div>'
-                        + '<div class="ow-form-item"><label>发言频率窗口(秒)</label><input class="ow-input" id="owS_msg_rate_window" value="' + esc(d.msg_rate_window || '10') + '"></div>'
-                        + '<div class="ow-form-item"><label>窗口内最大条数</label><input class="ow-input" id="owS_msg_rate_max" value="' + esc(d.msg_rate_max || '8') + '"></div>'
-                        + '<div class="ow-form-item"><label>邮件发送间隔(秒)</label><input class="ow-input" id="owS_mail_rate_limit" value="' + esc(d.mail_rate_limit || '60') + '"></div>'
-                        + '</div>'
-                        + '<div class="ow-form-item"><label>密码房通行缓存(秒)</label><input class="ow-input" id="owS_room_pass_ttl" value="' + esc(d.room_pass_ttl || '1800') + '">'
-                        + '<p style="font-size:12px;color:#999;margin-top:4px">验证一次密码后，该时间内进入同一房间无需重复输入；填 0 表示每次进入都要输入。</p></div>'
-                        + '<div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>登录失败几次后要求验证码</label><input class="ow-input" id="owS_login_fail_captcha" value="' + esc(d.login_fail_captcha || '3') + '"></div>'
-                        + '<div class="ow-form-item"><label>登录失败几次后锁定</label><input class="ow-input" id="owS_login_fail_lock" value="' + esc(d.login_fail_lock || '10') + '"></div>'
-                        + '<div class="ow-form-item"><label>锁定时长(分钟)</label><input class="ow-input" id="owS_login_lock_minutes" value="' + esc(d.login_lock_minutes || '15') + '"></div>'
-                        + '</div>'
-                        + '<div class="ow-form-item"><label>注册最低年龄(周岁)</label><input class="ow-input" id="owS_min_register_age" value="' + esc(d.min_register_age || '0') + '">'
-                        + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限制；填 18 则注册时必须选择出生日期且年满 18 周岁（按日期精确计算）。</p></div>'
-                        + '<div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>允许上传文件</label>' + sel('file_upload', { '1': '允许', '0': '禁止' }) + '</div>'
-                        + '<div class="ow-form-item"><label>单文件大小上限(MB)</label><input class="ow-input" id="owS_file_max_size" value="' + esc(d.file_max_size || '10') + '"></div>'
-                        + '</div>'
-                        + '<div class="ow-form-item"><label>允许的文件扩展名</label><input class="ow-input" id="owS_file_exts" value="' + esc(d.file_exts || 'zip,rar,7z,pdf,txt,md,doc,docx,xls,xlsx,ppt,pptx,mp3,mp4') + '">'
-                        + '<p style="font-size:12px;color:#999;margin-top:4px">逗号分隔。只有内置安全类型表内登记过的扩展名才会生效；'
-                        + 'svg/php/html 等可执行或可内嵌脚本的类型不予登记（即使填了也不会放行）。</p></div>'
-                        + '<p style="font-size:12px;color:#999;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
-                        + '<div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>允许用户创建群聊</label>' + sel('room_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
-                        + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
-                        + '</div>'
-                        + '<p style="font-size:12px;color:#999;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在聊天室管理中调整。</p>'
-                        + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
-                });
-            }
+            /* 禁言管理自 v1.0.52 起剥离为插件 ban-manager，页面与交互见 plugins/ban-manager/ */
         },
 
         /* ---------- 用户管理动作已随 v1.0.44 剥离为插件（OwUM，plugins/user-manager/） ---------- */
@@ -1559,14 +1480,7 @@
             });
         },
 
-        /* ---------- 其他动作 ---------- */
-        banAdd: function () {
-            OwApi.post('admin_ban_add', {
-                type: $('owBType').value, target: $('owBTarget').value, room_id: $('owBRoom').value,
-                hours: $('owBHours').value, reason: $('owBReason').value
-            }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('bans'); });
-        },
-        banDel: function (id) { OwApi.post('admin_ban_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('bans'); }); },
+        /* ---------- 其他动作（banAdd/banDel 已随 v1.0.52 剥离为插件 ban-manager） ---------- */
         wordAdd: function () {
             OwApi.post('admin_word_add', { word: $('owWWord').value, replacement: $('owWRep').value }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('words'); });
         },

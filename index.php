@@ -775,7 +775,6 @@ function renderAdmin(array $actor): void
        . '<div class="ow-admin-brand">ADMIN CONSOLE<br><strong>管理后台</strong></div>'
        . '<ul class="ow-admin-menu" id="owAdminMenu">'
        . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>聊天室管理</li>'
-       . '<li data-apage="bans"><span class="ow-admin-ico">' . ow_icon('mute', 16) . '</span>禁言管理</li>'
        . '<li data-apage="words"><span class="ow-admin-ico">' . ow_icon('ban', 16) . '</span>敏感词过滤</li>'
        . '<li data-apage="anns"><span class="ow-admin-ico">' . ow_icon('mega', 16) . '</span>系统公告</li>'
        . '<li data-apage="logs"><span class="ow-admin-ico">' . ow_icon('shield', 16) . '</span>安全日志</li>'

@@ -98,7 +98,11 @@ class Chat
                 return '您已被禁言' . $exp . ($b['reason'] ? '，原因：' . $b['reason'] : '');
             }
         }
-        return null;
+        // 插件扩展判定（v1.0.52）：核心表无禁言时，插件可通过 $reason 追加自定义
+        // 禁言逻辑（返回原因字符串即拦截）。每条消息触发一次，回调内避免重查询。
+        $reason = null;
+        Plugin::fire('ban.check', [&$reason, $actor, $roomId]);
+        return is_string($reason) && $reason !== '' ? $reason : null;
     }
 
     // ---------- 敏感词 ----------
