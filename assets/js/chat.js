@@ -1257,6 +1257,10 @@
                 if ((document.documentElement.clientWidth || window.innerWidth || 1024) > 720) setSide(false);
             };
             var items = menu.getElementsByTagName('li'), i;
+            // 记忆当前页面：启停插件等操作刷新后停留在原页面，而不是跳回默认页
+            var remember = function (ap) {
+                try { sessionStorage.setItem('owAdminPage', ap); } catch (e) {}
+            };
             for (i = 0; i < items.length; i++) {
                 items[i].onclick = function () {
                     var ap = this.getAttribute('data-apage'), all = menu.getElementsByTagName('li'), j;
@@ -1269,12 +1273,28 @@
                     else if (ap.indexOf('plugin:') === 0) self.togglePluginSub(true);
                     // ③ 选中态最后加，避免被上面的类名重置覆盖
                     this.className += ' active';
+                    remember(ap);
                     self.page(ap);
                     setSide(false);   // 移动端点完菜单收起抽屉
                 };
             }
-            /* 默认进入聊天室管理（用户管理已剥离为插件） */
-            this.page('rooms');
+            /* 恢复上次所在页面（启停插件刷新后不跳回默认页）；无记录时进聊天室管理 */
+            var lastPage = 'rooms';
+            try { lastPage = sessionStorage.getItem('owAdminPage') || 'rooms'; } catch (e) {}
+            try { if (sessionStorage.getItem('owAdminPluginsOpen') === '1') self.togglePluginSub(true); } catch (e) {}
+            // 摘掉服务端预置的默认选中态（rooms），避免双高亮
+            var all0 = menu.getElementsByTagName('li'), k0;
+            for (k0 = 0; k0 < all0.length; k0++) {
+                all0[k0].className = trimCls(all0[k0].className.replace(/\bactive\b/g, ''));
+            }
+            if (menu.querySelector('li[data-apage="' + lastPage + '"]')) {
+                if (lastPage.indexOf('plugin:') === 0) self.togglePluginSub(true);
+                var li0 = menu.querySelector('li[data-apage="' + lastPage + '"]');
+                li0.className += ' active';
+                this.page(lastPage);
+            } else {
+                this.page('rooms');
+            }
         },
 
         /**
@@ -1296,6 +1316,11 @@
                 el.className = trimCls((el.className.replace(/\bow-sub-open\b/g, ''))
                     + (willOpen ? ' ow-sub-open' : ''));
             }
+            // 记录展开状态：刷新后恢复
+            try {
+                if (willOpen) sessionStorage.setItem('owAdminPluginsOpen', '1');
+                else sessionStorage.removeItem('owAdminPluginsOpen');
+            } catch (e) {}
         },
 
         page: function (name) {
