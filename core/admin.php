@@ -33,6 +33,8 @@ class Admin
                 $role = $p('role');
                 if (!in_array($role, ['member', 'vip', 'admin'], true)) Api::json(['ok' => false, 'msg' => '非法角色']);
                 DB::run('UPDATE users SET role=?, title=? WHERE id=?', [$role, $p('title'), $id]);
+                // 历史消息里的角色/称号同为发送时快照，需一并刷新（v1.0.39）
+                DB::run('UPDATE messages SET role=?, title=? WHERE user_id=?', [$role, $p('title'), $id]);
                 // 积分：允许后台单独调整（可为负数，但不接受非数字）
                 if (isset($_POST['points']) && $_POST['points'] !== '') {
                     $pts = (int)$_POST['points'];

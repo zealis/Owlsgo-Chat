@@ -214,12 +214,20 @@ class Auth
     /**
      * 资料更新：昵称 / 头像。
      * 昵称已是账号显示名，规则与注册保持一致（见 checkNickname），避免注册能填、改资料填不了的割裂。
+     *
+     * 历史同步：messages 表的 nickname / avatar / to_nickname 是发送时的快照，
+     * 改资料后必须一并刷新，否则历史消息仍显示旧昵称旧头像（v1.0.39 修复）。
+     * online 在线表无需处理：每次心跳都用实时 users 数据重写。
      */
     public static function updateProfile(array $user, string $nickname, string $avatar): array
     {
         [$ok, $nick] = self::checkNickname($nickname);
         if (!$ok) return [false, $nick];
-        DB::run('UPDATE users SET nickname=?, avatar=? WHERE id=?', [$nick, $avatar, $user['id']]);
+        $uid = (int)$user['id'];
+        DB::run('UPDATE users SET nickname=?, avatar=? WHERE id=?', [$nick, $avatar, $uid]);
+        // 同步本人发出的历史消息（含私信里的「对我」显示名）
+        DB::run('UPDATE messages SET nickname=?, avatar=? WHERE user_id=?', [$nick, $avatar, $uid]);
+        DB::run('UPDATE messages SET to_nickname=? WHERE to_user_id=?', [$nick, $uid]);
         return [true, '资料已更新'];
     }
 
