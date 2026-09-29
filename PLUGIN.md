@@ -1,0 +1,139 @@
+# 插件开发规范（PLUGIN.md）
+
+本文件是 AI 新建、修改和审查 Owlsgo-Chat 插件时的规范。开始工作前先读完本文件，再检查核心文件（`core/plugin.php`）和功能最接近的现有插件（`plugins/user-manager/`）；实现时以当前代码为准，不臆造接口。
+
+> 与其他系统的插件体系无关：本文档只描述 Owlsgo-Chat 自身的插件机制，全部内容以 `core/plugin.php` 与现有插件的实际代码为准。
+
+## 执行顺序
+
+1. 明确插件 ID、功能边界、页面入口、权限要求与计划任务。
+2. 优先复用核心函数与 `Plugin::*` 既有 API；插件机制能完成时，不修改 `index.php` 或 `core/` 下的核心文件。
+3. 插件只写在 `plugins/<插件ID>/` 目录内，结构与命名遵守本文「基础约束」。
+4. 新建或修改插件后：PHP 语法检查（`php -l`）、JS 语法检查（`node --check`）、在「插件管理」里启用后真实走一遍功能，并按文末清单复核。
+5. 修改插件必须递增 `plugin.json` 的 `version`（至少补丁位）；`description` 与当前能力保持一致。
+
+## 基础约束
+
+- 兼容 PHP 8.1+ 与 SQLite / MySQL / PostgreSQL 三驱动，不引入框架、Composer 包或构建依赖；跨库差异处理遵循项目既有写法（见 `core/db.php` 的 `DB::driver()` 分支与 `DB::rebuildTableWithout()` 等助手）。
+- 插件目录与插件 ID 相同，只允许小写字母、数字、下划线或短横线。
+- 插件自有的 PHP 函数、JS 全局对象、CSS 类、文件名必须以插件 ID 相关的名称开头，避免与核心或其他插件冲突。例：插件 `user-manager` 的 JS 全局对象是 `OwUM`（自有命名），API 路由前缀 `plugin_user_manager_`。
+- 插件路由的 action 名**必须**以 `plugin_<插件ID下划线形式>_` 开头（如 `plugin_user_manager_search`）。`index.php` 对未知 action 会调用 `Plugin::dispatch()` 兜底，带前缀可避免与核心 action 或其他插件冲突。
+- `main.php` 开头必须包含 `if (!defined('OWLSGO_VERSION')) exit;`，禁止直接 HTTP 访问。
+- `plugin.json` 声明 `name`（显示名）、`version`、`description`（面向用户的简短说明）、`author`。
+- 插件数据库操作一律使用核心 `DB` 类（`DB::run/one/all/val/insert/upsert`），禁止自行 new PDO；表名建议带 `plugin_<id>_` 前缀。建表/改表如需跨驱动兼容，参考 `core/db.php` 既有实现，不要照搬单驱动 SQL。
+
+## 目录结构与最小插件
+
+```
+plugins/<插件ID>/
+├── plugin.json     # {"name":"显示名","version":"1.0.0","description":"...","author":"..."}
+├── main.php        # 插件逻辑：注册后台页面、API 路由、钩子、资源
+└── admin.js        # （可选）后台交互脚本，经 Plugin::asset() 注册
+```
+
+最小示例（页脚追加内容）：
+
+```php
+<?php
+if (!defined('OWLSGO_VERSION')) exit;
+
+Plugin::on('page.footer', function () {
+    echo '<p style="text-align:center">Hello</p>';
+});
+```
+
+## 加载与启停
+
+- 启用状态保存在 `plugins` 表（`enabled` 字段）。**只有启用的插件**，其 `main.php` 才会在每个请求中被 `Plugin::init()` 加载；未启用插件完全不执行。
+- 安装方式两种：后台「插件管理」上传 zip（包内须有 `<插件ID>/plugin.json`），或直接把插件目录放进 `plugins/`。
+- 安装/上传后默认停用，需在「插件管理」列表中启用。
+- 插件启停后整页刷新，侧栏子菜单与可用页面随之更新；**未启用的插件**在侧栏显示灰色「`<ID>（未启用）`」子项，点进去是停用说明 + 「启用插件」一键按钮。
+- `plugins/` 目录已加入 `.gitignore`，不随 Git 仓库分发；插件随部署环境安装维护。
+- 启停与安装会写安全日志（`Sec::log`）。
+
+## 后台页面（Plugin::adminPage）
+
+```php
+Plugin::adminPage('user-manager', '用户管理', function () {
+    return '<h2>用户管理</h2> ... ';   // return 或 echo 均可，见下
+});
+```
+
+- 注册后，后台侧栏「插件管理」分类下出现该插件的子页（一插件一页）；分类标题本身仍指向插件列表页。
+- 页面 HTML 通过 `admin_plugin_page` 接口取回并注入 `#owAdminMain`；回调 **echo 输出**与 **return 字符串**两种写法都支持。
+- 页面 HTML 是经 `innerHTML` 注入的，**内联 `<script>` 不会执行**——交互函数必须写在插件自己的 JS 文件里（见下）。
+
+## API 路由（Plugin::route）
+
+```php
+Plugin::route('plugin_user_manager_search', function (array $ctx) {
+    $actor = $ctx['actor'];   // 当前访问者摘要（kind/id/nickname/role...）
+    $post  = $ctx['post'];    // $_POST
+    Api::json(['ok' => true, 'data' => []]);
+});
+```
+
+- 路由在前台 AJAX 分发的最后兜底触发：核心 action 与 `admin_*` 后台动作之外，未命中的 action 会进入 `Plugin::dispatch()`。
+- ctx 固定为 `['actor' => 当前访问者, 'post' => $_POST]`。
+- **权限自查是插件路由的硬性要求**：核心不会替插件校验权限。需要管理员的接口，第一步必须做：
+
+```php
+if (($ctx['actor']['role'] ?? '') !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
+```
+
+- 输出统一用 `Api::json()`；禁止 `echo` 混入 JSON 响应。
+
+## 静态资源（Plugin::asset）
+
+```php
+Plugin::asset('js', 'user-manager/admin.js');   // 相对插件目录；css 同理
+```
+
+- 合并输出地址：`?action=assets&type=js` / `?action=assets&type=css`（免签名 GET，纯静态无写操作）。
+- **后台页面**已自动引入 `<script src="?action=assets&type=js">`：需要后台交互的插件在此声明 JS，交互对象挂为全局（如 `window.OwUM`），页面 HTML 里用 `onclick="OwUM.search()"` 调用。
+- 脚本可复用主程序暴露的全局：`OwApi`（AJAX + 自动签名）、`esc`、`toast`、`fmtUid`、`opts`、`ROLE_CN`、`OwAdmin`、`OwChat`。不要重复实现这些能力。
+
+## 钩子（Plugin::on / fire）
+
+当前核心提供的钩子（以源码 `Plugin::fire()` 调用点为准，不臆造）：
+
+| 钩子 | 触发时机 | 参数 |
+| --- | --- | --- |
+| `message.before_send` | 消息入库前（`Chat::send` 内） | `[&$content, $actor, $roomId]` —— `$content` 按引用传入，可改写（敏感词过滤之后、入库之前） |
+| `message.after_send` | 消息入库后 | `[$msgId, $actor, $roomId]` |
+| `page.head` | 各页面 `<head>` 输出时（`pageHead()` 内） | 无参，可直接 echo |
+| `page.footer` | 聊天页 / 后台页 body 输出末尾 | 无参，可直接 echo |
+| `cron.minute` | 统一计划任务（每分钟至多一次） | 无参 |
+
+计划任务由长轮询驱动（`Plugin::cronTick()`），也可用系统计划任务调 `?action=cron` 强制触发；回调内自行判断是否到达执行周期，保证可重复运行。
+
+## 前台页面输出
+
+- 钩子回调里的 `echo` 直接进入页面输出；输出前所有用户数据必须经 `Sec::e()` 或前端 `esc()` 转义。
+- 不修改核心文件即可扩展页面；确需新的注入点时，先在核心 `pageHead()` / 页面渲染处增加 `Plugin::fire()`，再讨论合入，不要在插件里用输出缓冲 hack。
+
+## 安全要点
+
+- 插件路由第一步做权限自查（见上）；涉及写操作的只接受 POST + 核心签名（前端经 `OwApi` 自动携带，无需额外处理）。
+- SQL 一律参数化（`DB::run/one/all/val` 的 `?` 占位），禁止拼接用户输入。
+- 文件路径白名单校验，防目录穿越；对外请求设置超时。
+- 错误信息简短，不暴露凭据与 SQL。
+- 用户消息等展示数据的历史快照语义注意：`messages` 表的 `nickname/avatar/role/title/to_nickname` 是发送时快照，涉及用户资料变更的插件需同步刷新对应快照（参考 `Auth::updateProfile` 的做法）。
+
+## 交付检查
+
+- `php -l plugins/<ID>/main.php` 与 `node --check` 全部通过。
+- 插件在「插件管理」中启用后，后台页面、API 路由、钩子输出真实走通一遍；停用后功能整体下线且不报错。
+- 路由 action 带正确前缀；需要管理员的接口有权限自查；SQL 全部参数化。
+- `plugin.json` 的 `version` 已按改动递增，`description` 与能力一致。
+- 插件文件命名、JS 全局对象、路由前缀均带插件 ID，无与核心或其他插件冲突的通用名。
+- 已核对 `plugins/` 在 `.gitignore` 内，插件不进入 Git 仓库。
+
+## 最小提示（给 AI）
+
+```text
+请先阅读根目录 PLUGIN.md 与 core/plugin.php，并参考现有插件 plugins/user-manager/。
+插件放在 plugins/<插件ID>/，使用 Plugin::adminPage / route / asset / on 注册能力。
+需求：<清楚描述功能、入口、权限>
+完成后执行 php -l 与 node --check，并在后台启用插件做真实验证。
+```
