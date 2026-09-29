@@ -565,7 +565,12 @@ function renderAuth(string $mode): void
        . '<div class="ow-auth-logo"><img src="assets/img/logo.svg" alt="Owlsgo-Chat"><h1>' . $titles[$mode] . '</h1>'
        . '<p>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</p></div>';
     if ($mode === 'login') {
+        // 从注册页跳转而来：提示注册成功、需手动登录（注册不自动登录）
+        $regTip = isset($_GET['registered'])
+            ? '<p style="color:#52C41A;font-size:13px;margin:0 0 10px">注册成功，请使用注册邮箱或用户 ID 登录。</p>'
+            : '';
         echo '<form class="ow-auth-form" data-mode="login">'
+           . $regTip
            . Sec::signField($_SESSION['anon_key'], 'login')
            . '<div class="ow-form-item"><label>邮箱或用户 ID</label><input class="ow-input" name="identity" required autocomplete="username" placeholder="注册邮箱或用户 ID"></div>'
            . '<div class="ow-form-item"><label>密码</label><input class="ow-input" type="password" name="password" required autocomplete="current-password"></div>'

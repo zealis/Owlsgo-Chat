@@ -303,7 +303,12 @@
                 OwApi.post(mode === 'login' ? 'login' : mode, data, function (r) {
                     if (r.ok) {
                         msg.innerHTML = '<span style="color:#52C41A">' + esc(r.msg) + '</span>';
-                        setTimeout(function () { location.href = mode === 'reset' ? '?page=login' : '?page=chat'; }, 600);
+                        // 注册成功不进入聊天（后端注册本就不建会话）：跳登录页由用户手动登录
+                        setTimeout(function () {
+                            location.href = mode === 'login' ? '?page=chat'
+                                : mode === 'reset' ? '?page=login'
+                                : '?page=login&registered=1';
+                        }, 800);
                     } else {
                         msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>';
                         if (r.captcha && $('owCaptchaRow')) {
