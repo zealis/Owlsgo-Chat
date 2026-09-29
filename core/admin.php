@@ -80,8 +80,20 @@ class Admin
                     $sets = implode(',', array_map(fn($c) => "$c=?", array_keys($data)));
                     DB::run("UPDATE rooms SET $sets WHERE id=?", [...array_values($data), $id]);
                 } else {
-                    $slug = 'room' . time();
-                    DB::insert('rooms', $data + ['slug' => $slug, 'created_at' => time()]);
+                    // 新建：随机位段 ID（同用户 ID 规则），并发撞主键重新分配重试
+                    $attempts = 0;
+                    while (true) {
+                        try {
+                            DB::insert('rooms', $data + [
+                                'id' => Auth::nextId('rooms'),
+                                'slug' => 'room' . time(),
+                                'created_at' => time(),
+                            ]);
+                            break;
+                        } catch (Throwable $e) {
+                            if (++$attempts >= 5) throw $e;
+                        }
+                    }
                 }
                 Sec::log('admin_room_save', $actor['nickname'], ['id' => $id]);
                 Api::json(['ok' => true, 'msg' => '已保存']);

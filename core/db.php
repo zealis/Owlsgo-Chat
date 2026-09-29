@@ -375,7 +375,9 @@ class DB
             if (self::setting($k) === null) self::setSetting($k, $v);
         }
         if (!self::val('SELECT COUNT(*) FROM rooms')) {
+            // 默认房间固定占用 001（v1.0.51 起新房间 ID 为随机 3 位起步）
             DB::insert('rooms', [
+                'id' => 1,
                 'name' => '综合闲聊', 'slug' => 'public', 'type' => 'public',
                 'min_role' => 'guest', 'description' => '默认公共聊天室',
                 'status' => 1, 'created_at' => time(),

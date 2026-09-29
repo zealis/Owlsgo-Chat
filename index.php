@@ -374,22 +374,30 @@ if ($action !== '') {
                 }
                 $charged = $cost;
             }
-            try {
-                $id = DB::insert('rooms', [
-                    'name' => $name,
-                    'slug' => 'g' . time() . bin2hex(random_bytes(3)),
-                    'type' => $type,
-                    'password' => $type === 'password' ? $p('password') : null,
-                    'min_role' => $minRole,
-                    'owner_id' => $uid,
-                    'description' => mb_substr($p('description'), 0, 200),
-                    'status' => 1,
-                    'created_at' => time(),
-                ]);
-            } catch (Throwable $e) {
-                // 房间入库失败必须退还已扣积分，否则用户白白损失
-                if ($charged > 0) DB::run('UPDATE users SET points=points+? WHERE id=?', [$charged, $uid]);
-                throw $e;
+            // 随机位段 ID（同用户 ID 规则）：插入失败（含并发撞主键）重新分配重试，
+            // 最多 5 次；仍失败则退还已扣积分后抛出，不让用户白扣分
+            $roomAttempts = 0;
+            while (true) {
+                try {
+                    $id = DB::insert('rooms', [
+                        'id' => Auth::nextId('rooms'),
+                        'name' => $name,
+                        'slug' => 'g' . time() . bin2hex(random_bytes(3)),
+                        'type' => $type,
+                        'password' => $type === 'password' ? $p('password') : null,
+                        'min_role' => $minRole,
+                        'owner_id' => $uid,
+                        'description' => mb_substr($p('description'), 0, 200),
+                        'status' => 1,
+                        'created_at' => time(),
+                    ]);
+                    break;
+                } catch (Throwable $e) {
+                    if (++$roomAttempts >= 5) {
+                        if ($charged > 0) DB::run('UPDATE users SET points=points+? WHERE id=?', [$charged, $uid]);
+                        throw $e;
+                    }
+                }
             }
             Sec::log('room_create', $actor['nickname'], ['id' => $id, 'name' => $name, 'cost' => $charged]);
             // 返回实际扣除额（管理员免费时为 0），前端提示才与真实扣费一致
