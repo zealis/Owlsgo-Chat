@@ -25,8 +25,10 @@ class Admin
             case 'admin_ban_add':
                 $type = $p('type');
                 if (!in_array($type, ['user', 'guest', 'ip'], true)) Api::json(['ok' => false, 'msg' => '非法类型']);
+                $target = trim($p('target'));
+                if ($target === '') Api::json(['ok' => false, 'msg' => '请填写禁言目标']);
                 DB::insert('bans', [
-                    'type' => $type, 'target' => $p('target'),
+                    'type' => $type, 'target' => $target,
                     'room_id' => (int)$p('room_id', '0'), 'reason' => $p('reason'),
                     'expires_at' => (int)$p('hours', '0') > 0 ? time() + (int)$p('hours') * 3600 : null,
                     'created_by' => $actor['nickname'], 'created_at' => time(),

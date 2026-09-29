@@ -527,7 +527,11 @@
             $('owModalMask').onclick = function (e) { if (e.target === this) self.closeModal(); };
             $('owImgViewer').onclick = function () { this.style.display = 'none'; };
             var lo = $('owBtnLogout');
-            if (lo) lo.onclick = function () { OwApi.post('logout', {}, function () { location.href = '?page=login'; }); };
+            if (lo) lo.onclick = function () {
+                self.confirmModal('确定退出登录吗？', function () {
+                    OwApi.post('logout', {}, function () { location.href = '?page=login'; });
+                });
+            };
             var st = $('owBtnSettings');
             if (st) st.onclick = function () { self.openSettings(); };
         },
@@ -1240,6 +1244,29 @@
        OwAdmin：管理后台
        ========================================================================== */
     var OwAdmin = {
+        /**
+         * 通用确认弹窗（与前台 confirmModal 同一样式，v1.0.50）。
+         * 所有删除 / 卸载 / 禁用等危险操作统一调用，不再使用原生 confirm。
+         */
+        confirm: function (text, onOk) {
+            var mask = document.createElement('div');
+            mask.className = 'ow-modal-mask';
+            mask.style.display = 'flex';
+            mask.innerHTML = '<div class="ow-modal" style="width:340px;max-width:92%">'
+                + '<button class="ow-modal-close">✕</button>'
+                + '<h3>确认操作</h3>'
+                + '<p class="ow-modal-desc">' + esc(text).replace(/\n/g, '<br>') + '</p>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost">取消</button>'
+                + '<button class="ow-btn ow-btn-danger">确定</button></div></div>';
+            document.body.appendChild(mask);
+            var close = function () { if (mask.parentNode) document.body.removeChild(mask); };
+            mask.querySelector('.ow-modal-close').onclick = close;
+            var bs = mask.querySelectorAll('.ow-modal-actions .ow-btn');
+            bs[0].onclick = close;
+            bs[1].onclick = function () { close(); if (onOk) onOk(); };
+            mask.onclick = function (e) { if (e.target === mask) close(); };
+        },
         init: function (opt) {
             OwApi.key = opt.key;
             OwApi.setServerTime(opt.ts);
@@ -1527,8 +1554,9 @@
             }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('rooms'); });
         },
         roomDel: function (id) {
-            if (!w.confirm('确定删除该聊天室？消息将保留但不可访问。')) return;
-            OwApi.post('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
+            OwAdmin.confirm('确定删除该聊天室？消息将保留但不可访问。', function () {
+                OwApi.post('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
+            });
         },
 
         /* ---------- 其他动作 ---------- */
@@ -1543,7 +1571,11 @@
             OwApi.post('admin_word_add', { word: $('owWWord').value, replacement: $('owWRep').value }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('words'); });
         },
         wordToggle: function (id, en) { OwApi.post('admin_word_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('words'); }); },
-        wordDel: function (id) { OwApi.post('admin_word_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('words'); }); },
+        wordDel: function (id) {
+            OwAdmin.confirm('确定删除该敏感词？', function () {
+                OwApi.post('admin_word_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('words'); });
+            });
+        },
         annAdd: function () {
             OwApi.post('admin_ann_add', {
                 content: $('owAnContent').value, room_id: $('owAnRoom').value,
@@ -1551,7 +1583,11 @@
             }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('anns'); });
         },
         annToggle: function (id, en) { OwApi.post('admin_ann_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('anns'); }); },
-        annDel: function (id) { OwApi.post('admin_ann_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('anns'); }); },
+        annDel: function (id) {
+            OwAdmin.confirm('确定删除该公告？', function () {
+                OwApi.post('admin_ann_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('anns'); });
+            });
+        },
         pluginToggle: function (name, en) {
             OwApi.post('admin_plugin_toggle', { name: name, enabled: en }, function (r) {
                 toast(r.msg);
@@ -1561,10 +1597,11 @@
         },
         /* 卸载：删除插件目录，二次确认后执行 */
         pluginUninstall: function (name) {
-            if (!window.confirm('确定卸载插件「' + name + '」吗？\n将停用并删除 plugins/' + name + ' 目录，不可恢复！')) return;
-            OwApi.post('admin_plugin_uninstall', { name: name }, function (r) {
-                toast(r.msg);
-                setTimeout(function () { location.reload(); }, 500);
+            OwAdmin.confirm('确定卸载插件「' + name + '」吗？\n将停用并删除 plugins/' + name + ' 目录，不可恢复！', function () {
+                OwApi.post('admin_plugin_uninstall', { name: name }, function (r) {
+                    toast(r.msg);
+                    setTimeout(function () { location.reload(); }, 500);
+                });
             });
         },
         pluginInstall: function () {
