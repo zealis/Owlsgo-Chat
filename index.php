@@ -165,6 +165,16 @@ if ($action !== '') {
         Api::json(['ok' => true]);
     }
 
+    // 插件静态资源合并输出（GET 引用，无敏感数据、无写操作）：与 captcha 同样免签名放行，
+    // 否则 <script src="?action=assets&type=js"> 无法在页面加载
+    if ($action === 'assets') {
+        $type = ($_GET['type'] ?? '') === 'js' ? 'js' : 'css';
+        header($type === 'js' ? 'Content-Type: text/javascript; charset=utf-8' : 'Content-Type: text/css; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo Plugin::renderAssets($type);
+        exit;
+    }
+
     // 签名密钥：登录用户/游客用其 client_key，匿名用会话 key（并兼容 cookie 备份 key）
     $signKeys = array_values(array_unique(array_filter([
         (string)($actor['key'] ?? ''),
@@ -414,13 +424,7 @@ if ($action !== '') {
             if ($actor['role'] !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
             Api::json(['ok' => true, 'loc' => Chat::ipLocation($p('ip'))]);
 
-        // ---------- 合并资源（插件 css/js） ----------
-        case 'assets':
-            $type = $p('type') === 'js' ? 'js' : 'css';
-            header($type === 'js' ? 'Content-Type: text/javascript; charset=utf-8' : 'Content-Type: text/css; charset=utf-8');
-            header('Cache-Control: no-store');
-            echo Plugin::renderAssets($type);
-            exit;
+        // ---------- 插件静态资源（已在签名门禁前放行，此处保留占位） ----------
     }
 
     // 管理后台动作
@@ -736,8 +740,7 @@ function renderAdmin(array $actor): void
        . '<aside class="ow-admin-side" id="owAdminSide">'
        . '<div class="ow-admin-brand">ADMIN CONSOLE<br><strong>管理后台</strong></div>'
        . '<ul class="ow-admin-menu" id="owAdminMenu">'
-       . '<li data-apage="users" class="active"><span class="ow-admin-ico">' . ow_icon('user', 16) . '</span>用户管理</li>'
-       . '<li data-apage="rooms"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>聊天室管理</li>'
+       . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>聊天室管理</li>'
        . '<li data-apage="bans"><span class="ow-admin-ico">' . ow_icon('mute', 16) . '</span>禁言管理</li>'
        . '<li data-apage="words"><span class="ow-admin-ico">' . ow_icon('ban', 16) . '</span>敏感词过滤</li>'
        . '<li data-apage="anns"><span class="ow-admin-ico">' . ow_icon('mega', 16) . '</span>系统公告</li>'
@@ -754,6 +757,8 @@ function renderAdmin(array $actor): void
        . '<div class="ow-admin-mask" id="owAdminMask" style="display:none"></div>'
        . '<div class="ow-toast" id="owToast" style="display:none"></div>'
        . '<script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
+       // 插件注册的 JS 资源合并输出（用户管理等插件的后台交互脚本）
+       . '<script src="?action=assets&type=js"></script>'
        . '<script>OwAdmin.init(' . json_encode(['key' => $actor['key'], 'ts' => time()]) . ');</script>'
        . '</body></html>';
 }

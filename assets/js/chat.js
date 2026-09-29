@@ -1273,7 +1273,8 @@
                     setSide(false);   // 移动端点完菜单收起抽屉
                 };
             }
-            this.page('users');
+            /* 默认进入聊天室管理（用户管理已剥离为插件） */
+            this.page('rooms');
         },
 
         /**
@@ -1310,13 +1311,7 @@
         },
 
         pages: {
-            users: function (main) {
-                main.innerHTML = '<h2>用户管理</h2><p class="ow-admin-desc">搜索用户，管理身份与头衔。</p>'
-                    + '<div class="ow-card"><h3 style="margin-bottom:10px">用户搜索</h3>'
-                    + '<div class="ow-form-row"><div class="ow-form-item" style="flex:1"><input class="ow-input" id="owAQ" placeholder="输入用户 ID（纯数字）"></div>'
-                    + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.searchUsers()">搜索用户</button></div></div>'
-                    + '<div id="owAResult"></div>';
-            },
+            /* 用户管理自 v1.0.44 起剥离为插件 user-manager，页面与交互见 plugins/user-manager/ */
             rooms: function (main) {
                 OwApi.post('admin_rooms', {}, function (r) {
                     var h = '<h2>聊天室管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除聊天室，设置访问权限与房主。</p><div class="ow-card">'
@@ -1466,41 +1461,7 @@
             }
         },
 
-        /* ---------- 用户管理动作 ---------- */
-        searchUsers: function () {
-            OwApi.post('admin_users', { q: $('owAQ').value }, function (r) {
-                // 搜索仅限纯数字用户 ID，非法输入服务端返回 {ok:false} 且不带 data，
-                // 必须先拦截——直接读 r.data.length 会抛错且用户收不到任何提示
-                if (!r.ok) { toast(r.msg); $('owAResult').innerHTML = ''; return; }
-                var h = '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>昵称</th><th>邮箱</th><th>角色</th><th>称号</th><th>积分</th><th>状态</th><th>操作</th></tr>';
-                for (var i = 0; i < r.data.length; i++) {
-                    var d = r.data[i];
-                    h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + esc(d.nickname) + '</td><td>' + esc(d.email) + '</td>'
-                       + '<td><select class="ow-input" id="owUR' + d.id + '">'
-                       + opts(ROLE_CN, ['member', 'vip', 'admin'], d.role)
-                       + '</select></td>'
-                       + '<td><input class="ow-input" id="owUT' + d.id + '" value="' + esc(d.title || '') + '"></td>'
-                       + '<td><input class="ow-input" id="owUP' + d.id + '" value="' + esc(d.points || 0) + '" style="width:88px"></td>'
-                       + '<td>' + (d.status == 1 ? '正常' : '禁用') + '</td>'
-                       + '<td><a href="javascript:;" onclick="OwAdmin.userSave(' + d.id + ')">保存</a> '
-                       + '<a href="javascript:;" onclick="OwAdmin.userStatus(' + d.id + ',' + (d.status == 1 ? 0 : 1) + ')">' + (d.status == 1 ? '禁用' : '启用') + '</a></td></tr>';
-                }
-                if (!r.data.length) {
-                    if (r.hint) toast(r.hint);
-                    h += '<tr><td colspan="8" style="color:#999">无匹配用户</td></tr>';
-                }
-                $('owAResult').innerHTML = h + '</table></div>';
-            });
-        },
-        userSave: function (id) {
-            OwApi.post('admin_user_set', {
-                id: id, role: $('owUR' + id).value,
-                title: $('owUT' + id).value, points: $('owUP' + id).value
-            }, function (r) { toast(r.msg); });
-        },
-        userStatus: function (id, s) {
-            OwApi.post('admin_user_status', { id: id, status: s }, function (r) { toast(r.msg); OwAdmin.searchUsers(); });
-        },
+        /* ---------- 用户管理动作已随 v1.0.44 剥离为插件（OwUM，plugins/user-manager/） ---------- */
 
         /* ---------- 房间动作 ---------- */
         roomForm: function (d) {
@@ -1592,4 +1553,7 @@
     w.OwAuth = OwAuth;
     w.OwChat = OwChat;
     w.OwAdmin = OwAdmin;
+    w.OwApi = OwApi;   // 暴露给插件脚本（如用户管理插件 OwUM）使用
+    // 通用助手同样暴露：插件脚本与主程序共用渲染与提示
+    w.esc = esc; w.toast = toast; w.fmtUid = fmtUid; w.opts = opts; w.ROLE_CN = ROLE_CN;
 })(window);

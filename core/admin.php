@@ -18,35 +18,8 @@ class Admin
 
         switch ($action) {
             // ---------- 用户管理 ----------
-            case 'admin_users':
-                // v1.0.33 起用户搜索仅支持数字用户 ID 精确查询：
-                // 用户名已取消，昵称允许重名，昵称/邮箱均不可作为区分用户的依据。
-                $q = $p('q');
-                if ($q === '') Api::json(['ok' => true, 'data' => [], 'hint' => '请输入用户 ID']);
-                if (!preg_match('/^\d{1,19}$/', $q)) Api::json(['ok' => false, 'msg' => '用户搜索仅支持数字用户 ID']);
-                $rows = DB::all("SELECT id,nickname,email,role,title,points,status,created_at,last_login FROM users
-                    WHERE id=? LIMIT 1", [(int)$q]);
-                Api::json(['ok' => true, 'data' => $rows]);
-
-            case 'admin_user_set':
-                $id = (int)$p('id');
-                $role = $p('role');
-                if (!in_array($role, ['member', 'vip', 'admin'], true)) Api::json(['ok' => false, 'msg' => '非法角色']);
-                DB::run('UPDATE users SET role=?, title=? WHERE id=?', [$role, $p('title'), $id]);
-                // 历史消息里的角色/称号同为发送时快照，需一并刷新（v1.0.39）
-                DB::run('UPDATE messages SET role=?, title=? WHERE user_id=?', [$role, $p('title'), $id]);
-                // 积分：允许后台单独调整（可为负数，但不接受非数字）
-                if (isset($_POST['points']) && $_POST['points'] !== '') {
-                    $pts = (int)$_POST['points'];
-                    DB::run('UPDATE users SET points=? WHERE id=?', [$pts, $id]);
-                    Sec::log('admin_user_points', $actor['nickname'], ['id' => $id, 'points' => $pts]);
-                }
-                Sec::log('admin_user_set', $actor['nickname'], ['id' => $id, 'role' => $role]);
-                Api::json(['ok' => true, 'msg' => '已更新']);
-
-            case 'admin_user_status':
-                DB::run('UPDATE users SET status=? WHERE id=?', [(int)$p('status'), (int)$p('id')]);
-                Api::json(['ok' => true, 'msg' => '已更新']);
+            // 用户管理自 v1.0.44 起剥离为插件 user-manager（plugins/user-manager/），
+            // 原搜索/角色/积分/禁用接口随迁：plugin_user_manager_search/save/status
 
             // ---------- 禁言管理 ----------
             case 'admin_ban_add':
@@ -183,9 +156,12 @@ class Admin
                 $slug = $p('slug');
                 $pages = Plugin::adminPages();
                 if (!isset($pages[$slug])) Api::json(['ok' => false, 'msg' => '页面不存在'], 404);
+                // 兼容两种插件页面写法：fn 内 echo 输出，或 fn 返回 HTML 字符串（v1.0.44）
                 ob_start();
-                call_user_func($pages[$slug]['fn']);
-                Api::json(['ok' => true, 'html' => ob_get_clean()]);
+                $ret = call_user_func($pages[$slug]['fn']);
+                $html = ob_get_clean();
+                if ($html === '' && is_string($ret) && $ret !== '') $html = $ret;
+                Api::json(['ok' => true, 'html' => $html]);
 
             default:
                 Api::json(['ok' => false, 'msg' => '未知操作'], 404);
