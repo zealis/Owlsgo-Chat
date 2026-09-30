@@ -989,12 +989,12 @@
             if (!items.length) return;
 
             this._ctxItems = items;
+            var menu = $('owCtxMenu');
             menu._from = 'msg';
             var html = '', i;
             for (i = 0; i < items.length; i++) {
                 html += '<a href="javascript:;" data-i="' + i + '">' + esc(items[i].t) + '</a>';
             }
-            var menu = $('owCtxMenu');
             menu.innerHTML = html;
             menu.style.display = 'block';
             // 视口边界：菜单放不下时往回挪
@@ -1251,7 +1251,7 @@
                 // 头像置顶：点击当前头像即触发上传（不另设上传按钮）
                 + '<div class="ow-set-avatar">'
                 + '<span id="owSetAvatarPreview" class="ow-set-avatar-btn" title="点击更换头像" onclick="document.getElementById(\'owSetAvatarFile\').click()">'
-                + avatarHtml(me.avatar, me.nickname, 'md', me.role) + '</span>'
+                + avatarHtml(me.avatar, me.nickname, true, me.role) + '</span>'
                 + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none">'
                 + '</div>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
@@ -1265,7 +1265,7 @@
                 OwApi.upload('upload', this.files[0], { kind: 'avatar' }, function (r) {
                     if (r.ok) {
                         self.cfg.me.avatar = r.url;
-                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname, 'md', self.cfg.me.role);
+                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname, true, self.cfg.me.role);
                         toast('头像已上传，点击保存生效');
                     } else toast(r.msg);
                 });
