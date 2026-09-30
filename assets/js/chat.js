@@ -1256,21 +1256,126 @@
                 + '</div>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
                 + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
-                + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id ? fmtUid(me.id) : '-') + '</div>'
                 + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.saveSettings()">保存</button>'
             );
             var self = this;
             $('owSetAvatarFile').onchange = function () {
                 if (!this.files || !this.files[0]) return;
-                OwApi.upload('upload', this.files[0], { kind: 'avatar' }, function (r) {
-                    if (r.ok) {
-                        self.cfg.me.avatar = r.url;
-                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
-                        toast('头像已上传，点击保存生效');
-                    } else toast(r.msg);
-                });
+                // 选完图不直接上传：先进入裁剪弹窗，由滑块手动缩放后再导出
+                self.avatarCrop(this.files[0]);
                 this.value = '';
             };
+        },
+
+        /* ---------- 头像裁剪：滑块手动缩放 + 圆形取景 ---------- */
+
+        /** 裁剪目标边长（与服务端 Upload::AVATAR_SIZE 保持一致） */
+        avatarCropSize: 100,
+
+        /**
+         * 打开裁剪弹窗：圆形取景框内即最终头像，拖动滑块缩放图片。
+         * @param File file 用户选择的原始图片
+         */
+        avatarCrop: function (file) {
+            var self = this;
+            if (!w.FileReader || !document.createElement('canvas').getContext) {
+                // 老浏览器无裁剪能力：退回直接上传，由服务端兜底裁方形
+                self.avatarUpload(file);
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+                self.openModal(
+                    '<h3>调整头像</h3>'
+                    + '<p class="ow-modal-desc">拖动滑块缩放图片，圆形区域内即为最终头像。</p>'
+                    + '<div class="ow-crop-wrap"><div class="ow-crop-stage"><img id="owCropImg" src="' + esc(String(ev.target.result)) + '" alt=""></div></div>'
+                    + '<div class="ow-crop-ctrl"><label>缩放</label>'
+                    + '<input type="range" id="owCropScale" min="50" max="300" step="5" value="100">'
+                    + '<span id="owCropVal">100%</span></div>'
+                    + '<div class="ow-modal-actions">'
+                    + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.avatarCropCancel()">取消</button>'
+                    + '<button class="ow-btn ow-btn-primary" onclick="OwChat.avatarCropSave()">确定</button></div>'
+                );
+                var img = $('owCropImg'), scale = $('owCropScale'), val = $('owCropVal');
+                var apply = function () {
+                    img.style.transform = 'scale(' + (parseInt(scale.value, 10) / 100) + ')';
+                    val.textContent = scale.value + '%';
+                };
+                // oninput 不支持的老浏览器退回 onchange
+                if ('oninput' in scale) scale.oninput = apply; else scale.onchange = apply;
+                apply();
+            };
+            reader.readAsDataURL(file);
+        },
+
+        /** 取消裁剪：回到个人设置弹窗 */
+        avatarCropCancel: function () {
+            this.closeModal();
+            this.openSettings();
+        },
+
+        /** 按当前缩放导出正方形头像并上传（上传后仍需点「保存」写入资料） */
+        avatarCropSave: function () {
+            var self = this, img = $('owCropImg'), sc = $('owCropScale');
+            if (!img) return;
+            var s = parseInt((sc && sc.value) || '100', 10) / 100;
+            var size = this.avatarCropSize;
+            var c = document.createElement('canvas');
+            c.width = size; c.height = size;
+            var ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, size, size);                       // 白底：透明区转 jpg 不返黑
+            // 取景框为正方形，缩放 s 倍后可见范围 = 原图短边 / s，居中裁出
+            var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+            var side = Math.min(iw, ih) / s;
+            ctx.drawImage(img, (iw - side) / 2, (ih - side) / 2, side, side, 0, 0, size, size);
+
+            var done = function (blob) {
+                if (!blob) { toast('当前浏览器无法处理图片，请更换浏览器'); return; }
+                self.avatarUpload(blob, 'avatar.jpg');
+            };
+            if (c.toBlob) {
+                c.toBlob(function (b) { done(b); }, 'image/jpeg', 0.9);
+            } else {
+                // 老浏览器：toDataURL → 手工转 Blob
+                var b64 = c.toDataURL('image/jpeg', 0.9).split(',')[1] || '';
+                var bin = w.atob ? w.atob(b64) : '';
+                var arr = new Uint8Array(bin.length), i;
+                for (i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                done(new Blob([arr], { type: 'image/jpeg' }));
+            }
+        },
+
+        /** 上传头像（file 可为 File 或 canvas 导出的 Blob），成功后刷新预览 */
+        avatarUpload: function (file, filename) {
+            var self = this;
+            try {
+                var fd = new FormData();
+                var s = OwApi.sign('upload');
+                fd.append('ts', s.ts);
+                fd.append('sign', s.sign);
+                fd.append('kind', 'avatar');
+                fd.append('file', file, filename || (file.name || 'avatar.jpg'));
+                var x = new XMLHttpRequest();
+                x.open('POST', '?action=upload', true);
+                x.onreadystatechange = function () {
+                    if (x.readyState !== 4) return;
+                    var r = null;
+                    try { r = JSON.parse(x.responseText); } catch (e) {}
+                    r = r || { ok: false, msg: '网络错误' };
+                    if (!r.ok) { toast(r.msg); return; }
+                    self.cfg.me.avatar = r.url;
+                    var pv = $('owSetAvatarPreview');
+                    if (pv) pv.innerHTML = avatarHtml(r.url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
+                    self.closeModal();
+                    self.openSettings();
+                    self.renderMe();
+                    toast('头像已上传，点击保存生效');
+                };
+                x.send(fd);
+            } catch (e) {
+                toast('上传失败，请重试');
+            }
         },
 
         saveSettings: function () {
