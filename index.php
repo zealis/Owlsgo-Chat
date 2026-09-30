@@ -443,9 +443,15 @@ if ($action !== '') {
             if (!$u) Api::json(['ok' => false, 'msg' => '用户不存在']);
             Api::json(['ok' => true, 'data' => $u]);
 
+        // ---------- IP 归属地：核心不再内置实现（原依赖第三方 ip-api.com），
+        // 改由插件通过 ip.location 钩子提供；无插件响应时给出明确提示 ----------
         case 'ip_loc':
             if ($actor['role'] !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
-            Api::json(['ok' => true, 'loc' => Chat::ipLocation($p('ip'))]);
+            $ip  = trim($p('ip'));
+            $loc = '';
+            Plugin::fire('ip.location', [&$loc, $ip, $actor]);
+            if ($loc === '') Api::json(['ok' => false, 'msg' => '未安装归属地查询插件']);
+            Api::json(['ok' => true, 'loc' => $loc]);
 
         // ---------- 插件静态资源（已在签名门禁前放行，此处保留占位） ----------
     }
@@ -731,8 +737,10 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         'ts' => time(),
         'version' => OWLSGO_VERSION,
     ];
+    // 插件资源必须在 OwChat.init 之后引入：插件脚本依赖 OwChat.cfg 判断场景
     echo '<script src="assets/js/chat.js?v=' . OWLSGO_VERSION . '"></script>'
-       . '<script>OwChat.init(' . json_encode($boot, JSON_UNESCAPED_UNICODE) . ');</script>';
+       . '<script>OwChat.init(' . json_encode($boot, JSON_UNESCAPED_UNICODE) . ');</script>'
+       . '<script src="?action=assets&type=js"></script>';
     Plugin::fire('page.footer');
     echo '</body></html>';
 }

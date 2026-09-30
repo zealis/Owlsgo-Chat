@@ -487,7 +487,7 @@
                 if (this.scrollTop < 40 && !self.historyDone && !self.loadingHistory) self.loadHistory();
             };
             $('owLoadMore').onclick = function () { self.loadHistory(); };
-            // 右键消息气泡 → 操作菜单（@/私信/收藏/撤回/归属地）
+            // 右键消息气泡 → 操作菜单（@/私信/收藏/撤回，插件可追加）
             $('owMessages').oncontextmenu = function (e) {
                 e = e || w.event;
                 var t = e.target || e.srcElement, node = t;
@@ -742,7 +742,7 @@
         msgCache: {},
 
         // 统一构建消息 DOM：头像一侧依次是「用户组标签、昵称」；
-        // 时间不直接显示，悬停气泡时显示在气泡下方；操作（@/私信/收藏/撤回/归属地）改为右键菜单
+        // 时间不直接显示，悬停气泡时显示在气泡下方；操作（@/私信/收藏/撤回等）改为右键菜单
         buildMessage: function (m) {
             var cls = 'ow-msg';
             if (m.mine) cls += ' mine';
@@ -955,7 +955,7 @@
             box.insertBefore(div, ref);
         },
 
-        /* ---------- 消息右键菜单（@ / 私信 / 收藏贴纸 / 撤回 / 归属地） ---------- */
+        /* ---------- 消息右键菜单（@ / 私信 / 收藏贴纸 / 撤回，插件可扩展） ---------- */
         _ctxItems: [],
         /**
          * 消息右键菜单扩展点（供插件追加菜单项，如禁言插件的「禁言」）。
@@ -979,9 +979,8 @@
                 if (m.mine || admin)
                     items.push({ t: '撤回', run: function () { self.recall(m.id); } });
             }
-            if (admin && m.ip)
-                items.push({ t: 'IP 归属地', run: function () { self.ipLoc(m.ip); } });
-            // 插件扩展（v1.0.54）：如禁言插件按「管理员 / 房主」身份追加菜单项
+            // 插件扩展（v1.0.54）：如禁言插件按「管理员 / 房主」身份追加菜单项；
+            // IP 归属地已移出核心，插件可在此注册（服务端走 ip_loc + ip.location 钩子）
             for (i = 0; i < this._ctxExt.length; i++) {
                 try { this._ctxExt[i](items, m, { roomId: this.room, actor: this.cfg.actor }); } catch (e) {}
             }
@@ -1072,10 +1071,6 @@
 
         collect: function (url) {
             OwApi.post('sticker_add', { url: url }, function (r) { toast(r.msg); });
-        },
-
-        ipLoc: function (ip) {
-            OwApi.post('ip_loc', { ip: ip }, function (r) { toast(r.ok ? ip + ' → ' + r.loc : r.msg, 4000); });
         },
 
         viewImg: function (src) {

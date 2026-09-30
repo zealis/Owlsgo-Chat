@@ -107,6 +107,7 @@ Plugin::asset('js', 'user-manager/admin.js');   // 相对插件目录；css 同�
 | `nickname.before_save` | 昵称校验（注册 / 改资料 / 安装向导，`Auth::checkNickname` 内） | `[&$nick, &$err, $ctx]` —— 可改写 `$nick`，或把 `$err` 设为非空字符串拦截（即用户看到的文案）；`$ctx['scene']` 为 `register` / `profile` / `install`。参考实现：`plugins/nickname-guard/` |
 | `ban.check` | 消息发送禁言判定（`Chat::isBanned` 内，核心 bans 表无命中时触发，每条消息一次） | `[&$reason, $actor, $roomId]` —— `$reason` 初始为 **null**，设为非空字符串即拦截（即用户看到的文案）；回调签名必须用 **`?string &$reason`**（nullable，初始 null 传非 nullable 引用会 TypeError 且被 fire 静默吞掉）。参考：`plugins/ban-manager/` 的运行时说明 |
 | `ban.after_add` / `ban.after_del` | 禁言添加 / 解除后（ban-manager 插件触发） | `[$banId, $type, $target, $actor]` / `[$banId, $actor]` —— 通知型，供审计、通知类插件扩展 |
+| `ip.location` | 管理员查 IP 归属地（`?action=ip_loc`，核心 v1.0.55 起不再内置实现） | `[&$loc, $ip, $actor]` —— `$loc` 初始 `''`，设为非空字符串即作为归属地结果返回；无人响应时接口返回「未安装归属地查询插件」。菜单入口由插件用 `OwChat.onMsgCtx` 自行注册 |
 
 计划任务由长轮询驱动（`Plugin::cronTick()`），也可用系统计划任务调 `?action=cron` 强制触发；回调内自行判断是否到达执行周期，保证可重复运行。
 
@@ -114,7 +115,14 @@ Plugin::asset('js', 'user-manager/admin.js');   // 相对插件目录；css 同�
 
 - 钩子回调里的 `echo` 直接进入页面输出；输出前所有用户数据必须经 `Sec::e()` 或前端 `esc()` 转义。
 - 不修改核心文件即可扩展页面；确需新的注入点时，先在核心 `pageHead()` / 页面渲染处增加 `Plugin::fire()`，再讨论合入，不要在插件里用输出缓冲 hack。
-- **前台需要插件 JS 时**：主程序只在后台自动引入合并资源；聊天页用 `Plugin::on('page.footer', fn () => echo '<script src="?action=assets&type=js"></script>')` 注入（参考 `plugins/ban-manager/main.php`）。脚本头部用 `if (!w.OwChat || !OwChat.cfg) return;` 做场景判断（后台 / 登录页也会合并加载到本脚本）。
+- **前台资源（v1.0.55 起）**：聊天页与后台页**都由主程序统一引入** `<script src="?action=assets&type=js">`（聊天页位于 `OwChat.init` 之后），插件无需自行注入。多个插件各自用 `page.footer` 注入会导致脚本重复加载、菜单项重复注册——不要这么做。
+- 脚本头部做场景判断与幂等保护：
+
+```js
+if (!w.OwChat || !OwChat.cfg) return;   // 后台 / 登录页也会加载本脚本
+if (w.__owXxxLoaded) return;            // 幂等：防止重复引入时二次注册菜单项
+w.__owXxxLoaded = true;
+```
 
 ### 前端扩展点（OwChat.onMsgCtx）
 

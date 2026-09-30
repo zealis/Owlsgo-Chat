@@ -337,16 +337,4 @@ class Chat
         );
         return array_map(fn($r) => ['id' => (int)$r['id'], 'content' => $r['content'], 'type' => $r['type']], $rows);
     }
-
-    // ---------- IP 归属地（管理员，ip-api.com） ----------
-    public static function ipLocation(string $ip): string
-    {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return '内网地址';
-        $ctx = stream_context_create(['http' => ['timeout' => 5]]);
-        $json = @file_get_contents("http://ip-api.com/json/$ip?lang=zh-CN", false, $ctx);
-        if (!$json) return '查询失败';
-        $d = json_decode($json, true);
-        if (($d['status'] ?? '') !== 'success') return '未知';
-        return trim(($d['country'] ?? '') . ' ' . ($d['regionName'] ?? '') . ' ' . ($d['city'] ?? ''));
-    }
 }
