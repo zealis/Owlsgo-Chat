@@ -966,7 +966,7 @@
         onMsgCtx: function (fn) { if (typeof fn === 'function') this._ctxExt.push(fn); },
         hideCtxMenu: function () {
             var menu = $('owCtxMenu');
-            if (menu) menu.style.display = 'none';
+            if (menu) { menu.style.display = 'none'; menu._from = ''; }
         },
         showCtxMenu: function (x, y, m) {
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
@@ -987,6 +987,7 @@
             if (!items.length) return;
 
             this._ctxItems = items;
+            menu._from = 'msg';
             var html = '', i;
             for (i = 0; i < items.length; i++) {
                 html += '<a href="javascript:;" data-i="' + i + '">' + esc(items[i].t) + '</a>';
@@ -1185,17 +1186,59 @@
 
         /* ---------- 我的面板 / 设置 ---------- */
         renderMe: function () {
-            var me = this.cfg.me, el = $('owMe');
+            var self = this, me = this.cfg.me, el = $('owMe');
             if (!el) return;
             if (me) {
-                // 昵称可重名，身份一律以用户 ID 为准，故侧栏同时展示 ID
+                // 昵称与身份标签同行；整块可点击 → 弹出操作菜单（创建群聊/设置/管理后台/退出）
+                el.className = 'ow-me ow-me-click';
                 el.innerHTML = avatarHtml(me.avatar, me.nickname, false, me.role)
-                    + '<div><div class="ow-me-name">' + esc(me.nickname) + '</div>' + roleTag(me.role, me.title)
+                    + '<div class="ow-me-info">'
+                    + '<div class="ow-me-line"><span class="ow-me-name">' + esc(me.nickname) + '</span>' + roleTag(me.role, me.title) + '</div>'
                     + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(fmtUid(me.id || 0)) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
+                el.onclick = function (e) {
+                    // 阻止冒泡：否则 document 级「点击菜单外关闭」会立刻把刚打开的菜单关掉
+                    e = e || w.event;
+                    if (e.stopPropagation) e.stopPropagation(); else e.cancelBubble = true;
+                    self.toggleMeMenu();
+                };
             } else {
+                el.className = 'ow-me';
+                el.onclick = null;
                 el.innerHTML = avatarHtml('', this.cfg.actor.nickname, false, 'guest')
                     + '<div><div class="ow-me-name">' + esc(this.cfg.actor.nickname) + '</div>' + roleTag('guest', '') + '</div>';
             }
+        },
+
+        /**
+         * 个人资料区操作菜单：复用消息右键菜单（owCtxMenu）的展示 / 委托点击 /
+         * 点击外部与 Esc 关闭，向上弹出（资料区位于侧栏底部）。
+         */
+        toggleMeMenu: function () {
+            var self = this, me = this.cfg.me, menu = $('owCtxMenu');
+            if (!me || !menu) return;
+            // 再次点击资料区 = 收起
+            if (menu.style.display !== 'none' && menu._from === 'me') { this.hideCtxMenu(); return; }
+            var items = [
+                { t: '创建群聊', run: function () { self.roomCreateModal(); } },
+                { t: '设置', run: function () { self.openSettings(); } },
+            ];
+            if (this.cfg.actor.role === 'admin') items.push({ t: '管理后台', run: function () { location.href = '?page=admin'; } });
+            items.push({ t: '退出登录', run: function () {
+                self.confirmModal('确定退出登录吗？', function () {
+                    OwApi.post('logout', {}, function () { location.href = '?page=login'; });
+                });
+            } });
+            this._ctxItems = items;
+            menu._from = 'me';
+            var html = '';
+            for (var i = 0; i < items.length; i++) html += '<a href="javascript:;" data-i="' + i + '">' + esc(items[i].t) + '</a>';
+            menu.innerHTML = html;
+            menu.style.display = 'block';
+            // 定位：贴着资料区上缘，左边对齐侧栏
+            var r = $('owMe').getBoundingClientRect();
+            var mh = menu.offsetHeight || items.length * 34;
+            menu.style.left = Math.max(4, r.left) + 'px';
+            menu.style.top = Math.max(4, r.top - mh - 8) + 'px';
         },
 
         openSettings: function () {

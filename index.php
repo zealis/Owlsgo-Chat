@@ -734,14 +734,9 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<div class="ow-side-title">聊天室 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
-       . '<div class="ow-side-actions">'
-       . ($user
-           ? '<button class="ow-btn ow-btn-ghost" id="owBtnCreateRoom">创建群聊</button>'
-             . '<button class="ow-btn ow-btn-ghost" id="owBtnSettings">设置</button>'
-             . ($actor['role'] === 'admin' ? '<a class="ow-btn ow-btn-ghost" href="?page=admin">管理后台</a>' : '')
-             . '<button class="ow-btn ow-btn-ghost" id="owBtnLogout">退出</button>'
-           : '<a class="ow-btn ow-btn-primary" href="?page=login">登录 / 注册</a>')
-       . '</div></aside>';
+       // 登录用户的操作入口收进个人资料区菜单（点击 owMe 弹出）；游客仍直接给登录按钮
+       . ($user ? '' : '<div class="ow-side-actions"><a class="ow-btn ow-btn-primary" href="?page=login">登录 / 注册</a></div>')
+       . '</aside>';
 
     // 主聊天区
     echo '<main class="ow-main">'

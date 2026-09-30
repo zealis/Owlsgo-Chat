@@ -237,6 +237,11 @@ button { font-family: inherit; cursor: pointer; }
     border-top: 1px solid var(--ow-border);
 }
 .ow-me-name { font-weight: 600; color: var(--ow-text-title); }
+/* 登录用户的资料区可点击（弹出操作菜单） */
+.ow-me-click { cursor: pointer; transition: background .15s; }
+.ow-me-click:hover { background: var(--ow-bg-sub); }
+.ow-me-info { min-width: 0; flex: 1; -webkit-flex: 1; }
+.ow-me-line { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 6px; flex-wrap: wrap; -webkit-flex-wrap: wrap; }
 .ow-side-actions { display: flex; display: -webkit-flex; gap: 8px; padding: 0 16px 14px; flex-wrap: wrap; -webkit-flex-wrap: wrap; }
 
 /* 主区域 */
