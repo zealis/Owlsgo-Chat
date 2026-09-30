@@ -1486,8 +1486,7 @@
                     }
                     main.innerHTML = '<h2>系统设置</h2><p class="ow-admin-desc">站点、注册控制、游客与发言限制、存储方式。</p><div class="ow-card">'
                         + '<div class="ow-form-item"><label>站点名称</label><input class="ow-input" id="owS_site_name" value="' + esc(d.site_name || '') + '"></div>'
-                        + '<div class="ow-form-item"><label>固定网站地址</label><input class="ow-input" id="owS_site_url" value="' + esc(d.site_url || '') + '" placeholder="留空自动识别">'
-                        + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">容器 / 反代 / 多虚拟主机部署时填写，如 https://chat.example.com；留空则按当前访问地址自动识别（当前识别为 ' + esc(d.site_url_detected || '（未知）') + '）。填写后上传的图片将使用该绝对地址。</p></div>'
+                        + '<div class="ow-form-item"><label>固定网站地址</label><input class="ow-input" id="owS_site_url" value="' + esc(d.site_url || '') + '" placeholder="留空自动识别"></div>'
                         + '<div class="ow-form-row">'
                         + '<div class="ow-form-item"><label>开放注册</label>' + sel('allow_register', { '1': '开放', '0': '关闭' }) + '</div>'
                         + '<div class="ow-form-item"><label>注册需邮箱验证</label>' + sel('reg_email_verify', { '1': '需要', '0': '不需要' }) + '</div>'

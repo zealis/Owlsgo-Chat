@@ -114,10 +114,7 @@ class Admin
             // ---------- 站点设置 ----------
             case 'admin_settings_get':
                 $rows = DB::all('SELECT k, v FROM settings');
-                $data = array_column($rows, 'v', 'k');
-                // 附带「自动识别」出的地址，供设置页提示当前识别结果（不入库）
-                $data['site_url_detected'] = ow_site_url();
-                Api::json(['ok' => true, 'data' => $data]);
+                Api::json(['ok' => true, 'data' => array_column($rows, 'v', 'k')]);
 
             case 'admin_settings_save':
                 // 创建群聊扣分必须是 0-999999 的整数：填负数或小数会被 (int) 转成一个
