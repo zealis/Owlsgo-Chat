@@ -1411,7 +1411,12 @@
             plugins: function (main) {
                 OwApi.post('admin_plugins', {}, function (r) {
                     var h = '<h2>插件管理</h2><p class="ow-admin-desc">安装（上传 zip）、启用 / 停用、下载与卸载插件。插件存放于 plugins/ 目录。</p>'
-                        + '<div class="ow-card"><input type="file" id="owPluginZip" accept=".zip"> <button class="ow-btn ow-btn-primary" onclick="OwAdmin.pluginInstall()">上传安装</button></div>'
+                        + '<div class="ow-card ow-upload-row">'
+                        + '<input type="file" id="owPluginZip" accept=".zip" style="display:none">'
+                        + '<button type="button" class="ow-btn ow-btn-ghost" onclick="document.getElementById(\'owPluginZip\').click()">选择文件</button>'
+                        + '<span class="ow-upload-name" id="owPluginZipName">未选择文件</span>'
+                        + '<button type="button" class="ow-btn ow-btn-primary" style="margin-left:auto" onclick="OwAdmin.pluginInstall()">上传安装</button>'
+                        + '</div>'
                         + '<div class="ow-plugin-list">';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
@@ -1430,6 +1435,18 @@
                     }
                     if (!r.data.length) h += '<div class="ow-card" style="color:#5C5C5C">暂无插件</div>';
                     main.innerHTML = h + '</div>';
+                    /* 自研上传控件：隐藏原生 file input，选择后回显文件名 */
+                    var zip = $('owPluginZip');
+                    if (zip) zip.onchange = function () {
+                        var name = $('owPluginZipName');
+                        if (this.files && this.files[0]) {
+                            name.textContent = this.files[0].name;
+                            name.className = 'ow-upload-name ow-has-file';
+                        } else {
+                            name.textContent = '未选择文件';
+                            name.className = 'ow-upload-name';
+                        }
+                    };
                 });
             },
             rooms: function (main) {
