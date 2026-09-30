@@ -299,38 +299,6 @@
                 });
             };
 
-            /**
-             * 两步验证第二步：把登录表单原位替换为「动态验证码」输入框。
-             * 可填 6 位动态码，或 10 位一次性恢复码（验证器不可用时使用）。
-             */
-            function showTwoStepForm(form, msg) {
-                form.innerHTML = '<h3 style="margin:0 0 6px">两步验证</h3>'
-                    + '<p style="font-size:12px;color:#5C5C5C;margin:0 0 12px">请输入验证器 App 上的 6 位动态验证码；验证器不可用时可填一次性恢复码。</p>'
-                    + '<div class="ow-form-item"><label>动态验证码 / 恢复码</label>'
-                    + '<input class="ow-input" name="code" id="owTwoFaCode" autocomplete="one-time-code" placeholder="6 位动态码或 10 位恢复码"></div>'
-                    + '<button class="ow-btn ow-btn-primary ow-btn-block" type="submit">验证并登录</button>'
-                    + '<div class="ow-form-msg"></div>'
-                    + '<p style="text-align:center;margin:10px 0 0"><a href="?page=login">返回重新登录</a></p>';
-                var m2 = form.querySelector('.ow-form-msg');
-                var input = $('owTwoFaCode');
-                if (input) input.focus();
-                form.onsubmit = function (e) {
-                    e.preventDefault();
-                    var code = input ? input.value.replace(/\s+/g, '') : '';
-                    if (!code) { m2.innerHTML = '<span style="color:#C41D1F">请填写验证码</span>'; return; }
-                    m2.innerHTML = '验证中…';
-                    OwApi.post('login_2fa', { code: code }, function (r) {
-                        if (r.ok) {
-                            m2.innerHTML = '<span style="color:#237804">' + esc(r.msg) + '</span>';
-                            setTimeout(function () { location.href = '?page=chat'; }, 600);
-                        } else {
-                            m2.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>';
-                            if (input) { input.value = ''; input.focus(); }
-                        }
-                    });
-                };
-            };
-
             form.onsubmit = function (e) {
                 e.preventDefault();
                 var data = {}, i, els = form.elements;
@@ -341,11 +309,6 @@
                 }
                 msg.innerHTML = '提交中…';
                 OwApi.post(mode === 'login' ? 'login' : mode, data, function (r) {
-                    if (r.ok && r.need_2fa) {
-                        // 已开启两步验证：密码已通过但尚未登录，就地切到第二步
-                        showTwoStepForm(form, msg);
-                        return;
-                    }
                     if (r.ok) {
                         msg.innerHTML = '<span style="color:#237804">' + esc(r.msg) + '</span>';
                         // 注册成功不进入聊天（后端注册本就不建会话）：跳登录页由用户手动登录
@@ -1294,8 +1257,6 @@
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
                 + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
                 + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id ? fmtUid(me.id) : '-') + '</div>'
-                // 两步验证：状态 / 绑定 / 确认 / 恢复码 四态就地切换
-                + '<div class="ow-form-item"><label>两步验证</label><div id="owSetTwoFa">读取中…</div></div>'
                 + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.saveSettings()">保存</button>'
             );
             var self = this;
@@ -1310,105 +1271,6 @@
                 });
                 this.value = '';
             };
-            this.twoFaStep('status');
-        },
-
-        /* ---------- 两步验证设置（TOTP + 恢复码） ---------- */
-
-        /**
-         * 渲染两步验证区块。
-         * @param string step status=状态页 | bind=绑定密钥 | confirm=动态码确认（关闭/重置） | codes=展示恢复码
-         * @param object data 依据 step 不同携带 secret / uri / codes / action
-         */
-        twoFaStep: function (step, data) {
-            var self = this, el = $('owSetTwoFa');
-            if (!el) return;
-            data = data || {};
-            var h = '';
-            if (step === 'bind') {
-                h = '<div style="font-size:12px;color:#5C5C5C">1. 在验证器 App 中新增账号，手动填入下方密钥（或粘贴配置链接）。</div>'
-                    + '<div class="ow-input" style="background:var(--ow-bg-sub);font-family:var(--ow-mono);word-break:break-all;margin:6px 0">'
-                    + esc(self.twoFaPretty(data.secret)) + '</div>'
-                    + '<div style="font-size:12px;color:#5C5C5C;margin-bottom:6px">配置链接：<span style="word-break:break-all">' + esc(data.uri || '') + '</span></div>'
-                    + '<div class="ow-input" style="background:var(--ow-bg-sub);font-size:12px;word-break:break-all;margin-bottom:8px">' + esc(data.uri || '') + '</div>'
-                    + '<div style="font-size:12px;color:#5C5C5C;margin-bottom:6px">2. 输入 App 上的 6 位动态验证码完成开启。</div>'
-                    + '<input class="ow-input" id="owTwoFaBind" placeholder="6 位动态验证码" autocomplete="one-time-code">'
-                    + '<div class="ow-form-row" style="margin-top:8px">'
-                    + '<button class="ow-btn ow-btn-primary" onclick="OwChat.twoFaEnable()">确认开启</button>'
-                    + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.twoFaStep(\'status\')">取消</button></div>';
-            } else if (step === 'confirm') {
-                h = '<div style="font-size:12px;color:#5C5C5C;margin-bottom:6px">'
-                    + (data.action === 'disable' ? '关闭两步验证需验证身份，请输入当前动态验证码。' : '重置恢复码需验证身份，请输入当前动态验证码。')
-                    + '</div>'
-                    + '<input class="ow-input" id="owTwoFaConfirm" placeholder="6 位动态验证码" autocomplete="one-time-code">'
-                    + '<div class="ow-form-row" style="margin-top:8px">'
-                    + '<button class="ow-btn ow-btn-primary" onclick="OwChat.twoFaConfirm(\'' + esc(data.action) + '\')">确定</button>'
-                    + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.twoFaStep(\'status\')">取消</button></div>';
-            } else if (step === 'codes') {
-                var list = data.codes || [], i;
-                h = '<div style="color:#237804;font-size:13px;margin-bottom:6px">已开启两步验证。以下是' + list.length + '个一次性恢复码，每个只能用一次，请立即保存。</div>'
-                    + '<div class="ow-input" style="background:var(--ow-bg-sub);font-family:var(--ow-mono);line-height:1.9;word-break:break-all">';
-                for (i = 0; i < list.length; i++) h += esc(list[i]) + '<br>';
-                h += '</div>'
-                    + '<div class="ow-form-row" style="margin-top:8px">'
-                    + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.twoFaStep(\'status\')">我已保存</button></div>';
-            } else {
-                h = '<div style="font-size:13px;color:#5C5C5C">读取中…</div>';
-                OwApi.post('twofa_status', {}, function (r) {
-                    if (!r.ok) { $('owSetTwoFa').innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>'; return; }
-                    var d = r.data || {}, box = $('owSetTwoFa');
-                    if (!box) return;
-                    if (d.enabled) {
-                        box.innerHTML = '<div style="font-size:13px;margin-bottom:8px"><span class="ow-tag ow-tag-green">已开启</span> '
-                            + '剩余恢复码 ' + esc(d.recovery_left || 0) + ' 个</div>'
-                            + '<div class="ow-form-row">'
-                            + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.twoFaStep(\'confirm\',{action:\'reset\'})">重置恢复码</button>'
-                            + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.twoFaStep(\'confirm\',{action:\'disable\'})">关闭</button></div>';
-                    } else {
-                        box.innerHTML = '<div style="font-size:13px;margin-bottom:8px"><span class="ow-tag ow-tag-guest">未开启</span> '
-                            + '开启后登录需额外输入动态验证码。</div>'
-                            + '<div class="ow-form-row">'
-                            + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.twoFaInit()">开启两步验证</button></div>';
-                    }
-                });
-            }
-            el.innerHTML = h;
-        },
-
-        /** 密钥按 4 字符分组，便于人工抄录（仅展示用） */
-        twoFaPretty: function (secret) {
-            return String(secret || '').replace(/(.{4})/g, '$1 ').replace(/\s+$/, '');
-        },
-
-        /** 开启流程 1：取密钥 */
-        twoFaInit: function () {
-            var self = this;
-            OwApi.post('twofa_init', {}, function (r) {
-                if (!r.ok) { toast(r.msg); return; }
-                self.twoFaStep('bind', { secret: r.secret, uri: r.uri });
-            });
-        },
-
-        /** 开启流程 2：校验动态码 → 生效并拿到恢复码 */
-        twoFaEnable: function () {
-            var self = this, code = $('owTwoFaBind') ? $('owTwoFaBind').value : '';
-            if (!code) { toast('请填写动态验证码'); return; }
-            OwApi.post('twofa_enable', { code: code }, function (r) {
-                if (!r.ok) { toast(r.msg); return; }
-                self.twoFaStep('codes', { codes: r.recovery || [] });
-            });
-        },
-
-        /** 关闭 / 重置恢复码：校验动态码后执行 */
-        twoFaConfirm: function (action) {
-            var self = this, code = $('owTwoFaConfirm') ? $('owTwoFaConfirm').value : '';
-            if (!code) { toast('请填写动态验证码'); return; }
-            var act = action === 'disable' ? 'twofa_disable' : 'twofa_recovery_reset';
-            OwApi.post(act, { code: code }, function (r) {
-                if (!r.ok) { toast(r.msg); return; }
-                if (action === 'reset') self.twoFaStep('codes', { codes: r.recovery || [] });
-                else { toast(r.msg); self.twoFaStep('status'); }
-            });
         },
 
         saveSettings: function () {

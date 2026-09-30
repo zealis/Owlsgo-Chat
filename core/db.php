@@ -193,11 +193,6 @@ class DB
                 ip $str, last_seen $ts NOT NULL)",
             "CREATE TABLE IF NOT EXISTS plugins (
                 name $str PRIMARY KEY, enabled $int NOT NULL DEFAULT 0, config $text)",
-            // 两步验证（TOTP）：secret 必须明文（算码需要原始密钥），恢复码只存哈希
-            "CREATE TABLE IF NOT EXISTS user_2fa (
-                user_id $int PRIMARY KEY, secret $str NOT NULL,
-                recovery $text, enabled $int NOT NULL DEFAULT 0,
-                created_at $ts NOT NULL, last_used $ts)",
         ];
         foreach ($tables as $sql) self::$pdo->exec($sql);
 

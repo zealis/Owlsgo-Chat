@@ -23,7 +23,6 @@ require __DIR__ . '/core/auth.php';
 require __DIR__ . '/core/plugin.php';
 require __DIR__ . '/core/chat.php';
 require __DIR__ . '/core/upload.php';
-require __DIR__ . '/core/totp.php';
 require __DIR__ . '/core/admin.php';
 
 class Api
@@ -203,8 +202,7 @@ if ($action !== '') {
 
     // 关键：长轮询等只读动作提前释放会话锁，避免阻塞同会话的发消息等请求（PHP-FPM 生产环境必需）
     // room_join 需要写入密码房通行缓存，必须保留会话写入能力
-    // login_2fa 要写入登录态；twofa_* 只读写数据库，无需占用会话
-    if (!in_array($action, ['login', 'login_2fa', 'logout', 'register', 'reset', 'send_code', 'room_join'], true)) {
+    if (!in_array($action, ['login', 'logout', 'register', 'reset', 'send_code', 'room_join'], true)) {
         session_write_close();
     }
 
@@ -249,64 +247,12 @@ if ($action !== '') {
                     Api::json(['ok' => false, 'msg' => '图形验证码错误', 'captcha' => true]);
                 }
             }
-            [$ok, $msg, , $stage] = Auth::login($identity, (string)($_POST['password'] ?? ''));
+            [$ok, $msg] = Auth::login($identity, (string)($_POST['password'] ?? ''));
             Api::json([
                 'ok' => $ok, 'msg' => $msg,
-                // 已开启两步验证：密码通过但尚未登录，前端转第二步（动态码 / 恢复码）
-                'need_2fa' => $ok && $stage === 'need_2fa',
                 'captcha' => !$ok && Sec::needCaptcha($key),
                 'locked' => !$ok && Sec::lockSeconds($key) > 0,
             ]);
-
-        // ---------- 两步验证第二步：校验动态码 / 恢复码后建立登录会话 ----------
-        case 'login_2fa':
-            $pending = $_SESSION['2fa_pending'] ?? null;
-            if (!is_array($pending) || ($pending['until'] ?? 0) < time()) {
-                unset($_SESSION['2fa_pending']);
-                Api::json(['ok' => false, 'msg' => '验证已超时，请重新登录', 'expired' => true]);
-            }
-            $pkey = (string)($pending['key'] ?? '');
-            [$ok, $msg, $u, $method] = Auth::loginTwoStep($pending, $p('code'));
-            Api::json([
-                'ok' => $ok, 'msg' => $msg, 'method' => $method,
-                'locked' => !$ok && $pkey !== '' && Sec::lockSeconds($pkey) > 0,
-            ]);
-
-        // ---------- 两步验证设置（需登录） ----------
-        case 'twofa_init':
-            if (!$user) Api::json(['ok' => false, 'msg' => '请先登录'], 403);
-            [$ok, $a, $b, $c] = Auth::twoFactorInit(
-                (int)$user['id'],
-                $user['nickname'] . '(' . $user['id'] . ')'
-            );
-            Api::json($ok
-                ? ['ok' => true, 'secret' => $a, 'uri' => $b, 'account' => $c]
-                : ['ok' => false, 'msg' => $a]);
-
-        case 'twofa_enable':
-            if (!$user) Api::json(['ok' => false, 'msg' => '请先登录'], 403);
-            [$ok, $msg, $codes] = Auth::twoFactorEnable((int)$user['id'], $p('code'));
-            Api::json(['ok' => $ok, 'msg' => $msg, 'recovery' => $codes]);
-
-        case 'twofa_disable':
-            if (!$user) Api::json(['ok' => false, 'msg' => '请先登录'], 403);
-            [$ok, $msg] = Auth::twoFactorDisable((int)$user['id'], $p('code'));
-            Api::json(['ok' => $ok, 'msg' => $msg]);
-
-        case 'twofa_recovery_reset':
-            if (!$user) Api::json(['ok' => false, 'msg' => '请先登录'], 403);
-            [$ok, $msg, $codes] = Auth::recoveryReset((int)$user['id'], $p('code'));
-            Api::json(['ok' => $ok, 'msg' => $msg, 'recovery' => $codes]);
-
-        case 'twofa_status':
-            if (!$user) Api::json(['ok' => false, 'msg' => '请先登录'], 403);
-            $row = Auth::twoFactor((int)$user['id']);
-            Api::json(['ok' => true, 'data' => [
-                'enabled' => $row ? (int)$row['enabled'] === 1 : false,
-                'pending' => $row ? (int)$row['enabled'] === 0 : false,
-                'recovery_left' => $row ? count(json_decode((string)($row['recovery'] ?? ''), true) ?: []) : 0,
-                'last_used' => $row ? (int)($row['last_used'] ?? 0) : 0,
-            ]]);
 
         case 'reset':
             [$ok, $msg] = Auth::resetPassword($p('email'), $p('code'), (string)($_POST['password'] ?? ''));
