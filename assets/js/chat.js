@@ -957,6 +957,13 @@
 
         /* ---------- 消息右键菜单（@ / 私信 / 收藏贴纸 / 撤回 / 归属地） ---------- */
         _ctxItems: [],
+        /**
+         * 消息右键菜单扩展点（供插件追加菜单项，如禁言插件的「禁言」）。
+         * 回调签名：function (items, msg, env) —— 直接 items.push({t:'文案', run:fn}) 即可。
+         * env：{ roomId: 当前房间ID, actor: 当前身份对象 }
+         */
+        _ctxExt: [],
+        onMsgCtx: function (fn) { if (typeof fn === 'function') this._ctxExt.push(fn); },
         hideCtxMenu: function () {
             var menu = $('owCtxMenu');
             if (menu) menu.style.display = 'none';
@@ -974,6 +981,10 @@
             }
             if (admin && m.ip)
                 items.push({ t: 'IP 归属地', run: function () { self.ipLoc(m.ip); } });
+            // 插件扩展（v1.0.54）：如禁言插件按「管理员 / 房主」身份追加菜单项
+            for (i = 0; i < this._ctxExt.length; i++) {
+                try { this._ctxExt[i](items, m, { roomId: this.room, actor: this.cfg.actor }); } catch (e) {}
+            }
             if (!items.length) return;
 
             this._ctxItems = items;

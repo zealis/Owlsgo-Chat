@@ -114,6 +114,23 @@ Plugin::asset('js', 'user-manager/admin.js');   // 相对插件目录；css 同�
 
 - 钩子回调里的 `echo` 直接进入页面输出；输出前所有用户数据必须经 `Sec::e()` 或前端 `esc()` 转义。
 - 不修改核心文件即可扩展页面；确需新的注入点时，先在核心 `pageHead()` / 页面渲染处增加 `Plugin::fire()`，再讨论合入，不要在插件里用输出缓冲 hack。
+- **前台需要插件 JS 时**：主程序只在后台自动引入合并资源；聊天页用 `Plugin::on('page.footer', fn () => echo '<script src="?action=assets&type=js"></script>')` 注入（参考 `plugins/ban-manager/main.php`）。脚本头部用 `if (!w.OwChat || !OwChat.cfg) return;` 做场景判断（后台 / 登录页也会合并加载到本脚本）。
+
+### 前端扩展点（OwChat.onMsgCtx）
+
+聊天室消息右键菜单支持插件追加菜单项（v1.0.54 新增）：
+
+```js
+OwChat.onMsgCtx(function (items, msg, env) {
+    // items.push({ t: '菜单文案', run: function () { ... } });
+    // msg：消息对象（uid/gid/nickname/role/mine/recalled 等）
+    // env：{ roomId, actor }
+});
+```
+
+- 回调在菜单渲染前同步执行，`try/catch` 包裹（插件异常不影响基础菜单）。
+- 显示判定只做用户体验过滤，**权限必须在服务端路由内重新校验**（参考 `plugin_ban_manager_quick`：管理员 / 房主守卫、不能禁言自己与管理员、房间归属校验）。
+- 弹窗复用 `OwChat.openModal()` / `OwChat.closeModal()`，与全站确认框同一样式。参考实现：`plugins/ban-manager/chat.js`。
 
 ## 安全要点
 
