@@ -1287,23 +1287,39 @@
             reader.onload = function (ev) {
                 self.openModal(
                     '<h3>调整头像</h3>'
-                    + '<p class="ow-modal-desc">拖动滑块缩放图片，圆形区域内即为最终头像。</p>'
-                    + '<div class="ow-crop-wrap"><div class="ow-crop-stage"><img id="owCropImg" src="' + esc(String(ev.target.result)) + '" alt=""></div></div>'
-                    + '<div class="ow-crop-ctrl"><label>缩放</label>'
-                    + '<input type="range" id="owCropScale" min="50" max="300" step="5" value="100">'
-                    + '<span id="owCropVal">100%</span></div>'
+                    + '<p class="ow-modal-desc">点击箭头缩放图片，方框内即为最终头像区域。</p>'
+                    + '<div class="ow-crop-wrap"><div class="ow-crop-stage" id="owCropStage"><img id="owCropImg" src="' + esc(String(ev.target.result)) + '" alt=""></div></div>'
+                    + '<div class="ow-crop-ctrl">'
+                    + '<button type="button" class="ow-btn ow-btn-ghost ow-crop-btn" id="owCropMinus" title="缩小">−</button>'
+                    + '<span class="ow-crop-val" id="owCropVal">100%</span>'
+                    + '<button type="button" class="ow-btn ow-btn-ghost ow-crop-btn" id="owCropPlus" title="放大">＋</button>'
+                    + '</div>'
                     + '<div class="ow-modal-actions">'
                     + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.avatarCropCancel()">取消</button>'
                     + '<button class="ow-btn ow-btn-primary" onclick="OwChat.avatarCropSave()">确定</button></div>'
                 );
-                var img = $('owCropImg'), scale = $('owCropScale'), val = $('owCropVal');
+                var img = $('owCropImg'), minus = $('owCropMinus'), plus = $('owCropPlus'), val = $('owCropVal');
+                var stage = 128;                       // 取景框边长
+                var min = 1, max = 3;                  // 缩放边界：1 = 恰好填满取景框（再小会露出边界）
+                var s = 1;
                 var apply = function () {
-                    img.style.transform = 'scale(' + (parseInt(scale.value, 10) / 100) + ')';
-                    val.textContent = scale.value + '%';
+                    var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+                    var f = stage / Math.min(iw, ih);  // 短边适配：恰好填满取景框
+                    img.style.width = (iw * f) + 'px';
+                    img.style.height = (ih * f) + 'px';
+                    // 居中定位（用负 margin，transform 只负责缩放）
+                    img.style.marginLeft = -(iw * f / 2) + 'px';
+                    img.style.marginTop = -(ih * f / 2) + 'px';
+                    img.style.transform = 'scale(' + s + ')';
+                    val.textContent = Math.round(s * 100) + '%';
+                    minus.disabled = s <= min + 0.001;
+                    plus.disabled = s >= max - 0.001;
                 };
-                // oninput 不支持的老浏览器退回 onchange
-                if ('oninput' in scale) scale.oninput = apply; else scale.onchange = apply;
-                apply();
+                // 图片加载完成后才能拿到 naturalWidth，需再算一次定位
+                img.onload = function () { s = 1; apply(); };
+                if (img.complete && img.naturalWidth) img.onload();
+                minus.onclick = function () { if (s > min + 0.001) { s = Math.max(min, s - 0.1); apply(); } };
+                plus.onclick = function () { if (s < max - 0.001) { s = Math.min(max, s + 0.1); apply(); } };
             };
             reader.readAsDataURL(file);
         },
@@ -1316,19 +1332,21 @@
 
         /** 按当前缩放导出正方形头像并上传（上传后仍需点「保存」写入资料） */
         avatarCropSave: function () {
-            var self = this, img = $('owCropImg'), sc = $('owCropScale');
-            if (!img) return;
-            var s = parseInt((sc && sc.value) || '100', 10) / 100;
-            var size = this.avatarCropSize;
+            var self = this, img = $('owCropImg');
+            if (!img || !img.naturalWidth) { toast('图片未加载完成'); return; }
+            var stage = 128, size = this.avatarCropSize;
+            var iw = img.naturalWidth, ih = img.naturalHeight;
+            var f = stage / Math.min(iw, ih);
+            // 取景框 128px 对应的源图边长（受当前缩放 s 影响）
+            var mt = /scale\(([\d.]+)\)/.exec(img.style.transform || '');
+            var sc = mt ? parseFloat(mt[1]) : 1;
+            var vis = stage / (f * sc);
             var c = document.createElement('canvas');
             c.width = size; c.height = size;
             var ctx = c.getContext('2d');
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, size, size);                       // 白底：透明区转 jpg 不返黑
-            // 取景框为正方形，缩放 s 倍后可见范围 = 原图短边 / s，居中裁出
-            var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-            var side = Math.min(iw, ih) / s;
-            ctx.drawImage(img, (iw - side) / 2, (ih - side) / 2, side, side, 0, 0, size, size);
+            ctx.drawImage(img, (iw - vis) / 2, (ih - vis) / 2, vis, vis, 0, 0, size, size);
 
             var done = function (blob) {
                 if (!blob) { toast('当前浏览器无法处理图片，请更换浏览器'); return; }
