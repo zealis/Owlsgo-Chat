@@ -1,10 +1,20 @@
 <?php
 /**
- * 上传与媒体：头像 / 贴纸 / 图片消息一律本地原样存储，不做任何压缩，也不走图床
+ * 上传与媒体：头像 / 贴纸 / 图片消息一律本地存储、不走图床。
+ * 贴纸与图片消息原图直存（不做任何压缩）；头像会居中裁剪缩放为正方形。
  */
 class Upload
 {
     private static array $cfg = [];
+
+    /**
+     * 头像统一尺寸（正方形边长 px）：居中裁剪 + 缩放后输出。
+     * 目的：① 长方形原图在圆形容器里会被拉成椭圆（老浏览器不支持 object-fit，
+     * 靠 CSS 修不住）→ 直接在服务端裁成方形，任何浏览器下都是正圆；
+     * ② 避免几 MB 的大图当头像反复传输。
+     * 仅作用于头像；贴纸与图片消息仍按 v1.0.35 约定原图直存，不做任何压缩。
+     */
+    private const AVATAR_SIZE = 200;
 
     /**
      * 允许作为「文件附件」的扩展名 => 可接受真实 MIME 列表
@@ -68,13 +78,50 @@ class Upload
         $name = date('Ymd') . '_' . bin2hex(random_bytes(8)) . '.' . $extOrMsg;
         $dest = self::$cfg['dir'] . '/' . $kind . '/' . $name;
         if (!move_uploaded_file($f['tmp_name'], $dest)) return [false, '保存失败'];
+        // 头像：居中裁剪 + 缩放为正方形（失败则退回原图，不影响可用性）
+        if ($kind === 'avatar') $name = self::squareAvatar($dest, $name) ?: $name;
         $rel = self::$cfg['url'] . '/' . $kind . '/' . $name;
         // 手动配置了「固定网站地址」才返回绝对 URL（自动识别不参与，避免误判）
         return [true, ow_abs_url($rel, true)];
     }
 
     /**
+     * 头像裁剪缩放：居中裁成正方形 → 缩放至 AVATAR_SIZE → 统一输出 jpg。
+     *
+     * @param string $dest 已落盘的原始文件路径
+     * @param string $name 原始文件名
+     * @return string|null 成功返回最终文件名（.jpg），失败（无 GD / 非图片）返回 null
+     */
+    private static function squareAvatar(string $dest, string $name): ?string
+    {
+        if (!function_exists('imagecreatefromstring')) return null;
+        $src = @imagecreatefromstring((string)file_get_contents($dest));
+        if (!$src) return null;
+
+        $w = imagesx($src); $h = imagesy($src);
+        $side = min($w, $h);                                  // 以短边为正方形边长
+        $sx = (int)(($w - $side) / 2);                         // 居中裁剪起点
+        $sy = (int)(($h - $side) / 2);
+        $size = self::AVATAR_SIZE;
+
+        $dst = imagecreatetruecolor($size, $size);
+        // 白底填充：PNG/WebP 透明区域转 jpg 时不会变黑
+        imagefilledrectangle($dst, 0, 0, $size, $size, imagecolorallocate($dst, 255, 255, 255));
+        imagecopyresampled($dst, $src, 0, 0, $sx, $sy, $size, $size, $side, $side);
+        imagedestroy($src);
+
+        // 统一 jpg（头像无需透明通道，体积可控）；原为 jpg 时直接覆盖同名文件
+        $outName = preg_replace('/\.(png|gif|webp)$/i', '.jpg', $name) ?: $name;
+        $ok = imagejpeg($dst, self::$cfg['dir'] . '/avatar/' . $outName, 90);
+        imagedestroy($dst);
+        if (!$ok) return null;
+        if ($outName !== $name) @unlink($dest);                // 清掉转换前的原图
+        return $outName;
+    }
+
+    /**
      * 统一上传入口：全部走本地原样存储（不压缩、不转码、不转发图床）
+     * 例外：头像会居中裁剪缩放为正方形（见 squareAvatar）
      */
     public static function handle(array $f, string $kind): array
     {

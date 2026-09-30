@@ -143,6 +143,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .ow-avatar-sm { width: 28px; height: 28px; line-height: 28px; font-size: 12px; }
 .ow-avatar-md { width: 32px; height: 32px; line-height: 32px; font-size: 14px; }
+.ow-avatar-xs { width: 20px; height: 20px; line-height: 20px; font-size: 10px; }
 /* 个人设置：头像置顶居中，点击即可更换 */
 .ow-set-avatar { text-align: center; margin: 0 0 16px; }
 .ow-set-avatar-btn { display: inline-block; cursor: pointer; border-radius: 50%; transition: opacity .15s, box-shadow .15s; }

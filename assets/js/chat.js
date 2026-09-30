@@ -254,8 +254,8 @@
     /* 头像：有图用图；无图时游客固定米金底（#E5D5A0，深字保证可读），
        用户按昵称长度从色盘取色 */
     function avatarHtml(url, name, sm, role) {
-        // 尺寸档：true/sm=28px（列表用）、'md'=32px（设置弹窗）、false=40px（资料区等）
-        var sizeCls = sm === 'md' ? ' ow-avatar-md' : (sm ? ' ow-avatar-sm' : '');
+        // 尺寸档：'xs'=20px（设置弹窗）、true/sm=28px（列表）、'md'=32px、false=40px（资料区）
+        var sizeCls = sm === 'xs' ? ' ow-avatar-xs' : (sm === 'md' ? ' ow-avatar-md' : (sm ? ' ow-avatar-sm' : ''));
         var cls = 'ow-avatar' + sizeCls;
         if (url) return '<span class="' + cls + '"><img src="' + esc(url) + '" alt=""></span>';
         var ch = esc((name || '?').charAt(0));
@@ -1251,7 +1251,7 @@
                 // 头像置顶：点击当前头像即触发上传（不另设上传按钮）
                 + '<div class="ow-set-avatar">'
                 + '<span id="owSetAvatarPreview" class="ow-set-avatar-btn" title="点击更换头像" onclick="document.getElementById(\'owSetAvatarFile\').click()">'
-                + avatarHtml(me.avatar, me.nickname, true, me.role) + '</span>'
+                + avatarHtml(me.avatar, me.nickname, 'xs', me.role) + '</span>'
                 + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none">'
                 + '</div>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
@@ -1265,7 +1265,7 @@
                 OwApi.upload('upload', this.files[0], { kind: 'avatar' }, function (r) {
                     if (r.ok) {
                         self.cfg.me.avatar = r.url;
-                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname, true, self.cfg.me.role);
+                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
                         toast('头像已上传，点击保存生效');
                     } else toast(r.msg);
                 });
