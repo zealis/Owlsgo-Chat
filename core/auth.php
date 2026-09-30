@@ -206,6 +206,10 @@ class Auth
         $_SESSION['uid'] = $user['id'];
         DB::run('UPDATE users SET last_login=? WHERE id=?', [time(), $user['id']]);
         Sec::log('login', $user['nickname']);
+        // 登录验证完成钩子：供插件扩展两步验证、登录通知、异地提醒等。
+        // $method 为本次通过验证的方式（核心仅有 password；插件实现两步验证时
+        // 可自行触发本钩子并传入 totp / recovery 等）。仅成功登录触发，失败不触发。
+        Plugin::fire('login.after_verify', [$user, 'password', ['ip' => Sec::ip()]]);
         return [true, '登录成功', $user];
     }
 

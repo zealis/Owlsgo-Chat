@@ -123,6 +123,7 @@ ow_abs_url('uploads/a.jpg');    // 拼接绝对地址；第二个参数默认 tr
 | `ban.check` | 消息发送禁言判定（`Chat::isBanned` 内，核心 bans 表无命中时触发，每条消息一次） | `[&$reason, $actor, $roomId]` —— `$reason` 初始为 **null**，设为非空字符串即拦截（即用户看到的文案）；回调签名必须用 **`?string &$reason`**（nullable，初始 null 传非 nullable 引用会 TypeError 且被 fire 静默吞掉）。参考：`plugins/ban-manager/` 的运行时说明 |
 | `ban.after_add` / `ban.after_del` | 禁言添加 / 解除后（ban-manager 插件触发） | `[$banId, $type, $target, $actor]` / `[$banId, $actor]` —— 通知型，供审计、通知类插件扩展 |
 | `ip.location` | 管理员查 IP 归属地（`?action=ip_loc`，核心 v1.0.55 起不再内置实现） | `[&$loc, $ip, $actor]` —— `$loc` 初始 `''`，设为非空字符串即作为归属地结果返回；无人响应时接口返回「未安装归属地查询插件」。菜单入口由插件用 `OwChat.onMsgCtx` 自行注册 |
+| `login.after_verify` | 登录验证完成（`Auth::login` 内，密码校验通过且会话已建立） | `[$user, $method, $ctx]` —— 通知型，`$method` 为本通过验证的方式（核心仅 `password`；插件实现两步验证时可自行触发本钩子并传 `totp` / `recovery`）；`$ctx` 含 `ip`。**仅在成功登录时触发，验证失败不触发** |
 
 计划任务由长轮询驱动（`Plugin::cronTick()`），也可用系统计划任务调 `?action=cron` 强制触发；回调内自行判断是否到达执行周期，保证可重复运行。
 
