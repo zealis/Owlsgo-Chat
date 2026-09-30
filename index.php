@@ -481,6 +481,73 @@ switch ($page) {
         renderChat(Auth::actor($user, $guest), $user, $guest);
 }
 
+// ================= 站点地址 =================
+/**
+ * 站点根地址（结尾无斜杠）。
+ *
+ * 取值优先级：
+ *   ① 后台「系统设置 → 固定网站地址」手填值（多虚拟主机 / 容器反代 / 多域名时显式指定）；
+ *   ② 留空则按当前请求自动识别：协议（兼容 X-Forwarded-Proto）+ 主机（兼容
+ *      X-Forwarded-Host）+ 非标准端口 + 子目录部署路径。
+ *
+ * @param bool $manualOnly true 时只返回「手动配置」的值（自动识别结果不生效）。
+ *                         用于会写入数据库的场景（如上传 URL），避免自动识别
+ *                         误判（拿到内网地址 / http）把不可访问的绝对地址存进消息。
+ * @return string 形如 https://chat.example.com（子目录部署为 https://example.com/chat）；取不到返回 ''
+ */
+function ow_site_url(bool $manualOnly = false): string
+{
+    $manual = trim((string)DB::setting('site_url', ''));
+    if ($manual !== '') return rtrim($manual, '/');
+    if ($manualOnly) return '';
+
+    // 协议：反代场景优先信任 X-Forwarded-Proto，其次 HTTPS 标记
+    $proto = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($proto === '') $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $proto = explode(',', $proto)[0];                     // 多层反代可能用逗号分隔
+    $proto = in_array($proto, ['http', 'https'], true) ? $proto : 'http';
+
+
+    // 主机：优先信任反代头；X-Forwarded-Host 与 Host 本身已含端口（容器反代场景下
+    // 服务器内部端口与对外端口往往不一致，绝不能用 SERVER_PORT 去补，否则会拼出
+    // 形如 https://chat.example.com:80 的错误地址）。仅当两者都缺失时退回 SERVER_NAME。
+    $host = trim((string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? ''));
+    if ($host === '') $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+    $fromServerName = false;
+    if ($host === '') { $host = trim((string)($_SERVER['SERVER_NAME'] ?? '')); $fromServerName = true; }
+    if ($host === '') return '';
+    $host = trim(explode(',', $host)[0]);
+    if (!preg_match('/^[a-zA-Z0-9._\[\]:-]+$/', $host)) return '';   // 主机头防注入
+
+    // 仅 SERVER_NAME 兜底时才补非标准端口
+    if ($fromServerName && strpos($host, ':') === false) {
+        $port = (int)($_SERVER['SERVER_PORT'] ?? 0);
+        if ($port > 0 && !(($proto === 'http' && $port === 80) || ($proto === 'https' && $port === 443))) {
+            $host .= ':' . $port;
+        }
+    }
+
+    // 子目录部署：去掉脚本名，保留目录部分（如 /chat/index.php → /chat）
+    $base = '/';
+    $script = (string)($_SERVER['SCRIPT_NAME'] ?? '');
+    if ($script !== '') $base = rtrim(str_replace('\\', '/', dirname($script)), '/.');
+    return $proto . '://' . $host . $base;
+}
+
+/**
+ * 生成站内绝对地址。
+ * @param string $path 站内相对路径（如 uploads/image/a.jpg 或 ?page=chat）
+ * @param bool   $manualOnly 同 ow_site_url()：仅允许手动配置的地址参与拼接
+ * @return string 有站点地址时返回绝对 URL；否则原样返回 $path（保持相对路径行为不变）
+ */
+function ow_abs_url(string $path, bool $manualOnly = true): string
+{
+    $base = ow_site_url($manualOnly);
+    if ($base === '') return $path;
+    if (preg_match('#^https?://#i', $path)) return $path;              // 已是绝对地址
+    return $base . '/' . ltrim($path, '/');
+}
+
 // ================= 页面渲染函数 =================
 /** 自研线性图标（零依赖 inline SVG，stroke 风格） */
 function ow_icon(string $name, int $size = 18): string
@@ -728,6 +795,7 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         ],
         'rooms' => $rooms,
         'room' => $first['id'],
+        'site_url' => ow_site_url(),
         'settings' => $settings,
         'me' => $user ? [
             'nickname' => $user['nickname'], 'id' => (int)$user['id'],

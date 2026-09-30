@@ -68,7 +68,9 @@ class Upload
         $name = date('Ymd') . '_' . bin2hex(random_bytes(8)) . '.' . $extOrMsg;
         $dest = self::$cfg['dir'] . '/' . $kind . '/' . $name;
         if (!move_uploaded_file($f['tmp_name'], $dest)) return [false, '保存失败'];
-        return [true, self::$cfg['url'] . '/' . $kind . '/' . $name];
+        $rel = self::$cfg['url'] . '/' . $kind . '/' . $name;
+        // 手动配置了「固定网站地址」才返回绝对 URL（自动识别不参与，避免误判）
+        return [true, ow_abs_url($rel, true)];
     }
 
     /**

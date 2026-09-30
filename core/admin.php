@@ -114,7 +114,10 @@ class Admin
             // ---------- 站点设置 ----------
             case 'admin_settings_get':
                 $rows = DB::all('SELECT k, v FROM settings');
-                Api::json(['ok' => true, 'data' => array_column($rows, 'v', 'k')]);
+                $data = array_column($rows, 'v', 'k');
+                // 附带「自动识别」出的地址，供设置页提示当前识别结果（不入库）
+                $data['site_url_detected'] = ow_site_url();
+                Api::json(['ok' => true, 'data' => $data]);
 
             case 'admin_settings_save':
                 // 创建群聊扣分必须是 0-999999 的整数：填负数或小数会被 (int) 转成一个
@@ -124,7 +127,14 @@ class Admin
                         Api::json(['ok' => false, 'msg' => '创建群聊扣除积分需填 0-999999 的整数（0 表示免费）']);
                     }
                 }
-                $allow = ['site_name', 'allow_register', 'reg_email_verify', 'guest_browse', 'guest_chat',
+                // 固定网站地址：允许留空（自动识别）；填写时必须是 http(s) 开头的合法地址
+                if (isset($_POST['site_url']) && trim((string)$_POST['site_url']) !== '') {
+                    $u = trim((string)$_POST['site_url']);
+                    if (!preg_match('{^https?://[a-zA-Z0-9._~:/?#\[\]@!$&()*+,;=%-]+$}', $u)) {
+                        Api::json(['ok' => false, 'msg' => '固定网站地址需以 http:// 或 https:// 开头']);
+                    }
+                }
+                $allow = ['site_name', 'site_url', 'allow_register', 'reg_email_verify', 'guest_browse', 'guest_chat',
                           'guest_daily_limit', 'msg_rate_window', 'msg_rate_max', 'mail_rate_limit',
                           'sound_default', 'room_pass_ttl',
                           'login_fail_captcha', 'login_fail_lock', 'login_lock_minutes', 'min_register_age',
