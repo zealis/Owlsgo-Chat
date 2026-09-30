@@ -254,7 +254,9 @@
     /* 头像：有图用图；无图时游客固定米金底（#E5D5A0，深字保证可读），
        用户按昵称长度从色盘取色 */
     function avatarHtml(url, name, sm, role) {
-        var cls = 'ow-avatar' + (sm ? ' ow-avatar-sm' : '');
+        // 尺寸档：true/sm=28px（列表用）、'md'=32px（设置弹窗）、false=40px（资料区等）
+        var sizeCls = sm === 'md' ? ' ow-avatar-md' : (sm ? ' ow-avatar-sm' : '');
+        var cls = 'ow-avatar' + sizeCls;
         if (url) return '<span class="' + cls + '"><img src="' + esc(url) + '" alt=""></span>';
         var ch = esc((name || '?').charAt(0));
         if (role === 'guest') {
@@ -1246,13 +1248,15 @@
             if (!me) return;
             this.openModal(
                 '<h3>个人设置</h3>'
+                // 头像置顶：点击当前头像即触发上传（不另设上传按钮）
+                + '<div class="ow-set-avatar">'
+                + '<span id="owSetAvatarPreview" class="ow-set-avatar-btn" title="点击更换头像" onclick="document.getElementById(\'owSetAvatarFile\').click()">'
+                + avatarHtml(me.avatar, me.nickname, 'md', me.role) + '</span>'
+                + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none">'
+                + '</div>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
                 + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
                 + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id ? fmtUid(me.id) : '-') + '</div>'
-                + '<div class="ow-form-item"><label>头像</label><div class="ow-captcha-row">'
-                + '<span id="owSetAvatarPreview">' + avatarHtml(me.avatar, me.nickname, false, me.role) + '</span>'
-                + '<button class="ow-btn ow-btn-ghost" onclick="document.getElementById(\'owSetAvatarFile\').click()">上传头像</button>'
-                + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none"></div></div>'
                 + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.saveSettings()">保存</button>'
             );
             var self = this;
@@ -1261,7 +1265,7 @@
                 OwApi.upload('upload', this.files[0], { kind: 'avatar' }, function (r) {
                     if (r.ok) {
                         self.cfg.me.avatar = r.url;
-                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname);
+                        $('owSetAvatarPreview').innerHTML = avatarHtml(r.url, self.cfg.me.nickname, 'md', self.cfg.me.role);
                         toast('头像已上传，点击保存生效');
                     } else toast(r.msg);
                 });
