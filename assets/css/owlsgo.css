@@ -1,22 +1,27 @@
 /* ==========================================================================
    Owlsgo-Chat 自研扁平化 UI（ow 前缀）
-   色彩规范：经典蓝 #00A0E9 / 深蓝 #0078D4，禁渐变、禁毛玻璃、禁 Emoji 图标依赖
+   色彩规范：经典蓝 #00A0E9（装饰）/ 文字蓝 #006AB8 / 深蓝 #00558F，禁渐变、禁毛玻璃、
+   禁 Emoji 图标依赖；文字与其背景对比度须达 WCAG AA（正文 4.5:1、大字与 UI 组件 3:1）
    兼容旧内核浏览器：flex 布局 + 媒体查询，无 CSS Grid 依赖（渐进增强）
    ========================================================================== */
 
 :root {
-    --ow-primary: #00A0E9;
-    --ow-primary-dark: #0078D4;
+    /* 色系按 WCAG AA 校准（v1.0.56）：品牌色保留用于装饰/边框，
+       承载文字或白字的场景一律使用加深后的 *-strong / 深色调，确保对比度 ≥4.5:1 */
+    --ow-primary: #00A0E9;          /* 品牌蓝：仅用于描边、图标底、焦点态，不承载文字 */
+    --ow-primary-strong: #006AB8;   /* 文字蓝 / 实心按钮底（白字 5.59:1） */
+    --ow-primary-dark: #00558F;     /* 悬停、选中态（白 7.79:1、浅蓝底 7.09:1） */
     --ow-bg: #FFFFFF;
     --ow-bg-sub: #F5F7FA;
-    --ow-border: #E0E4E8;
+    --ow-border: #E0E4E8;            /* 装饰性分隔线（卡片/表格），非交互组件 */
+    --ow-border-control: #8C8C8C;    /* 输入控件边框：对白底 3.36:1，满足 UI 组件 3:1 */
     --ow-text: #333333;
-    --ow-text-sub: #999999;
+    --ow-text-sub: #5C5C5C;         /* 副文本：白底 6.69、浅灰底 6.23、徽章底 5.23 */
     --ow-text-title: #1A1A1A;
-    --ow-green: #52C41A;
-    --ow-yellow: #FAAD14;
-    --ow-red: #F5222D;
-    --ow-orange: #FF7D00;
+    --ow-green: #237804;            /* 成功 / 可发言：白底 5.59、浅绿标签底 5.44 */
+    --ow-yellow: #874D00;           /* 称号标签等：浅黄底 6.53 */
+    --ow-red: #C41D1F;              /* 危险 / 管理员标签：白底 5.93、浅红底 5.39，白字 5.93 */
+    --ow-orange: #A05000;           /* VIP 标签：浅橙底 5.41、白底 5.77 */
     --ow-blue-light: #E6F7FF;
     --ow-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     --ow-mono: Consolas, Monaco, "Courier New", monospace;
@@ -31,7 +36,7 @@ body {
     color: var(--ow-text);
     background: var(--ow-bg-sub);
 }
-a { color: var(--ow-primary); text-decoration: none; }
+a { color: var(--ow-primary-strong); text-decoration: none; }
 a:hover { color: var(--ow-primary-dark); }
 img { max-width: 100%; }
 ul { list-style: none; }
@@ -49,10 +54,10 @@ button { font-family: inherit; cursor: pointer; }
     color: var(--ow-text);
     transition: background .15s;
 }
-.ow-btn-primary { background: var(--ow-primary); color: #fff; }
+.ow-btn-primary { background: var(--ow-primary-strong); color: #fff; }
 .ow-btn-primary:hover { background: var(--ow-primary-dark); }
 .ow-btn-primary:active { background: #005a9e; }
-.ow-btn-ghost { background: transparent; border-color: var(--ow-border); }
+.ow-btn-ghost { background: transparent; border-color: var(--ow-border-control); }
 .ow-btn-ghost:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
 .ow-btn-block { display: block; width: 100%; text-align: center; }
 .ow-btn-danger { background: var(--ow-red); color: #fff; }
@@ -79,14 +84,14 @@ button { font-family: inherit; cursor: pointer; }
 .ow-input {
     width: 100%;
     padding: 9px 12px;
-    border: 1px solid var(--ow-border);
+    border: 1px solid var(--ow-border-control);
     border-radius: 6px;
     background: var(--ow-bg-sub);
     font-size: 14px;
     font-family: inherit;
     color: var(--ow-text);
 }
-.ow-input:focus { outline: none; border-color: var(--ow-primary); background: #fff; }
+.ow-input:focus { outline: none; border-color: var(--ow-primary-strong); background: #fff; }
 .ow-form-msg { margin-top: 10px; font-size: 13px; min-height: 20px; }
 .ow-captcha-row { display: flex; display: -webkit-flex; gap: 8px; }
 .ow-captcha-row .ow-input { flex: 1; -webkit-flex: 1; }
@@ -109,7 +114,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-tag-vip { background: #fff7e6; color: var(--ow-orange); border: 1px solid #ffd591; }
 .ow-tag-member { background: var(--ow-blue-light); color: var(--ow-primary-dark); border: 1px solid #91d5ff; }
 .ow-tag-guest { background: var(--ow-bg-sub); color: var(--ow-text-sub); border: 1px solid var(--ow-border); }
-.ow-tag-title { background: #fffbe6; color: #d48806; border: 1px solid #ffe58f; }
+.ow-tag-title { background: #fffbe6; color: var(--ow-yellow); border: 1px solid #ffe58f; }
 .ow-badge-num {
     display: inline-block;
     min-width: 18px;
@@ -216,7 +221,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-room-icon {
     width: 32px; height: 32px;
     border-radius: 50%;
-    background: var(--ow-primary);
+    background: var(--ow-primary-strong);
     color: #fff;
     text-align: center;
     line-height: 32px;
@@ -263,7 +268,7 @@ button { font-family: inherit; cursor: pointer; }
     border-bottom: 1px solid #ffe58f;
     padding: 6px 16px;
     font-size: 12px;
-    color: #d48806;
+    color: var(--ow-yellow);
     overflow: hidden;
     height: 30px;
     position: relative;
@@ -284,7 +289,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-load-more {
     text-align: center;
     font-size: 12px;
-    color: var(--ow-primary);
+    color: var(--ow-primary-strong);
     padding: 6px;
     cursor: pointer;
 }
@@ -353,7 +358,7 @@ button { font-family: inherit; cursor: pointer; }
     border: 1px solid var(--ow-border);
     border-radius: 8px;
 }
-.ow-file-ico { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary); }
+.ow-file-ico { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary-strong); }
 .ow-file-meta { flex: 1; -webkit-flex: 1; min-width: 0; line-height: 1.3; }
 .ow-file-name {
     font-size: 13px; color: var(--ow-text-title);
@@ -361,7 +366,7 @@ button { font-family: inherit; cursor: pointer; }
     display: block;
 }
 .ow-file-size { font-size: 12px; color: var(--ow-text-sub); margin-top: 2px; }
-.ow-file-dl { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary); text-decoration: none; }
+.ow-file-dl { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-primary-strong); text-decoration: none; }
 .ow-file-dl svg { display: block; }
 .ow-file-dl:hover { color: var(--ow-primary-dark); }
 
@@ -409,7 +414,7 @@ button { font-family: inherit; cursor: pointer; }
     cursor: ns-resize;
     user-select: none; -webkit-user-select: none;
 }
-.ow-input-resize:hover { opacity: .9; color: var(--ow-primary); }
+.ow-input-resize:hover { opacity: .9; color: var(--ow-primary-strong); }
 @media (max-width: 720px) { .ow-input-resize { display: none; } }
 .ow-send { width: 46px; height: 40px; padding: 0; font-size: 18px; border-radius: 50%; flex-shrink: 0; -webkit-flex-shrink: 0; }
 

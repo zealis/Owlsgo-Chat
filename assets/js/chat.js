@@ -258,9 +258,9 @@
         if (url) return '<span class="' + cls + '"><img src="' + esc(url) + '" alt=""></span>';
         var ch = esc((name || '?').charAt(0));
         if (role === 'guest') {
-            return '<span class="' + cls + '" style="background:#E5D5A0;color:#7A5E12">' + ch + '</span>';
+            return '<span class="' + cls + '" style="background:#E5D5A0;color:#5C4500">' + ch + '</span>';
         }
-        var colors = ['#00A0E9', '#0078D4', '#FF7D00', '#52C41A', '#722ed1'];
+        var colors = ['#006AB8', '#00558F', '#A05000', '#237804', '#5B21B6'];
         var ci = (name || '').length % colors.length;
         return '<span class="' + cls + '" style="background:' + colors[ci] + '">' + ch + '</span>';
     }
@@ -283,10 +283,10 @@
             var codeBtn = form.querySelector('[data-sendcode]');
             if (codeBtn) codeBtn.onclick = function () {
                 var email = form.querySelector('[name=email]').value;
-                if (!email) { msg.innerHTML = '<span style="color:#F5222D">请先填写邮箱</span>'; return; }
+                if (!email) { msg.innerHTML = '<span style="color:#C41D1F">请先填写邮箱</span>'; return; }
                 codeBtn.disabled = true;
                 OwApi.post('send_code', { email: email, type: codeBtn.getAttribute('data-sendcode') }, function (r) {
-                    msg.innerHTML = '<span style="color:' + (r.ok ? '#52C41A' : '#F5222D') + '">' + esc(r.msg) + '</span>';
+                    msg.innerHTML = '<span style="color:' + (r.ok ? '#237804' : '#C41D1F') + '">' + esc(r.msg) + '</span>';
                     var n = 60;
                     if (r.ok) {
                         var tm = setInterval(function () {
@@ -308,7 +308,7 @@
                 msg.innerHTML = '提交中…';
                 OwApi.post(mode === 'login' ? 'login' : mode, data, function (r) {
                     if (r.ok) {
-                        msg.innerHTML = '<span style="color:#52C41A">' + esc(r.msg) + '</span>';
+                        msg.innerHTML = '<span style="color:#237804">' + esc(r.msg) + '</span>';
                         // 注册成功不进入聊天（后端注册本就不建会话）：跳登录页由用户手动登录
                         setTimeout(function () {
                             location.href = mode === 'login' ? '?page=chat'
@@ -316,7 +316,7 @@
                                 : '?page=login&registered=1';
                         }, 800);
                     } else {
-                        msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>';
+                        msg.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>';
                         if (r.captcha && $('owCaptchaRow')) {
                             $('owCaptchaRow').style.display = 'block';
                             if (img) img.src = '?action=captcha&_=' + new Date().getTime();
@@ -569,11 +569,11 @@
             var input = $('owRoomPw'), msg = $('owRoomPwMsg');
             var submit = function () {
                 var pw = input.value;
-                if (!pw) { msg.innerHTML = '<span style="color:#F5222D">请输入密码</span>'; return; }
+                if (!pw) { msg.innerHTML = '<span style="color:#C41D1F">请输入密码</span>'; return; }
                 msg.innerHTML = '验证中…';
                 OwApi.post('room_join', { room_id: roomId, password: pw }, function (r) {
                     if (!r.ok) {
-                        msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>';
+                        msg.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>';
                         input.select();
                         return;
                     }
@@ -675,14 +675,14 @@
                         // 降级：短轮询 + 指数退避（2s → 10s 封顶）
                         var wait = Math.min(10000, 2000 * self.failCount);
                         $('owLatency').innerHTML = '重连中…';
-                        $('owLatency').style.color = '#F5222D';
+                        $('owLatency').style.color = '#C41D1F';
                         setTimeout(loop, wait);
                         return;
                     }
                     self.failCount = 0;
                     var ms = new Date().getTime() - t0;
                     $('owLatency').innerHTML = '● ' + ms + ' ms';
-                    $('owLatency').style.color = '#52C41A';
+                    $('owLatency').style.color = '#237804';
                     self.since = r.since;
                     var i, hasNew = false;
                     for (i = 0; i < r.messages.length; i++) {
@@ -815,7 +815,7 @@
             var pts = parseInt(me.points, 10) || 0;
             var notEnough = cost > 0 && me.role !== 'admin' && pts < cost;   // 管理员免费
             if (notEnough) {
-                tip.innerHTML = '<span style="color:#F5222D">积分不足：创建需要 <b>' + cost + '</b> 积分，当前 <b>' + pts + '</b>。</span>';
+                tip.innerHTML = '<span style="color:#C41D1F">积分不足：创建需要 <b>' + cost + '</b> 积分，当前 <b>' + pts + '</b>。</span>';
                 $('owRCCreate').disabled = true;
                 $('owRCCreate').style.opacity = '.5';
                 $('owRCCreate').style.cursor = 'not-allowed';
@@ -827,12 +827,12 @@
                 tip.innerHTML = '创建免费。';
             }
             var submit = function () {
-                if (notEnough) { msg.innerHTML = '<span style="color:#F5222D">积分不足，无法创建</span>'; return; }
+                if (notEnough) { msg.innerHTML = '<span style="color:#C41D1F">积分不足，无法创建</span>'; return; }
                 var name = $('owRCName').value.replace(/^\s+|\s+$/g, '');
-                if (name.length < 2) { msg.innerHTML = '<span style="color:#F5222D">群名称至少 2 个字符</span>'; return; }
+                if (name.length < 2) { msg.innerHTML = '<span style="color:#C41D1F">群名称至少 2 个字符</span>'; return; }
                 var t = typeSel.value;
                 if (t === 'password' && !$('owRCPass').value) {
-                    msg.innerHTML = '<span style="color:#F5222D">密码群必须设置密码</span>'; return;
+                    msg.innerHTML = '<span style="color:#C41D1F">密码群必须设置密码</span>'; return;
                 }
                 msg.innerHTML = '创建中…';
                 OwApi.post('room_create', {
@@ -840,7 +840,7 @@
                     min_role: $('owRCRole').value,
                     description: $('owRCDesc').value
                 }, function (r) {
-                    if (!r.ok) { msg.innerHTML = '<span style="color:#F5222D">' + esc(r.msg) + '</span>'; return; }
+                    if (!r.ok) { msg.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>'; return; }
                     self.closeModal();
                     toast('群聊「' + r.name + '」已创建' + (r.cost > 0 ? '，扣除 ' + r.cost + ' 积分' : ''));
                     self.refreshRooms(r.id, r.name);
@@ -1091,7 +1091,7 @@
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
                     + '<div style="margin-top:4px">' + roleTag(u.role, u.title) + '</div></div>'
                     // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
-                    + '<p style="font-size:13px;color:#999">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
+                    + '<p style="font-size:13px;color:#5C5C5C">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
                     + '积分：' + esc(u.points || 0) + '<br>'
                     + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
                 );
@@ -1169,7 +1169,7 @@
                 }
             } else {
                 OwApi.post('stickers', {}, function (r) {
-                    if (!r.ok || !r.data.length) { grid.innerHTML = '<p style="padding:20px;color:#999;font-size:12px">暂无贴纸：把鼠标悬停在图片消息上点击「收藏贴纸」即可添加</p>'; return; }
+                    if (!r.ok || !r.data.length) { grid.innerHTML = '<p style="padding:20px;color:#5C5C5C;font-size:12px">暂无贴纸：把鼠标悬停在图片消息上点击「收藏贴纸」即可添加</p>'; return; }
                     for (i = 0; i < r.data.length; i++) html += '<img class="ow-sticker-item" src="' + esc(r.data[i].url) + '">';
                     grid.innerHTML = html;
                     var imgs = grid.getElementsByTagName('img');
@@ -1204,7 +1204,7 @@
             this.openModal(
                 '<h3>个人设置</h3>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
-                + '<p style="font-size:12px;color:#999;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
+                + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">2-20 个字符，支持中英文、数字、下划线与短横线，不含空格或 @；允许重名。</p></div>'
                 + '<div class="ow-form-item"><label>用户 ID</label><div class="ow-input" style="background:var(--ow-bg-sub);cursor:default">' + esc(me.id ? fmtUid(me.id) : '-') + '</div>'
                 + '<div class="ow-form-item"><label>头像</label><div class="ow-captcha-row">'
                 + '<span id="owSetAvatarPreview">' + avatarHtml(me.avatar, me.nickname, false, me.role) + '</span>'
@@ -1428,7 +1428,7 @@
                            + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.pluginUninstall(\'' + esc(d.id) + '\')">卸载</button>'
                            + '</div></div>';
                     }
-                    if (!r.data.length) h += '<div class="ow-card" style="color:#999">暂无插件</div>';
+                    if (!r.data.length) h += '<div class="ow-card" style="color:#5C5C5C">暂无插件</div>';
                     main.innerHTML = h + '</div>';
                 });
             },
@@ -1481,27 +1481,27 @@
                         + '<div class="ow-form-item"><label>邮件发送间隔(秒)</label><input class="ow-input" id="owS_mail_rate_limit" value="' + esc(d.mail_rate_limit || '60') + '"></div>'
                         + '</div>'
                         + '<div class="ow-form-item"><label>密码房通行缓存(秒)</label><input class="ow-input" id="owS_room_pass_ttl" value="' + esc(d.room_pass_ttl || '1800') + '">'
-                        + '<p style="font-size:12px;color:#999;margin-top:4px">验证一次密码后，该时间内进入同一房间无需重复输入；填 0 表示每次进入都要输入。</p></div>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">验证一次密码后，该时间内进入同一房间无需重复输入；填 0 表示每次进入都要输入。</p></div>'
                         + '<div class="ow-form-row">'
                         + '<div class="ow-form-item"><label>登录失败几次后要求验证码</label><input class="ow-input" id="owS_login_fail_captcha" value="' + esc(d.login_fail_captcha || '3') + '"></div>'
                         + '<div class="ow-form-item"><label>登录失败几次后锁定</label><input class="ow-input" id="owS_login_fail_lock" value="' + esc(d.login_fail_lock || '10') + '"></div>'
                         + '<div class="ow-form-item"><label>锁定时长(分钟)</label><input class="ow-input" id="owS_login_lock_minutes" value="' + esc(d.login_lock_minutes || '15') + '"></div>'
                         + '</div>'
                         + '<div class="ow-form-item"><label>注册最低年龄(周岁)</label><input class="ow-input" id="owS_min_register_age" value="' + esc(d.min_register_age || '0') + '">'
-                        + '<p style="font-size:12px;color:#999;margin-top:4px">填 0 表示不限制；填 18 则注册时必须选择出生日期且年满 18 周岁（按日期精确计算）。</p></div>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">填 0 表示不限制；填 18 则注册时必须选择出生日期且年满 18 周岁（按日期精确计算）。</p></div>'
                         + '<div class="ow-form-row">'
                         + '<div class="ow-form-item"><label>允许上传文件</label>' + sel('file_upload', { '1': '允许', '0': '禁止' }) + '</div>'
                         + '<div class="ow-form-item"><label>单文件大小上限(MB)</label><input class="ow-input" id="owS_file_max_size" value="' + esc(d.file_max_size || '10') + '"></div>'
                         + '</div>'
                         + '<div class="ow-form-item"><label>允许的文件扩展名</label><input class="ow-input" id="owS_file_exts" value="' + esc(d.file_exts || 'zip,rar,7z,pdf,txt,md,doc,docx,xls,xlsx,ppt,pptx,mp3,mp4') + '">'
-                        + '<p style="font-size:12px;color:#999;margin-top:4px">逗号分隔。只有内置安全类型表内登记过的扩展名才会生效；'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">逗号分隔。只有内置安全类型表内登记过的扩展名才会生效；'
                         + 'svg/php/html 等可执行或可内嵌脚本的类型不予登记（即使填了也不会放行）。</p></div>'
-                        + '<p style="font-size:12px;color:#999;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">登录保护：验证码填错也计入失败次数（保证锁定可达），锁定按「账号+IP」记录，成功后清零。全部填 0 表示关闭对应保护。</p>'
                         + '<div class="ow-form-row">'
                         + '<div class="ow-form-item"><label>允许用户创建群聊</label>' + sel('room_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
                         + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
                         + '</div>'
-                        + '<p style="font-size:12px;color:#999;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在聊天室管理中调整。</p>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在聊天室管理中调整。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
                 });

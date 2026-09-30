@@ -538,7 +538,7 @@ function ageFieldHtml(): string
         . '<div class="ow-birth-row"><select class="ow-input" name="birth_y" required>' . $ys . '</select>'
         . '<select class="ow-input" name="birth_m" required>' . $ms . '</select>'
         . '<select class="ow-input" name="birth_d" required>' . $ds . '</select></div>'
-        . '<p style="font-size:12px;color:#999;margin-top:4px">注册需年满 ' . $min . ' 周岁（按出生日期精确计算）。</p></div>';
+        . '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">注册需年满 ' . $min . ' 周岁（按出生日期精确计算）。</p></div>';
 }
 
 function pageHead(string $title): void
@@ -576,7 +576,7 @@ function renderInstall(string $err): void
        . '<div class="ow-form-item"><label>管理员昵称</label><input class="ow-input" name="nickname" required placeholder="2-20 个字符"></div>'
        . '<div class="ow-form-item"><label>管理员邮箱</label><input class="ow-input" type="email" name="email" required></div>'
        . '<div class="ow-form-item"><label>管理员密码</label><input class="ow-input" type="password" name="password" required></div>'
-       . '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#0078D4;font-size:13px">SMTP 邮件配置（可选，稍后可在 config.php 修改）</summary>'
+       . '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#00558F;font-size:13px">SMTP 邮件配置（可选，稍后可在 config.php 修改）</summary>'
        . '<div class="ow-form-item"><label>SMTP 主机</label><input class="ow-input" name="smtp_host" placeholder="smtp.qq.com"></div>'
        . '<div class="ow-form-item"><label>SMTP 账号</label><input class="ow-input" name="smtp_user"></div>'
        . '<div class="ow-form-item"><label>SMTP 密码/授权码</label><input class="ow-input" type="password" name="smtp_pass"></div></details>'
@@ -585,8 +585,8 @@ function renderInstall(string $err): void
        . '<script>document.getElementById("owInstallForm").onsubmit=function(e){e.preventDefault();'
        . 'var f=new FormData(this);var x=new XMLHttpRequest();'
        . 'x.open("POST","?action=install",true);x.onreadystatechange=function(){if(x.readyState===4){'
-       . 'try{var r=JSON.parse(x.responseText);if(r.ok){document.getElementById("owInstallMsg").innerHTML="<span style=\"color:#52C41A\">安装成功，正在跳转...</span>";setTimeout(function(){location.href="?page=login"},800);}'
-       . 'else{document.getElementById("owInstallMsg").innerHTML="<span style=\"color:#F5222D\">"+r.msg+"</span>";}}catch(_){}}};x.send(f);};</script>'
+       . 'try{var r=JSON.parse(x.responseText);if(r.ok){document.getElementById("owInstallMsg").innerHTML="<span style=\"color:#237804\">安装成功，正在跳转...</span>";setTimeout(function(){location.href="?page=login"},800);}'
+       . 'else{document.getElementById("owInstallMsg").innerHTML="<span style=\"color:#C41D1F\">"+r.msg+"</span>";}}catch(_){}}};x.send(f);};</script>'
        . '</body></html>';
 }
 
@@ -600,7 +600,7 @@ function renderAuth(string $mode): void
     if ($mode === 'login') {
         // 从注册页跳转而来：提示注册成功、需手动登录（注册不自动登录）
         $regTip = isset($_GET['registered'])
-            ? '<p style="color:#52C41A;font-size:13px;margin:0 0 10px">注册成功，请使用注册邮箱或用户 ID 登录。</p>'
+            ? '<p style="color:#237804;font-size:13px;margin:0 0 10px">注册成功，请使用注册邮箱或用户 ID 登录。</p>'
             : '';
         echo '<form class="ow-auth-form" data-mode="login">'
            . $regTip
@@ -622,7 +622,7 @@ function renderAuth(string $mode): void
                ? '<div class="ow-captcha-row"><input class="ow-input" type="email" name="email" required>'
                  . '<button type="button" class="ow-btn ow-btn-ghost" data-sendcode="register">发验证码</button></div>'
                : '<input class="ow-input" type="email" name="email" required>')
-           . '<p style="font-size:12px;color:#999;margin-top:4px">'
+           . '<p style="font-size:12px;color:#5C5C5C;margin-top:4px">'
            . ($needMail ? '注册需要邮箱验证码。' : '当前未开启邮箱验证，邮箱仅用于找回密码。')
            . '</p></div>'
            . ($needMail ? '<div class="ow-form-item"><label>邮箱验证码</label><input class="ow-input" name="code" required></div>' : '')
