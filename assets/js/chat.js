@@ -501,7 +501,15 @@
                 var m = self.msgCache[parseInt(node.id.replace('owMsg', ''), 10)];
                 if (!m || m.type === 'system' || m.recalled) { self.hideCtxMenu(); return; }
                 if (e.preventDefault) e.preventDefault(); else e.returnValue = false;
-                self.showCtxMenu(e.clientX || 0, e.clientY || 0, m);
+                // 右键落点分流（v1.0.69）：点在头像上 → 对该「人」的操作菜单；
+                // 点在消息内容 / 其它区域 → 对该「消息」的操作菜单（复制 / 引用 / 删除）
+                var onAvatar = false, n2 = e.target || e.srcElement;
+                while (n2 && n2 !== node) {
+                    if (n2.className && String(n2.className).indexOf('ow-avatar') >= 0) { onAvatar = true; break; }
+                    n2 = n2.parentNode;
+                }
+                if (onAvatar) self.showUserMenu(e.clientX || 0, e.clientY || 0, m);
+                else self.showContentMenu(e.clientX || 0, e.clientY || 0, m);
                 return false;
             };
             // 点击菜单外 / Esc 关闭
@@ -757,7 +765,10 @@
             if (m.recalled) content = '<span class="ow-msg-content">此消息已撤回</span>';
             else if (m.type === 'file') content = '<span class="ow-msg-content" style="padding:4px">' + fileCardHtml(m) + '</span>';
             else if (m.type === 'image') content = '<span class="ow-msg-content" style="padding:4px"><img class="ow-msg-img" src="' + esc(m.content) + '" onclick="OwChat.viewImg(this.src)" alt="图片"></span>';
-            else content = '<span class="ow-msg-content">' + esc(m.content) + '</span>';
+            else content = '<span class="ow-msg-content">' + (m.quote && (m.quote.nick || m.quote.text)
+                    ? '<span class="ow-msg-quote"><b>' + esc(m.quote.nick || '') + '</b>'
+                      + (m.quote.nick ? '：' : '') + esc(m.quote.text || '') + '</span>'
+                    : '') + esc(m.content) + '</span>';
 
             var isSys = m.type === 'system';
             // meta 行：头像一侧依次是「用户组标签、昵称」；时间不直接显示，
@@ -965,12 +976,23 @@
          * env：{ roomId: 当前房间ID, actor: 当前身份对象 }
          */
         _ctxExt: [],
+        _ctxExtContent: [],   // 右键「内容」菜单的插件扩展
+        _quoteExt: [],        // 引用内容钩子（前端侧）
+        quote: null,          // 当前待发送的引用 {nick,text}
         onMsgCtx: function (fn) { if (typeof fn === 'function') this._ctxExt.push(fn); },
+        /** 插件扩展点：构造引用内容时可改写（服务端另有 message.quote 钩子做最终校验） */
+        onQuote: function (fn) { if (typeof fn === 'function') this._quoteExt.push(fn); },
+        showCtxMenu: function (x, y, m) { this.showUserMenu(x, y, m); },
         hideCtxMenu: function () {
             var menu = $('owCtxMenu');
             if (menu) { menu.style.display = 'none'; menu._from = ''; }
         },
-        showCtxMenu: function (x, y, m) {
+        /**
+         * 右键「头像」的用户菜单：对该发言人的操作（@ / 私信 / 收藏 / 撤回 / 禁言…）。
+         * 插件通过 OwChat.onMsgCtx 追加的项也进这里（都是针对「人」的能力）。
+         * @deprecated showCtxMenu 保留为别名，兼容既有插件 / 调用
+         */
+        showUserMenu: function (x, y, m) {
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
             if (!m.recalled) {
                 items.push({ t: '@ ' + m.nickname, run: function () { self.mention(m.nickname); } });
@@ -1017,10 +1039,13 @@
                 type: opt.type || 'text',
                 content: content,
                 to_user_id: opt.to_user_id || '', to_guest_id: opt.to_guest_id || '',
-                to_nickname: opt.to_nickname || ''
+                to_nickname: opt.to_nickname || '',
+                // 引用快照：JSON 字符串，服务端会再次校验截断
+                quote: this.quote ? JSON.stringify(this.quote) : ''
             }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 if (!opt.type || opt.type === 'text') input.value = '';
+                self.clearQuote();   // 发送成功后清掉引用条
                 self.autoGrow();   // 发送后回到单行（若手动拉高过则保持用户高度）
             });
         },
@@ -1322,6 +1347,102 @@
                 plus.onclick = function () { if (s < max - 0.001) { s = Math.min(max, s + 0.1); apply(); } };
             };
             reader.readAsDataURL(file);
+        },
+
+        /**
+         * 右键「消息内容」的菜单：复制 / 引用 / 删除。
+         * 插件可通过 OwChat.onMsgContent 追加项（如翻译、举报、复制原文…）。
+         */
+        showContentMenu: function (x, y, m) {
+            var self = this, admin = this.cfg.actor.role === 'admin', items = [];
+            if (!m.recalled) {
+                items.push({ t: '复制', run: function () { self.copyMsg(m); } });
+                if (this.cfg.actor.kind !== 'none')
+                    items.push({ t: '引用', run: function () { self.quoteMsg(m); } });
+                if (m.mine || admin)
+                    items.push({ t: '删除', run: function () { self.deleteMsg(m.id); } });
+                for (var i = 0; i < this._ctxExtContent.length; i++) {
+                    try { this._ctxExtContent[i](items, m, { roomId: this.room, actor: this.cfg.actor }); } catch (e) {}
+                }
+            }
+            this._ctxItems = items;
+            if (!items.length) return;
+            var menu = $('owCtxMenu'), html = '', i2;
+            menu._from = 'msg';
+            for (i2 = 0; i2 < items.length; i2++) html += '<a href="javascript:;" data-i="' + i2 + '">' + esc(items[i2].t) + '</a>';
+            menu.innerHTML = html;
+            menu.style.display = 'block';
+            var vw = w.innerWidth || document.documentElement.clientWidth, vh = w.innerHeight || document.documentElement.clientHeight;
+            var mw = menu.offsetWidth || 140, mh = menu.offsetHeight || items.length * 32;
+            menu.style.left = Math.max(4, x + mw > vw ? x - mw : x) + 'px';
+            menu.style.top = Math.max(4, y + mh > vh ? y - mh : y) + 'px';
+        },
+
+        /** 插件扩展点：右键消息「内容」时追加菜单项 */
+        onMsgContent: function (fn) { if (typeof fn === 'function') this._ctxExtContent.push(fn); },
+
+        /** 复制消息内容（图片/文件消息复制其可读文本） */
+        copyMsg: function (m) {
+            var text = m.type === 'file' ? (function () {
+                try { return JSON.parse(m.content).name || m.content; } catch (e) { return m.content; }
+            })() : m.content;
+            text = String(text || '');
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+            toast(ok ? '已复制' : '复制失败，请手动选择文本');
+        },
+
+        /**
+         * 引用消息：在输入框上方生成引用条（可点 × 取消）；发送时随消息提交。
+         * 触发 msg.quote 钩子，插件可改写引用内容。
+         */
+        quoteMsg: function (m) {
+            var text = m.type === 'image' ? '[图片]' : (m.type === 'file' ? (function () {
+                try { return '[文件] ' + (JSON.parse(m.content).name || ''); } catch (e) { return '[文件]'; }
+            })() : String(m.content || ''));
+            var q = { nick: m.nickname || '', text: text };
+            for (var i = 0; i < this._quoteExt.length; i++) {
+                try { this._quoteExt[i](q, m); } catch (e) {}
+            }
+            this.quote = { nick: String(q.nick || '').slice(0, 40), text: String(q.text || '').slice(0, 120) };
+            this.renderQuote();
+            var input = $('owInput');
+            if (input) input.focus();
+        },
+
+        /** 渲染 / 清除输入框上方的引用条 */
+        renderQuote: function () {
+            var box = $('owQuoteBar');
+            if (!box) return;
+            var q = this.quote;
+            if (!q || (!q.nick && !q.text)) { this.quote = null; box.style.display = 'none'; box.innerHTML = ''; return; }
+            box.style.display = 'block';
+            box.innerHTML = '<div class="ow-quote-inner"><span class="ow-quote-nick">' + esc(q.nick) + '：</span>'
+                + '<span class="ow-quote-text">' + esc(q.text) + '</span>'
+                + '<button class="ow-quote-del" type="button" title="取消引用" onclick="OwChat.clearQuote()">✕</button></div>';
+        },
+
+        /** 取消引用 */
+        clearQuote: function () { this.quote = null; this.renderQuote(); },
+
+        /** 删除消息（内容右键）：确认弹窗 → 物理删除 → 就地移除 */
+        deleteMsg: function (id) {
+            var self = this;
+            this.confirmModal('确定删除这条消息吗？删除后不可恢复。', function () {
+                OwApi.post('msg_delete', { id: id }, function (r) {
+                    if (!r.ok) { toast(r.msg); return; }
+                    var el = $('owMsg' + id);
+                    if (el && el.parentNode) el.parentNode.removeChild(el);
+                    delete self.msgCache[id];
+                    toast('已删除');
+                });
+            });
         },
 
         /** 取消裁剪：回到个人设置弹窗 */

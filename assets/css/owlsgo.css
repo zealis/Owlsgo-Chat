@@ -428,6 +428,41 @@ button { font-family: inherit; cursor: pointer; }
 .ow-input-row .ow-input { resize: none; max-height: 320px; background: var(--ow-bg-sub); }
 .ow-input-row { position: relative; }
 /* 输入框拖拽手柄（右下角，避开发送按钮） */
+/* 引用条（输入框上方，可点 ✕ 取消） */
+.ow-quote-bar { margin: 0 0 8px; }
+.ow-quote-inner {
+    position: relative;
+    padding: 6px 30px 6px 10px;
+    border-left: 3px solid var(--ow-primary);
+    background: var(--ow-bg-sub);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ow-text-sub);
+}
+.ow-quote-nick { color: var(--ow-text); font-weight: 600; }
+.ow-quote-text { word-break: break-all; }
+.ow-quote-del {
+    position: absolute; right: 4px; top: 50%; margin-top: -11px;
+    width: 22px; height: 22px; line-height: 20px; padding: 0;
+    background: transparent; border: none; cursor: pointer;
+    font-size: 13px; color: var(--ow-text-sub);
+}
+.ow-quote-del:hover { color: var(--ow-text); }
+/* 消息气泡内的引用块 */
+.ow-msg-quote {
+    display: block;
+    margin: 0 0 4px;
+    padding: 4px 8px;
+    border-left: 3px solid var(--ow-primary);
+    background: rgba(0, 0, 0, .05);
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: .85;
+    word-break: break-all;
+}
+.ow-msg-quote b { font-weight: 600; }
+
 .ow-input-resize {
     position: absolute;
     right: 50px; bottom: 2px;

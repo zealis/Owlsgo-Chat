@@ -182,6 +182,24 @@ class Chat
             $content = self::filterWords($content);
         }
 
+        // 引用快照：前端传 {nick,text}，服务端只保留两个字段并截断，避免塞入任意结构
+        $quote = '';
+        if ($type !== 'system' && !empty($opt['quote'])) {
+            $q = is_array($opt['quote']) ? $opt['quote'] : json_decode((string)$opt['quote'], true);
+            if (is_array($q)) {
+                $qn = trim((string)($q['nick'] ?? ''));
+                $qt = trim((string)($q['text'] ?? ''));
+                if ($qn !== '' || $qt !== '') {
+                    $quote = json_encode([
+                        'nick' => mb_substr($qn, 0, 40),
+                        'text' => mb_substr($qt, 0, 120),
+                    ], JSON_UNESCAPED_UNICODE);
+                }
+            }
+        }
+        // 钩子：可改写引用内容（如脱敏、追加上下文），或直接清空以禁用该条引用
+        if ($quote !== '') Plugin::fire('message.quote', [&$quote, $content, $actor, $roomId]);
+
         Plugin::fire('message.before_send', [&$content, $actor, $roomId]);
 
         $id = DB::insert('messages', [
@@ -192,6 +210,7 @@ class Chat
             'title' => $actor['title'] ?? '', 'avatar' => $actor['avatar'] ?? '',
             'type' => $type, 'content' => $content,
             'to_user_id' => $toUserId, 'to_guest_id' => $toGuestId, 'to_nickname' => $toNickname,
+            'quote' => $quote,
             'recalled' => 0, 'ip' => Sec::ip(), 'created_at' => time(),
         ]);
         if ($actor['kind'] === 'guest') {
@@ -223,6 +242,7 @@ class Chat
             'type' => $m['type'],
             'content' => $m['recalled'] ? '' : $m['content'],
             'recalled' => (int)$m['recalled'],
+            'quote' => $m['recalled'] ? null : (json_decode((string)($m['quote'] ?? ''), true) ?: null),
             'to_uid' => $m['to_user_id'] ? (int)$m['to_user_id'] : null,
             'to_gid' => $m['to_guest_id'] ? (int)$m['to_guest_id'] : null,
             'to_nickname' => $m['to_nickname'] ?? '',
@@ -310,6 +330,35 @@ class Chat
     }
 
     // ---------- 撤回 ----------
+    /**
+     * 删除消息（内容右键「删除」）：物理删除，与「撤回」区分
+     * ——撤回是标记 recalled 保留占位，删除是真的从库中移除。
+     * 权限：作者本人（不限时间）、管理员、该群房主。
+     *
+     * @return array [bool, string]
+     */
+    public static function deleteMessage(array $actor, int $msgId): array
+    {
+        $m = DB::one('SELECT * FROM messages WHERE id=?', [$msgId]);
+        if (!$m) return [false, '消息不存在'];
+        $mine = ($actor['kind'] === 'user' && (int)$m['user_id'] === $actor['id'])
+             || ($actor['kind'] === 'guest' && (int)$m['guest_id'] === $actor['id']);
+        $can = $actor['role'] === 'admin' || $mine;
+        if (!$can) {
+            $room = self::room((int)$m['room_id']);
+            if ($room && $actor['kind'] === 'user' && (int)$room['owner_id'] === $actor['id']) $can = true;
+        }
+        // 钩子：可放行或拦截（$allow 置 false 即拒绝，$reason 为展示给用户的理由）
+        $allow = $can; $reason = '';
+        Plugin::fire('msg.before_delete', [&$allow, &$reason, $m, $actor]);
+        if (!$allow) return [false, $reason !== '' ? $reason : '无权删除该消息'];
+
+        DB::run('DELETE FROM messages WHERE id=?', [$msgId]);
+        Sec::log('msg_delete', (string)$msgId, ['room' => (int)$m['room_id']]);
+        Plugin::fire('msg.after_delete', [$msgId, $m, $actor]);
+        return [true, '已删除'];
+    }
+
     public static function recall(array $actor, int $msgId): array
     {
         $m = DB::one('SELECT * FROM messages WHERE id=?', [$msgId]);

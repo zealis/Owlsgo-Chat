@@ -316,8 +316,15 @@ if ($action !== '') {
         case 'send':
             [$ok, $msg, $id] = Chat::send($actor, (int)$p('room_id'), $p('type', 'text'), (string)($_POST['content'] ?? ''), [
                 'to_user_id' => $p('to_user_id'), 'to_guest_id' => $p('to_guest_id'), 'to_nickname' => $p('to_nickname'),
+                // 引用快照（前端「引用」功能）：{nick,text} 的 JSON 字符串，服务端会再校验截断
+                'quote' => (string)($_POST['quote'] ?? ''),
             ]);
             Api::json(['ok' => $ok, 'msg' => $msg, 'id' => $id ?? null]);
+
+        // ---------- 删除消息（内容右键「删除」，与「撤回」区分） ----------
+        case 'msg_delete':
+            [$ok, $msg] = Chat::deleteMessage($actor, (int)$p('id'));
+            Api::json(['ok' => $ok, 'msg' => $msg]);
 
         case 'recall':
             [$ok, $msg] = Chat::recall($actor, (int)$p('id'));
@@ -761,6 +768,8 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<input type="file" id="owFileAttach" style="display:none">'
        . '</div>'
        . '<div class="ow-input-row">'
+       // 引用条（v1.0.69）：出现在输入框上方，点 ✕ 取消；默认隐藏，由 OwChat.renderQuote 填充
+       . '<div class="ow-quote-bar" id="owQuoteBar" style="display:none"></div>'
        . '<textarea class="ow-input" id="owInput" rows="1" placeholder="输入消息，按 Enter 发送，Ctrl+V 粘贴图片"></textarea>'
        // 拖拽手柄：手动拉高输入框（自动增高之外的人工控制方式）
        . '<span class="ow-input-resize" id="owInputResize" title="拖动调整输入框高度">' . ow_icon('resize', 14) . '</span>'
