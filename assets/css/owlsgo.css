@@ -110,9 +110,11 @@ button { font-family: inherit; cursor: pointer; }
     vertical-align: middle;
 }
 .ow-tag-green { background: #f6ffed; color: var(--ow-green); border: 1px solid #b7eb8f; }
-.ow-tag-admin { background: #fff1f0; color: var(--ow-red); border: 1px solid #ffa39e; }
+/* 群主（v1.0.86）：橙底 #FF7D00，文字同色系加深保证可读 */
+.ow-tag-owner { background: #FF7D00; color: #8C4200; border: 1px solid #E67000; }
 .ow-tag-vip { background: #fff7e6; color: var(--ow-orange); border: 1px solid #ffd591; }
-.ow-tag-member { background: var(--ow-blue-light); color: var(--ow-primary-dark); border: 1px solid #91d5ff; }
+/* 会员（v1.0.86）：默认灰底 */
+.ow-tag-member { background: #E4E4E4; color: #595959; border: 1px solid #D0D0D0; }
 .ow-tag-guest { background: var(--ow-bg-sub); color: var(--ow-text-sub); border: 1px solid var(--ow-border); }
 .ow-tag-title { background: #fffbe6; color: var(--ow-yellow); border: 1px solid #ffe58f; }
 .ow-badge-num {

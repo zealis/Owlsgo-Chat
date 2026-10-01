@@ -244,10 +244,16 @@
         } catch (e) {}
     }
 
-    function roleTag(role, title) {
-        var map = { admin: ['超级管理员', 'ow-tag-admin'], vip: ['VIP', 'ow-tag-vip'], member: ['普通用户', 'ow-tag-member'], guest: ['游客', 'ow-tag-guest'] };
-        var r = map[role] || map.guest, h = '<span class="ow-tag ' + r[1] + '">' + r[0] + '</span>';
-        if (title) h += ' <span class="ow-tag ow-tag-title">' + esc(title) + '</span>';
+    /* 前台身份标签（v1.0.86）：只保留「群主 / 会员」两类身份展示——
+       群主=当前群聊 owner（橙色），VIP=会员（保留 VIP 配色），普通用户与超级管理员=会员（灰色），
+       游客与其它角色不再展示身份标签。超级管理员在别人创建的群聊里同样显示「会员」。 */
+    var CUR_OWNER = 0;   // 当前群聊的 owner 用户 ID（OwChat 切换群聊时同步）
+    function roleTag(role, title, uid) {
+        var h = '';
+        if (uid && uid === CUR_OWNER) h = '<span class="ow-tag ow-tag-owner">群主</span>';
+        else if (role === 'vip') h = '<span class="ow-tag ow-tag-vip">会员</span>';
+        else if (role === 'member' || role === 'admin') h = '<span class="ow-tag ow-tag-member">会员</span>';
+        if (title) h += (h ? ' ' : '') + '<span class="ow-tag ow-tag-title">' + esc(title) + '</span>';
         return h;
     }
 
@@ -342,6 +348,7 @@
             OwApi.key = cfg.key;
             OwApi.setServerTime(cfg.ts);
             this.room = cfg.room;
+            this.syncRoomOwner();
             this.sound = cfg.settings.sound === '1';
             var self = this;
 
@@ -679,8 +686,19 @@
             return mt ? parseInt(mt[1], 10) || 0 : 0;
         },
 
+        /** 同步当前群聊的 owner 用户 ID 到模块变量 CUR_OWNER（roleTag 群主标签用） */
+        syncRoomOwner: function () {
+            var rooms = (this.cfg && this.cfg.rooms) || [];
+            for (var i = 0; i < rooms.length; i++) {
+                if (rooms[i].id === this.room) { CUR_OWNER = rooms[i].owner_id || 0; return; }
+            }
+            CUR_OWNER = 0;
+        },
+
         switchRoom: function (id, name, el, fromPop) {
             this.room = id; this.roomName = name; this.since = 0; this.historyDone = false;
+            this.syncRoomOwner();
+            this.renderMe();   // 资料区身份标签随群聊变化（群主/会员归属当前群）
             $('owRoomName').innerHTML = esc(name);
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             var items = $('owRoomList').getElementsByTagName('li'), i;
@@ -818,7 +836,7 @@
             // meta 行：头像一侧依次是「用户组标签、昵称」；时间不直接显示，
             // 悬停时出现在该行远离头像的一端（自己的消息镜像后标签仍贴头像）
             var timeHtml = '<span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span>';
-            var mainPart = roleTag(m.role, m.title)
+            var mainPart = roleTag(m.role, m.title, m.uid)
                 + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
                 + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '');
             var meta = isSys ? '' :
@@ -1153,7 +1171,7 @@
                     '<h3>用户资料</h3>'
                     + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname, false, u.role)
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
-                    + '<div style="margin-top:4px">' + roleTag(u.role, u.title) + '</div></div>'
+                    + '<div style="margin-top:4px">' + roleTag(u.role, u.title, u.id) + '</div></div>'
                     // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
                     + '<p style="font-size:13px;color:#5C5C5C">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
                     + '积分：' + esc(u.points || 0) + '<br>'
@@ -1173,7 +1191,7 @@
                 html += '<li class="ow-online-item"><span class="ow-online-dot"></span>'
                       + avatarHtml(o.avatar, o.nickname, true, o.role)
                       + '<span class="ow-online-name" onclick="OwChat.userCard(' + (o.uid || 0) + ',\'' + esc(o.nickname) + '\')">' + esc(o.nickname) + '</span>'
-                      + roleTag(o.role, '') + '</li>';
+                      + roleTag(o.role, '', o.uid) + '</li>';
             }
             $('owOnlineList').innerHTML = html;
         },
@@ -1256,7 +1274,7 @@
                 el.className = 'ow-me ow-me-click';
                 el.innerHTML = avatarHtml(me.avatar, me.nickname, false, me.role)
                     + '<div class="ow-me-info">'
-                    + '<div class="ow-me-line"><span class="ow-me-name">' + esc(me.nickname) + '</span>' + roleTag(me.role, me.title) + '</div>'
+                    + '<div class="ow-me-line"><span class="ow-me-name">' + esc(me.nickname) + '</span>' + roleTag(me.role, me.title, me.id) + '</div>'
                     + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(fmtUid(me.id || 0)) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
                 el.onclick = function (e) {
                     // 阻止冒泡：否则 document 级「点击菜单外关闭」会立刻把刚打开的菜单关掉
