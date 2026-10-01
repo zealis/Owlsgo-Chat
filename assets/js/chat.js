@@ -116,7 +116,7 @@
 
     /* 枚举值中文显示（提交时仍用英文原始值，仅界面本地化） */
     var ROOM_TYPE_CN = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
-    var ROLE_CN = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '管理员' };
+    var ROLE_CN = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '超级管理员' };
     function cn(map, v) { return map[v] || v; }
     function opts(map, keys, current) {
         var h = '', i;
@@ -245,7 +245,7 @@
     }
 
     function roleTag(role, title) {
-        var map = { admin: ['管理员', 'ow-tag-admin'], vip: ['VIP', 'ow-tag-vip'], member: ['普通用户', 'ow-tag-member'], guest: ['游客', 'ow-tag-guest'] };
+        var map = { admin: ['超级管理员', 'ow-tag-admin'], vip: ['VIP', 'ow-tag-vip'], member: ['普通用户', 'ow-tag-member'], guest: ['游客', 'ow-tag-guest'] };
         var r = map[role] || map.guest, h = '<span class="ow-tag ' + r[1] + '">' + r[0] + '</span>';
         if (title) h += ' <span class="ow-tag ow-tag-title">' + esc(title) + '</span>';
         return h;
@@ -798,7 +798,7 @@
         roomCreateModal: function () {
             var self = this;
             var TYPE = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
-            var ROLE = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '管理员' };
+            var ROLE = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '超级管理员' };
             var opts = function (map, keys, cur) {
                 var h = '';
                 for (var i = 0; i < keys.length; i++) {
@@ -1897,14 +1897,21 @@
                 });
             },
             rooms: function (main) {
+                // 群聊审核（v1.0.78）：仅封禁/解封、删除、重置违规名称与头像
                 OwApi.post('admin_rooms', {}, function (r) {
-                    var h = '<h2>群聊管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除群聊，设置访问权限与房主。</p><div class="ow-card">'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建群聊</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
+                    var h = '<h2>群聊审核</h2><p class="ow-admin-desc">对群聊做合规处置：名称 / 头像不合法可重置，违规群聊可封禁或删除。</p><div class="ow-card">'
+                        + '<table class="ow-table"><tr><th>ID</th><th>头像</th><th>名称</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
-                        h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
-                           + '<td>' + (d.status == 1 ? '开启' : '关闭') + '</td>'
-                           + '<td><a href="javascript:;" onclick=\'OwAdmin.roomForm(' + JSON.stringify(d) + ')\'>编辑</a> '
+                        var av = d.avatar
+                            ? '<img src="' + esc(d.avatar) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;vertical-align:middle;display:block">'
+                            : '<span style="display:block;width:28px;height:28px;border-radius:50%;background:var(--ow-bg-sub);color:var(--ow-text-sub);font-size:12px;line-height:28px;text-align:center">' + esc(d.name.charAt(0)) + '</span>';
+                        h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + av + '</td><td>' + esc(d.name) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
+                           + '<td>' + (d.status == 1 ? '正常' : '<span style="color:#C41D1F">已封禁</span>') + '</td>'
+                           + '<td style="white-space:nowrap">'
+                           + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'reset_name\')">名称不合法</a> '
+                           + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'reset_avatar\')">头像不合法</a> '
+                           + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'toggle_status\')">' + (d.status == 1 ? '封禁' : '解封') + '</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
                     }
                     main.innerHTML = h + '</table></div>';
@@ -1977,46 +1984,21 @@
         /* ---------- 用户管理动作已随 v1.0.44 剥离为插件（OwUM，plugins/user-manager/） ---------- */
 
         /* ---------- 房间动作 ---------- */
-        roomForm: function (d) {
-            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', owner_id: '', description: '', status: 1, avatar: '' };
-            OwChat._roomAvatar = d.avatar || '';
-            $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '群聊</h2><div class="ow-card">'
-                + '<input type="hidden" id="owRId" value="' + d.id + '">'
-                + '<div class="ow-form-item"><label>群头像（点击上传，自动裁剪为圆形）</label>'
-                + '<span id="owRoomAvatarPreview" class="ow-room-avatar-btn" title="点击上传群头像" onclick="document.getElementById(\'owRoomAvatarFile\').click()">'
-                + (d.avatar ? '<img src="' + esc(d.avatar) + '" alt="">' : '<span class="ow-room-avatar-empty">无头像</span>') + '</span>'
-                + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none"></div>'
-                + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '" maxlength="30" placeholder="2-30 个字符"></div>'
-                + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRType" onchange="OwAdmin.roomTypeToggle()">'
-                + opts(ROOM_TYPE_CN, ['public', 'password', 'role'], d.type) + '</select></div>'
-                + '<div class="ow-form-item" id="owRPassRow"' + (d.type === 'password' ? '' : ' style="display:none"') + '><label>房间密码</label><input class="ow-input" id="owRPass" value="' + esc(d.password || '') + '" placeholder="密码房必须设置密码"></div>'
-                + '<div class="ow-form-item" id="owRRoleRow"' + (d.type === 'role' ? '' : ' style="display:none"') + '><label>最低进入角色</label><select class="ow-input" id="owRRole">'
-                + opts(ROLE_CN, ['guest', 'member', 'vip', 'admin'], d.min_role) + '</select></div>'
-                + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRDesc" value="' + esc(d.description || '') + '" maxlength="200" placeholder="一句话介绍这个群"></div>'
-                + '<div class="ow-form-item"><label>房主用户ID（可撤回本房间任意消息，留空则为空房主）</label><input class="ow-input" id="owROwner" value="' + (d.owner_id || '') + '"></div>'
-                + '<div class="ow-form-item"><label>状态</label><select class="ow-input" id="owRStatus"><option value="1"' + (d.status == 1 ? ' selected' : '') + '>开启</option><option value="0"' + (d.status == 0 ? ' selected' : '') + '>关闭</option></select></div>'
-                + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomSave()">保存</button> '
-                + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.page(\'rooms\')">返回</button></div>';
-            // 群头像选择 → 裁剪弹窗（后台表单独立于弹窗，上传后直接回填预览）
-            var af = $('owRoomAvatarFile');
-            if (af) af.onchange = function () {
-                if (!this.files || !this.files[0]) return;
-                OwChat.roomAvatarCrop(this.files[0]);
-                this.value = '';
+        /** 群聊审核动作：重置名称 / 恢复默认头像 / 封禁解封 */
+        roomReview: function (id, act) {
+            var tips = {
+                reset_name: '确定该群聊名称不合法？将重置为「未命名群聊」。',
+                reset_avatar: '确定该群聊头像不合法？将恢复默认头像。',
+                toggle_status: ''
             };
-        },
-        roomTypeToggle: function () {
-            var t = $('owRType').value;
-            $('owRPassRow').style.display = t === 'password' ? 'block' : 'none';
-            $('owRRoleRow').style.display = t === 'role' ? 'block' : 'none';
-        },
-        roomSave: function () {
-            OwApi.post('admin_room_save', {
-                id: $('owRId').value, name: $('owRName').value, type: $('owRType').value,
-                password: $('owRPass').value, min_role: $('owRRole').value,
-                owner_id: $('owROwner').value, description: $('owRDesc').value, status: $('owRStatus').value,
-                avatar: OwChat._roomAvatar || ''
-            }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('rooms'); });
+            var run = function () {
+                OwApi.post('admin_room_review', { id: id, act: act }, function (r) {
+                    toast(r.msg);
+                    if (r.ok) OwAdmin.page('rooms');
+                });
+            };
+            if (tips[act]) OwAdmin.confirm(tips[act], run);
+            else run();
         },
         roomDel: function (id) {
             OwAdmin.confirm('确定删除该群聊？消息将保留但不可访问。', function () {

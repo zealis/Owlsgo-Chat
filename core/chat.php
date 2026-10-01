@@ -19,9 +19,9 @@ class Chat
                 'avatar' => (string)($r['avatar'] ?? ''),
                 'mine' => (int)($r['owner_id'] ?? 0) === (int)($actor['id'] ?? 0) && $actor['kind'] === 'user',
             ];
-            // 前台可编辑（⋮ 菜单）：管理员或房主
+            // 前台可编辑（⋮ 菜单）：仅房主（超级管理员走后台审核，不在此列）
             $out[count($out) - 1]['can_edit'] = $actor['kind'] === 'user'
-                && ($actor['role'] === 'admin' || (int)($r['owner_id'] ?? 0) === (int)$actor['id']);
+                && (int)($r['owner_id'] ?? 0) === (int)$actor['id'];
         }
         return $out;
     }
@@ -375,13 +375,17 @@ class Chat
     {
         $room = self::room($roomId);
         if (!$room) return [false, '群聊不存在'];
+        // v1.0.78 起前台仅房主可编辑（超级管理员在后台只做审核，不再代改群聊信息）
         $isOwner = $actor['kind'] === 'user' && (int)$room['owner_id'] === (int)$actor['id'];
-        if ($actor['role'] !== 'admin' && !$isOwner) return [false, '仅群主或管理员可编辑群聊信息'];
+        if (!$isOwner) return [false, '仅群主可编辑群聊信息'];
 
         $name = trim($name);
         if (mb_strlen($name) < 1 || mb_strlen($name) > 30) return [false, '群名称需 1-30 个字符'];
         $description = trim($description);
         if (mb_strlen($description) > 200) return [false, '群简介不能超过 200 字'];
+        // 敏感词过滤（与发言同一套词库：命中替换）
+        $name = self::filterWords($name);
+        $description = self::filterWords($description);
         // 头像：仅接受本站头像目录下的相对路径（由上传接口产出），空串表示不修改
         $avatar = trim($avatar);
         if ($avatar !== '' && strpos($avatar, 'uploads/avatar/') !== 0) return [false, '头像路径不合法'];

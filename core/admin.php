@@ -45,47 +45,39 @@ class Admin
 
             // ---------- 群聊管理 ----------
             case 'admin_rooms':
-                Api::json(['ok' => true, 'data' => DB::all('SELECT * FROM rooms ORDER BY id')]);
+                // 审核列表：不返回密码字段
+                $rows = DB::all('SELECT id, name, avatar, type, min_role, owner_id, status, created_at FROM rooms ORDER BY id');
+                Api::json(['ok' => true, 'data' => $rows]);
 
-            case 'admin_room_save':
+            case 'admin_room_review':
+                // 群聊审核（v1.0.78）：超级管理员仅能做合规处置，不代改群聊内容
                 $id = (int)$p('id', '0');
-                if (!in_array($p('type'), ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法类型']);
-                $data = [
-                    'name' => $p('name') ?: '未命名房间',
-                    'type' => $p('type'),
-                    'password' => $p('type') === 'password' ? $p('password') : null,
-                    'min_role' => in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest',
-                    'owner_id' => (int)$p('owner_id', '0') ?: null,
-                    'description' => $p('description'),
-                    'status' => (int)$p('status', '1'),
-                ];
-                // 群聊头像：仅接受本站头像目录下的相对路径（由上传接口产出）；空串不改
-                $avatar = trim((string)$p('avatar', ''));
-                if ($avatar !== '') {
-                    if (strpos($avatar, 'uploads/avatar/') !== 0) Api::json(['ok' => false, 'msg' => '头像路径不合法']);
-                    $data['avatar'] = $avatar;
+                $room = DB::one('SELECT * FROM rooms WHERE id=?', [$id]);
+                if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
+                $act = (string)$p('act', '');
+                if ($act === 'reset_name') {
+                    DB::run("UPDATE rooms SET name=? WHERE id=?", ['未命名群聊', $id]);
+                    Sec::log('room_review', (string)$id, ['act' => 'reset_name']);
+                    Plugin::fire('room.after_update', [$id, ['name' => '未命名群聊'], $actor]);
+                    Api::json(['ok' => true, 'msg' => '已重置为「未命名群聊」']);
                 }
-                if ($id > 0) {
-                    $sets = implode(',', array_map(fn($c) => "$c=?", array_keys($data)));
-                    DB::run("UPDATE rooms SET $sets WHERE id=?", [...array_values($data), $id]);
-                } else {
-                    // 新建：随机位段 ID（同用户 ID 规则），并发撞主键重新分配重试
-                    $attempts = 0;
-                    while (true) {
-                        try {
-                            DB::insert('rooms', $data + [
-                                'id' => Auth::nextId('rooms'),
-                                'slug' => 'room' . time(),
-                                'created_at' => time(),
-                            ]);
-                            break;
-                        } catch (Throwable $e) {
-                            if (++$attempts >= 5) throw $e;
-                        }
+                if ($act === 'reset_avatar') {
+                    $old = (string)$room['avatar'];
+                    DB::run("UPDATE rooms SET avatar='' WHERE id=?", [$id]);
+                    if ($old !== '' && strpos($old, 'uploads/avatar/') === 0 && is_file(dirname(__DIR__) . '/' . $old)) {
+                        @unlink(dirname(__DIR__) . '/' . $old);   // 违规头像文件一并清理
                     }
+                    Sec::log('room_review', (string)$id, ['act' => 'reset_avatar']);
+                    Plugin::fire('room.after_update', [$id, ['avatar' => ''], $actor]);
+                    Api::json(['ok' => true, 'msg' => '头像已恢复默认']);
                 }
-                Sec::log('admin_room_save', $actor['nickname'], ['id' => $id]);
-                Api::json(['ok' => true, 'msg' => '已保存']);
+                if ($act === 'toggle_status') {
+                    $to = (int)$room['status'] === 1 ? 0 : 1;
+                    DB::run('UPDATE rooms SET status=? WHERE id=?', [$to, $id]);
+                    Sec::log('room_review', (string)$id, ['act' => $to ? 'unban' : 'ban']);
+                    Api::json(['ok' => true, 'msg' => $to ? '已解封' : '已封禁']);
+                }
+                Api::json(['ok' => false, 'msg' => '未知审核动作']);
 
             case 'admin_room_del':
                 $id = (int)$p('id');

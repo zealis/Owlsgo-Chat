@@ -365,6 +365,8 @@ if ($action !== '') {
             }
             $name = trim($p('name'));
             if (mb_strlen($name) < 2 || mb_strlen($name) > 30) Api::json(['ok' => false, 'msg' => '群名称需 2-30 个字符']);
+            $name = Chat::filterWords($name);   // 敏感词过滤
+            $desc = Chat::filterWords(trim((string)($_POST['description'] ?? '')));
             $type = $p('type');
             if (!in_array($type, ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法的群类型']);
             $minRole = in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest';
@@ -400,7 +402,7 @@ if ($action !== '') {
                         'password' => $type === 'password' ? $p('password') : null,
                         'min_role' => $minRole,
                         'owner_id' => $uid,
-                        'description' => mb_substr($p('description'), 0, 200),
+                        'description' => mb_substr($desc, 0, 200),   // 已过滤（filterWords）
                         'status' => 1,
                         'created_at' => time(),
                     ]);
@@ -860,7 +862,7 @@ function renderAdmin(array $actor): void
        . '<aside class="ow-admin-side" id="owAdminSide">'
        . '<div class="ow-admin-brand">ADMIN CONSOLE<br><strong>管理后台</strong></div>'
        . '<ul class="ow-admin-menu" id="owAdminMenu">'
-       . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>群聊管理</li>'
+       . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>群聊审核</li>'
        . '<li data-apage="words"><span class="ow-admin-ico">' . ow_icon('ban', 16) . '</span>敏感词过滤</li>'
        . '<li data-apage="anns"><span class="ow-admin-ico">' . ow_icon('mega', 16) . '</span>系统公告</li>'
        . '<li data-apage="logs"><span class="ow-admin-ico">' . ow_icon('shield', 16) . '</span>安全日志</li>'

@@ -142,6 +142,7 @@ class Auth
     {
         if (DB::setting('allow_register', '1') !== '1') return [false, '站点已关闭注册'];
         [$nickOk, $nick] = self::checkNickname($nickname, ['scene' => 'register']);
+        if ($nickOk) $nick = Chat::filterWords($nick);   // 敏感词过滤（与发言同一套词库）
         if (!$nickOk) return [false, $nick];
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return [false, '邮箱格式不正确'];
         if (strlen($password) < 6) return [false, '密码至少 6 位'];
@@ -243,6 +244,7 @@ class Auth
     {
         [$ok, $nick] = self::checkNickname($nickname, ['scene' => 'profile']);
         if (!$ok) return [false, $nick];
+        $nick = Chat::filterWords($nick);   // 敏感词过滤（与发言同一套词库）
         $uid = (int)$user['id'];
         DB::run('UPDATE users SET nickname=?, avatar=? WHERE id=?', [$nick, $avatar, $uid]);
         // 同步本人发出的历史消息（含私信里的「对我」显示名）
