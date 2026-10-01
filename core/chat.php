@@ -190,9 +190,11 @@ class Chat
                 $qn = trim((string)($q['nick'] ?? ''));
                 $qt = trim((string)($q['text'] ?? ''));
                 if ($qn !== '' || $qt !== '') {
+                    // id：被引用消息的 ID，供前端「点击引用跳转到原消息」
                     $quote = json_encode([
                         'nick' => mb_substr($qn, 0, 40),
                         'text' => mb_substr($qt, 0, 120),
+                        'id' => (int)($q['id'] ?? 0),
                     ], JSON_UNESCAPED_UNICODE);
                 }
             }

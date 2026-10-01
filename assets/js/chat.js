@@ -766,7 +766,9 @@
             else if (m.type === 'file') content = '<span class="ow-msg-content" style="padding:4px">' + fileCardHtml(m) + '</span>';
             else if (m.type === 'image') content = '<span class="ow-msg-content" style="padding:4px"><img class="ow-msg-img" src="' + esc(m.content) + '" onclick="OwChat.viewImg(this.src)" alt="图片"></span>';
             else content = '<span class="ow-msg-content">' + (m.quote && (m.quote.nick || m.quote.text)
-                    ? '<span class="ow-msg-quote"><b>' + esc(m.quote.nick || '') + '</b>'
+                    ? '<span class="ow-msg-quote' + (m.quote.id ? ' ow-quote-link' : '') + '"'
+                      + (m.quote.id ? ' title="点击查看原消息" onclick="OwChat.jumpToQuote(' + (m.quote.id | 0) + ')"' : '')
+                      + '><b>' + esc(m.quote.nick || '') + '</b>'
                       + (m.quote.nick ? '：' : '') + esc(m.quote.text || '') + '</span>'
                     : '') + esc(m.content) + '</span>';
 
@@ -1406,11 +1408,11 @@
             var text = m.type === 'image' ? '[图片]' : (m.type === 'file' ? (function () {
                 try { return '[文件] ' + (JSON.parse(m.content).name || ''); } catch (e) { return '[文件]'; }
             })() : String(m.content || ''));
-            var q = { nick: m.nickname || '', text: text };
+            var q = { nick: m.nickname || '', text: text, id: m.id || 0 };
             for (var i = 0; i < this._quoteExt.length; i++) {
                 try { this._quoteExt[i](q, m); } catch (e) {}
             }
-            this.quote = { nick: String(q.nick || '').slice(0, 40), text: String(q.text || '').slice(0, 120) };
+            this.quote = { nick: String(q.nick || '').slice(0, 40), text: String(q.text || '').slice(0, 120), id: q.id || 0 };
             this.renderQuote();
             var input = $('owInput');
             if (input) input.focus();
@@ -1437,6 +1439,27 @@
 
         /** 取消引用 */
         clearQuote: function () { this.quote = null; this.renderQuote(); },
+
+        /**
+         * 点击引用块 → 滚动到被引用的原消息并高亮闪烁。
+         * 原消息不在当前页面（更早的历史未加载）时给出提示。
+         */
+        jumpToQuote: function (msgId) {
+            var el = $('owMsg' + msgId);
+            if (!el) { toast('原消息不在当前页面，请加载更早的消息'); return; }
+            try {
+                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            } catch (e) {
+                // 老浏览器无 smooth 参数：手动滚动到居中
+                var box = $('owMessages'), r = el.getBoundingClientRect(), br = box.getBoundingClientRect();
+                box.scrollTop += r.top - br.top - br.height / 2 + r.height / 2;
+            }
+            el.classList.remove('ow-msg-jump');
+            // 强制重排以重启动画
+            void el.offsetWidth;
+            el.classList.add('ow-msg-jump');
+            setTimeout(function () { el.classList.remove('ow-msg-jump'); }, 1800);
+        },
 
         /** 删除消息（内容右键）：确认弹窗 → 物理删除 → 就地移除 */
         deleteMsg: function (id) {

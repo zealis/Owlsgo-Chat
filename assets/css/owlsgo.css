@@ -477,6 +477,13 @@ button { font-family: inherit; cursor: pointer; }
     word-break: break-all;
 }
 .ow-msg-quote b { font-weight: 600; }
+/* 可跳转的引用块（带原消息 id） */
+.ow-msg-quote.ow-quote-link { cursor: pointer; }
+.ow-msg-quote.ow-quote-link:hover { opacity: 1; background: rgba(0, 160, 233, .12); }
+/* 点击引用后原消息高亮闪烁 */
+@-webkit-keyframes owMsgJump { 0%, 60% { background: rgba(0, 160, 233, .18); } 100% { background: transparent; } }
+@keyframes owMsgJump { 0%, 60% { background: rgba(0, 160, 233, .18); } 100% { background: transparent; } }
+.ow-msg.ow-msg-jump { -webkit-animation: owMsgJump 1.8s ease; animation: owMsgJump 1.8s ease; }
 
 .ow-input-resize {
     position: absolute;
