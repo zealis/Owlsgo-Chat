@@ -112,9 +112,24 @@ if (!$installed) {
             $CFG = require $cfgFile;
             DB::init($CFG);
             DB::migrate();
-            DB::defaults();
 
-            $n = trim($_POST['nickname'] ?? '');
+            // 旧数据预检：重装时若 php-cgi 等常驻进程持有旧库句柄，「删除」数据库文件
+            // 可能实际未生效（Windows 延迟删除 / 双库并行），随后管理员创建会撞
+            // users.id=1 唯一约束。这里给出明确指引而不是裸报错。
+            $existUsers = (int)DB::val('SELECT COUNT(*) FROM users');
+            $existRooms = (int)DB::val('SELECT COUNT(*) FROM rooms');
+            if ($existUsers > 0 || $existRooms > 0) {
+                throw new RuntimeException('检测到数据库中已有安装数据（用户 ' . $existUsers . ' / 群聊 ' . $existRooms
+                    . '）。请先在面板重启 PHP 释放数据库句柄，再删除 data 目录后重试安装。');
+            }
+
+            // 事务：建表种子 + 管理员账号一次性提交，杜绝「装一半」（如种子已插入但账号创建失败）的中间态
+            $pdo = DB::pdo();
+            $pdo->beginTransaction();
+            try {
+                DB::defaults();
+
+                $n = trim($_POST['nickname'] ?? '');
             $e = trim($_POST['email'] ?? '');
             $pw = (string)($_POST['password'] ?? '');
             // 取消用户名后，账号显示名就是昵称；规则与注册/改资料共用 Auth::checkNickname
@@ -131,7 +146,12 @@ if (!$installed) {
                 'client_key' => Sec::clientKey(), 'status' => 1,
                 'email_verified' => 1, 'created_at' => time(),
             ]);
-            @mkdir($CFG['data_dir'], 0775, true);
+                @mkdir($CFG['data_dir'], 0775, true);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
             file_put_contents($LOCK, date('c') . ' v' . OWLSGO_VERSION);
             Api::json(['ok' => true, 'msg' => '安装完成']);
         } catch (Throwable $e) {
