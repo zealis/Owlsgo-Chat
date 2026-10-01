@@ -198,6 +198,7 @@ class DB
 
         // ---------- 增量迁移（幂等） ----------
         self::addColumn('messages', 'quote', 'text', "''");   // 引用快照 JSON：{nick,text}（v1.0.69 引用功能）
+        self::addColumn('rooms', 'avatar', 'text', "''");     // 群聊头像（v1.0.76，uploads/avatar/ 下的相对路径）
         self::addColumn('users', 'points', 'int', '0');   // 用户积分
         self::addColumn('users', 'birthdate', 'varchar(10)', "''");   // 出生日期（年龄限制注册用）
         // 已废弃字段：rooms.min_age（进入该房间的最低年龄）随 1.0.31 下线，应用层已不再读写。

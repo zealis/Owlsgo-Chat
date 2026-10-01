@@ -249,6 +249,25 @@ button { font-family: inherit; cursor: pointer; }
     font-size: 14px;
     flex-shrink: 0; -webkit-flex-shrink: 0;
 }
+.ow-room-icon img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+/* 群聊列表右侧 ⋮ 设置入口（仅管理员/房主可见） */
+.ow-room-more {
+    margin-left: auto; -webkit-margin-left: auto;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    width: 22px; height: 22px; line-height: 20px; padding: 0;
+    background: transparent; border: none; cursor: pointer;
+    font-size: 14px; color: var(--ow-text-sub); border-radius: 4px;
+}
+.ow-room-more:hover { background: var(--ow-bg-sub); color: var(--ow-text); }
+/* 后台群头像预览 */
+.ow-room-avatar-btn { display: inline-block; cursor: pointer; }
+.ow-room-avatar-btn img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 1px solid var(--ow-border); display: block; }
+.ow-room-avatar-btn img:hover { opacity: .85; }
+.ow-room-avatar-empty {
+    display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; justify-content: center; -webkit-justify-content: center;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 1px dashed var(--ow-border-control); font-size: 12px; color: var(--ow-text-sub);
+}
 .ow-room-item .ow-room-lock { font-size: 12px; color: var(--ow-text-sub); }
 .ow-me {
     display: flex; display: -webkit-flex;

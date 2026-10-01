@@ -59,6 +59,12 @@ class Admin
                     'description' => $p('description'),
                     'status' => (int)$p('status', '1'),
                 ];
+                // 群聊头像：仅接受本站头像目录下的相对路径（由上传接口产出）；空串不改
+                $avatar = trim((string)$p('avatar', ''));
+                if ($avatar !== '') {
+                    if (strpos($avatar, 'uploads/avatar/') !== 0) Api::json(['ok' => false, 'msg' => '头像路径不合法']);
+                    $data['avatar'] = $avatar;
+                }
                 if ($id > 0) {
                     $sets = implode(',', array_map(fn($c) => "$c=?", array_keys($data)));
                     DB::run("UPDATE rooms SET $sets WHERE id=?", [...array_values($data), $id]);

@@ -321,6 +321,12 @@ if ($action !== '') {
             ]);
             Api::json(['ok' => $ok, 'msg' => $msg, 'id' => $id ?? null]);
 
+        // ---------- 前台编辑群聊信息（列表 ⋮ 菜单，管理员/房主） ----------
+        case 'room_update':
+            if ($actor['kind'] !== 'user') Api::json(['ok' => false, 'msg' => '请先登录'], 403);
+            [$ok, $msg] = Chat::updateRoom($actor, (int)$p('id'), (string)($_POST['name'] ?? ''), (string)($_POST['description'] ?? ''), (string)($_POST['avatar'] ?? ''));
+            Api::json(['ok' => $ok, 'msg' => $msg]);
+
         // ---------- 删除消息（内容右键「删除」，与「撤回」区分） ----------
         case 'msg_delete':
             [$ok, $msg] = Chat::deleteMessage($actor, (int)$p('id'));

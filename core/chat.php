@@ -16,8 +16,12 @@ class Chat
                 'type' => $r['type'], 'need_password' => $r['type'] === 'password',
                 'description' => $r['description'] ?? '',
                 'owner_id' => (int)($r['owner_id'] ?? 0),
+                'avatar' => (string)($r['avatar'] ?? ''),
                 'mine' => (int)($r['owner_id'] ?? 0) === (int)($actor['id'] ?? 0) && $actor['kind'] === 'user',
             ];
+            // 前台可编辑（⋮ 菜单）：管理员或房主
+            $out[count($out) - 1]['can_edit'] = $actor['kind'] === 'user'
+                && ($actor['role'] === 'admin' || (int)($r['owner_id'] ?? 0) === (int)$actor['id']);
         }
         return $out;
     }
@@ -359,6 +363,36 @@ class Chat
         Sec::log('msg_delete', (string)$msgId, ['room' => (int)$m['room_id']]);
         Plugin::fire('msg.after_delete', [$msgId, $m, $actor]);
         return [true, '已删除'];
+    }
+
+    /**
+     * 前台编辑群聊信息（列表 ⋮ 菜单）：群名称 / 简介 / 头像。
+     * 权限：管理员或房主。slug、类型、密码等管理性字段不在前台开放。
+     *
+     * @return array [bool, string]
+     */
+    public static function updateRoom(array $actor, int $roomId, string $name, string $description, string $avatar = ''): array
+    {
+        $room = self::room($roomId);
+        if (!$room) return [false, '群聊不存在'];
+        $isOwner = $actor['kind'] === 'user' && (int)$room['owner_id'] === (int)$actor['id'];
+        if ($actor['role'] !== 'admin' && !$isOwner) return [false, '仅群主或管理员可编辑群聊信息'];
+
+        $name = trim($name);
+        if (mb_strlen($name) < 1 || mb_strlen($name) > 30) return [false, '群名称需 1-30 个字符'];
+        $description = trim($description);
+        if (mb_strlen($description) > 200) return [false, '群简介不能超过 200 字'];
+        // 头像：仅接受本站头像目录下的相对路径（由上传接口产出），空串表示不修改
+        $avatar = trim($avatar);
+        if ($avatar !== '' && strpos($avatar, 'uploads/avatar/') !== 0) return [false, '头像路径不合法'];
+
+        $sets = ['name' => $name, 'description' => $description];
+        if ($avatar !== '') $sets['avatar'] = $avatar;
+        $up = implode(',', array_map(fn($c) => "$c=?", array_keys($sets)));
+        DB::run("UPDATE rooms SET $up WHERE id=?", [...array_values($sets), $roomId]);
+        Sec::log('room_update', $name, ['id' => $roomId, 'by' => $actor['role']]);
+        Plugin::fire('room.after_update', [$roomId, $sets, $actor]);
+        return [true, '已保存'];
     }
 
     public static function recall(array $actor, int $msgId): array

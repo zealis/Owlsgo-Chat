@@ -606,10 +606,15 @@
             var html = '', i, self = this;
             for (i = 0; i < rooms.length; i++) {
                 var r = rooms[i];
+                var icon = r.avatar
+                    ? '<span class="ow-room-icon"><img src="' + esc(r.avatar) + '" alt=""></span>'
+                    : '<span class="ow-room-icon">' + esc(r.name.charAt(0)) + '</span>';
                 html += '<li class="ow-room-item' + (r.id === this.room ? ' active' : '') + '" data-room="' + r.id + '" data-name="' + esc(r.name) + '" data-pw="' + (r.need_password ? 1 : 0) + '">'
-                      + '<span class="ow-room-icon">' + esc(r.name.charAt(0)) + '</span>'
+                      + icon
                       + '<span>' + esc(r.name) + '</span>'
                       + (r.need_password ? '<span class="ow-tag ow-tag-guest ow-room-lock">密码房</span>' : '')
+                      // 群聊信息编辑入口（仅管理员/房主可见）
+                      + (r.can_edit ? '<button class="ow-room-more" type="button" title="群聊设置" onclick="OwChat.openRoomEdit(' + r.id + ');event.stopPropagation&&event.stopPropagation();return false;">&#8942;</button>' : '')
                       + '</li>';
             }
             $('owRoomList').innerHTML = html;
@@ -1303,10 +1308,23 @@
          * @param File file 用户选择的原始图片
          */
         avatarCrop: function (file) {
+            this._cropTarget = 'me';
+            this.cropForTarget(file);
+        },
+
+        /** 群聊头像裁剪：复用同一裁剪弹窗，保存时上传到群聊头像 */
+        roomAvatarCrop: function (file) {
+            this._cropTarget = 'room';
+            this.cropForTarget(file);
+        },
+
+        /** 按 _cropTarget 走裁剪流程（me=个人头像 / room=群聊头像） */
+        cropForTarget: function (file) {
             var self = this;
             if (!w.FileReader || !document.createElement('canvas').getContext) {
                 // 老浏览器无裁剪能力：退回直接上传，由服务端兜底裁方形
-                self.avatarUpload(file);
+                if (this._cropTarget === 'room') self.roomAvatarUpload(file);
+                else self.avatarUpload(file);
                 return;
             }
             var reader = new FileReader();
@@ -1442,6 +1460,78 @@
         clearQuote: function () { this.quote = null; this.renderQuote(); },
 
         /**
+         * 群聊设置弹窗（列表 ⋮ 入口，管理员/房主）：头像 / 群名称 / 群简介。
+         * 头像复用用户头像上传 API（kind=avatar + 滑块裁剪），保存走 room_update。
+         */
+        /**
+         * @param number id 群聊 ID
+         * @param object draft 可选：{name, desc, avatar} —— 头像裁剪回来时恢复输入与新头像
+         */
+        openRoomEdit: function (id, draft) {
+            var self = this;
+            draft = draft || {};
+            var r = null, list = this.cfg.rooms || [], i;
+            for (i = 0; i < list.length; i++) { if (list[i].id === id) { r = list[i]; break; } }
+            if (!r) return;
+            this._roomEditId = id;
+            this._roomAvatar = draft.avatar || r.avatar || '';
+            var name = draft.name !== undefined ? draft.name : r.name;
+            var desc = draft.desc !== undefined ? draft.desc : (r.description || '');
+            this.openModal(
+                '<h3>群聊设置</h3>'
+                + '<div class="ow-set-avatar">'
+                + '<span id="owRoomAvatarPreview" class="ow-set-avatar-btn" title="点击更换群头像" onclick="OwChat.roomAvatarPick()">'
+                + avatarHtml(this._roomAvatar, name, false, 'member') + '</span>'
+                + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none">'
+                + '</div>'
+                + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(name) + '" maxlength="30"></div>'
+                + '<div class="ow-form-item"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(desc) + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
+                + '<button class="ow-btn ow-btn-primary" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button></div>'
+            );
+            $('owRoomAvatarFile').onchange = function () {
+                if (!this.files || !this.files[0]) return;
+                // 裁剪弹窗会替换本弹窗：先暂存输入，上传完成后带新头像重建
+                self._roomEditDraft = {
+                    name: $('owRoomEditName').value,
+                    desc: $('owRoomEditDesc').value,
+                };
+                self.roomAvatarCrop(this.files[0]);
+                this.value = '';
+            };
+        },
+
+        /** 触发群头像文件选择 */
+        roomAvatarPick: function () { var f = $('owRoomAvatarFile'); if (f) f.click(); },
+
+        /** 保存群聊设置 */
+        roomEditSave: function (id) {
+            var self = this;
+            OwApi.post('room_update', {
+                id: id,
+                name: $('owRoomEditName').value,
+                description: $('owRoomEditDesc').value,
+                avatar: this._roomAvatar || ''
+            }, function (r) {
+                if (!r.ok) { toast(r.msg); return; }
+                self.closeModal();
+                toast('群聊信息已更新');
+                self.reloadRooms();
+            });
+        },
+
+        /** 重新拉取群聊列表并重渲染 */
+        reloadRooms: function () {
+            var self = this;
+            OwApi.post('rooms', {}, function (r) {
+                if (!r.ok) return;
+                self.cfg.rooms = r.data;
+                self.renderRooms(r.data);
+            });
+        },
+
+        /**
          * 点击引用块 → 滚动到被引用的原消息并高亮闪烁。
          * 原消息不在当前页面（更早的历史未加载）时给出提示。
          */
@@ -1502,7 +1592,8 @@
 
             var done = function (blob) {
                 if (!blob) { toast('当前浏览器无法处理图片，请更换浏览器'); return; }
-                self.avatarUpload(blob, 'avatar.jpg');
+                if (self._cropTarget === 'room') self.roomAvatarUpload(blob, 'room.jpg');
+                else self.avatarUpload(blob, 'avatar.jpg');
             };
             if (c.toBlob) {
                 c.toBlob(function (b) { done(b); }, 'image/jpeg', 0.9);
@@ -1516,36 +1607,75 @@
             }
         },
 
-        /** 上传头像（file 可为 File 或 canvas 导出的 Blob），成功后刷新预览 */
+        /**
+         * 通用头像上传（复用用户头像上传 API：kind=avatar，服务端统一裁 100x100）。
+         * 上传成功后调用 onOk(url)；UI 行为由调用方决定（个人头像 / 群聊头像）。
+         */
+        uploadAvatarBlob: function (file, filename, onOk) {
+            var fd = new FormData();
+            var s = OwApi.sign('upload');
+            fd.append('ts', s.ts);
+            fd.append('sign', s.sign);
+            fd.append('kind', 'avatar');
+            fd.append('file', file, filename || (file.name || 'avatar.jpg'));
+            var x = new XMLHttpRequest();
+            x.open('POST', '?action=upload', true);
+            x.onreadystatechange = function () {
+                if (x.readyState !== 4) return;
+                var r = null;
+                try { r = JSON.parse(x.responseText); } catch (e) {}
+                r = r || { ok: false, msg: '网络错误' };
+                if (!r.ok) { toast(r.msg); return; }
+                if (onOk) onOk(r.url);
+            };
+            x.onerror = function () { toast('上传失败，请重试'); };
+            x.send(fd);
+        },
+
+        /** 上传个人头像（file 可为 File 或 canvas 导出的 Blob），成功后刷新预览 */
         avatarUpload: function (file, filename) {
             var self = this;
             try {
-                var fd = new FormData();
-                var s = OwApi.sign('upload');
-                fd.append('ts', s.ts);
-                fd.append('sign', s.sign);
-                fd.append('kind', 'avatar');
-                fd.append('file', file, filename || (file.name || 'avatar.jpg'));
-                var x = new XMLHttpRequest();
-                x.open('POST', '?action=upload', true);
-                x.onreadystatechange = function () {
-                    if (x.readyState !== 4) return;
-                    var r = null;
-                    try { r = JSON.parse(x.responseText); } catch (e) {}
-                    r = r || { ok: false, msg: '网络错误' };
-                    if (!r.ok) { toast(r.msg); return; }
-                    self.cfg.me.avatar = r.url;
+                self.uploadAvatarBlob(file, filename, function (url) {
+                    self.cfg.me.avatar = url;
                     var pv = $('owSetAvatarPreview');
-                    if (pv) pv.innerHTML = avatarHtml(r.url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
+                    if (pv) pv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
                     self.closeModal();
                     self.openSettings();
                     self.renderMe();
                     toast('头像已上传，点击保存生效');
-                };
-                x.send(fd);
+                });
             } catch (e) {
                 toast('上传失败，请重试');
             }
+        },
+
+        /** 上传群聊头像：编辑弹窗内回显（保存时随 room_update 提交） */
+        roomAvatarUpload: function (file, filename) {
+            var self = this;
+            self.uploadAvatarBlob(file, filename, function (url) {
+                self._roomAvatar = url;
+                var pv = $('owRoomAvatarPreview');
+                // 前台：编辑弹窗已被裁剪弹窗替换 → 带新头像与草稿重建
+                if (!pv && self._roomEditId) {
+                    self.openRoomEdit(self._roomEditId, {
+                        name: self._roomEditDraft ? self._roomEditDraft.name : '',
+                        desc: self._roomEditDraft ? self._roomEditDraft.desc : '',
+                        avatar: url,
+                    });
+                    toast('群头像已上传，点击保存生效');
+                    return;
+                }
+                if (pv) {
+                    // 前台弹窗用头像组件，后台表单用图片预览
+                    if (pv.getAttribute('class').indexOf('ow-set-avatar-btn') >= 0)
+                        pv.innerHTML = avatarHtml(url, '', false, 'member');
+                    else
+                        pv.innerHTML = '<img src="' + esc(url) + '" alt="">';
+                    self.closeModal();   // 后台表单场景：裁剪弹窗盖在表单上方，上传后关闭
+                }
+                toast('群头像已上传，点击保存生效');
+            });
         },
 
         saveSettings: function () {
@@ -1561,6 +1691,15 @@
 
         /* ---------- 弹层 ---------- */
         openModal: function (html) {
+            // 后台页（OwAdmin）没有静态浮层：动态补建（closeModal 同样兼容）
+            if (!$('owModalMask') || !$('owModal')) {
+                var mask = document.createElement('div');
+                mask.className = 'ow-modal-mask';
+                mask.id = 'owModalMask';
+                mask.style.display = 'none';
+                mask.innerHTML = '<div class="ow-modal" id="owModal"></div>';
+                document.body.appendChild(mask);
+            }
             $('owModal').innerHTML = '<button class="ow-modal-close" onclick="OwChat.closeModal()">✕</button>' + html;
             $('owModalMask').style.display = '-webkit-flex';
             $('owModalMask').style.display = 'flex';
@@ -1853,9 +1992,14 @@
 
         /* ---------- 房间动作 ---------- */
         roomForm: function (d) {
-            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', owner_id: '', description: '', status: 1 };
+            d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', owner_id: '', description: '', status: 1, avatar: '' };
+            OwChat._roomAvatar = d.avatar || '';
             $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '群聊</h2><div class="ow-card">'
                 + '<input type="hidden" id="owRId" value="' + d.id + '">'
+                + '<div class="ow-form-item"><label>群头像（点击上传，自动裁剪为圆形）</label>'
+                + '<span id="owRoomAvatarPreview" class="ow-room-avatar-btn" title="点击上传群头像" onclick="document.getElementById(\'owRoomAvatarFile\').click()">'
+                + (d.avatar ? '<img src="' + esc(d.avatar) + '" alt="">' : '<span class="ow-room-avatar-empty">无头像</span>') + '</span>'
+                + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none"></div>'
                 + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '" maxlength="30" placeholder="2-30 个字符"></div>'
                 + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRType" onchange="OwAdmin.roomTypeToggle()">'
                 + opts(ROOM_TYPE_CN, ['public', 'password', 'role'], d.type) + '</select></div>'
@@ -1867,6 +2011,13 @@
                 + '<div class="ow-form-item"><label>状态</label><select class="ow-input" id="owRStatus"><option value="1"' + (d.status == 1 ? ' selected' : '') + '>开启</option><option value="0"' + (d.status == 0 ? ' selected' : '') + '>关闭</option></select></div>'
                 + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomSave()">保存</button> '
                 + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.page(\'rooms\')">返回</button></div>';
+            // 群头像选择 → 裁剪弹窗（后台表单独立于弹窗，上传后直接回填预览）
+            var af = $('owRoomAvatarFile');
+            if (af) af.onchange = function () {
+                if (!this.files || !this.files[0]) return;
+                OwChat.roomAvatarCrop(this.files[0]);
+                this.value = '';
+            };
         },
         roomTypeToggle: function () {
             var t = $('owRType').value;
@@ -1877,7 +2028,8 @@
             OwApi.post('admin_room_save', {
                 id: $('owRId').value, name: $('owRName').value, type: $('owRType').value,
                 password: $('owRPass').value, min_role: $('owRRole').value,
-                owner_id: $('owROwner').value, description: $('owRDesc').value, status: $('owRStatus').value
+                owner_id: $('owROwner').value, description: $('owRDesc').value, status: $('owRStatus').value,
+                avatar: OwChat._roomAvatar || ''
             }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('rooms'); });
         },
         roomDel: function (id) {
