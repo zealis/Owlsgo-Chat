@@ -1,6 +1,6 @@
 <?php
 /**
- * 管理后台：用户 / 禁言 / 敏感词 / 聊天室 / 公告 / 安全日志 / 站点设置
+ * 管理后台：用户 / 禁言 / 敏感词 / 群聊 / 公告 / 安全日志 / 站点设置
  */
 class Admin
 {
@@ -43,7 +43,7 @@ class Admin
                 DB::run('DELETE FROM sensitive_words WHERE id=?', [(int)$p('id')]);
                 Api::json(['ok' => true, 'msg' => '已删除']);
 
-            // ---------- 聊天室管理 ----------
+            // ---------- 群聊管理 ----------
             case 'admin_rooms':
                 Api::json(['ok' => true, 'data' => DB::all('SELECT * FROM rooms ORDER BY id')]);
 

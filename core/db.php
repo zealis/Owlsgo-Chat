@@ -379,7 +379,7 @@ class DB
             DB::insert('rooms', [
                 'id' => 1,
                 'name' => '综合闲聊', 'slug' => 'public', 'type' => 'public',
-                'min_role' => 'guest', 'description' => '默认公共聊天室',
+                'min_role' => 'guest', 'description' => '默认公共群聊',
                 'status' => 1, 'created_at' => time(),
             ]);
         }

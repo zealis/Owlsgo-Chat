@@ -268,8 +268,8 @@ if ($action !== '') {
 
         case 'room_join':
             $room = Chat::room((int)$p('room_id'));
-            if (!$room) Api::json(['ok' => false, 'msg' => '聊天室不存在']);
-            if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权进入该聊天室']);
+            if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
+            if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权进入该群聊']);
             if ($actor['kind'] === 'none') Api::json(['ok' => false, 'msg' => '请先登录', 'need_login' => true]);
             // 密码房：已持有有效通行授权则免密；管理员免密码。
             // 是否真的需要密码一律由服务端判定，前端只需先空密码尝试一次，返回 need_password 再弹窗。
@@ -293,7 +293,7 @@ if ($action !== '') {
             if (!Chat::roomAccessOk($room, $actor)) {
                 Api::json([
                     'ok' => false,
-                    'msg' => '无权访问该聊天室',
+                    'msg' => '无权访问该群聊',
                     'need_password' => $room['type'] === 'password',
                 ]);
             }
@@ -307,7 +307,7 @@ if ($action !== '') {
             if (!Chat::roomAccessOk($room, $actor)) {
                 Api::json([
                     'ok' => false,
-                    'msg' => '无权访问该聊天室',
+                    'msg' => '无权访问该群聊',
                     'need_password' => $room['type'] === 'password',
                 ]);
             }
@@ -724,14 +724,14 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         'sound' => DB::setting('sound_default', '1'),
         'room_create_cost' => DB::setting('room_create_cost', '0'),   // 创建群聊扣分（前端提示用）
     ];
-    pageHead('聊天室');
+    pageHead('群聊');
     echo '<body class="ow-chat-body">';
     echo '<div class="ow-layout">';
 
     // 左侧栏
     echo '<aside class="ow-sidebar" id="owSidebar">'
        . '<div class="ow-brand"><img src="assets/img/logo.svg" alt="logo"><span>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</span></div>'
-       . '<div class="ow-side-title">聊天室 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
+       . '<div class="ow-side-title">群聊 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
        // 登录用户的操作入口收进个人资料区菜单（点击 owMe 弹出）；游客仍直接给登录按钮
@@ -845,7 +845,7 @@ function renderAdmin(array $actor): void
        . '<aside class="ow-admin-side" id="owAdminSide">'
        . '<div class="ow-admin-brand">ADMIN CONSOLE<br><strong>管理后台</strong></div>'
        . '<ul class="ow-admin-menu" id="owAdminMenu">'
-       . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>聊天室管理</li>'
+       . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>群聊管理</li>'
        . '<li data-apage="words"><span class="ow-admin-ico">' . ow_icon('ban', 16) . '</span>敏感词过滤</li>'
        . '<li data-apage="anns"><span class="ow-admin-ico">' . ow_icon('mega', 16) . '</span>系统公告</li>'
        . '<li data-apage="logs"><span class="ow-admin-ico">' . ow_icon('shield', 16) . '</span>安全日志</li>'

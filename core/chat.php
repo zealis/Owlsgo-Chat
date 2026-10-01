@@ -122,8 +122,8 @@ class Chat
     public static function send(array $actor, int $roomId, string $type, string $content, array $opt = []): array
     {
         $room = self::room($roomId);
-        if (!$room) return [false, '聊天室不存在'];
-        if (!self::roomAccessOk($room, $actor)) return [false, '无权进入该聊天室'];
+        if (!$room) return [false, '群聊不存在'];
+        if (!self::roomAccessOk($room, $actor)) return [false, '无权进入该群聊'];
 
         // 游客发言权限
         if ($actor['kind'] === 'guest') {

@@ -1481,7 +1481,7 @@
                     setSide(false);   // 移动端点完菜单收起抽屉
                 };
             }
-            /* 恢复上次所在页面（启停插件刷新后不跳回默认页）；无记录时进聊天室管理 */
+            /* 恢复上次所在页面（启停插件刷新后不跳回默认页）；无记录时进群聊管理 */
             var lastPage = 'rooms';
             try { lastPage = sessionStorage.getItem('owAdminPage') || 'rooms'; } catch (e) {}
             try { if (sessionStorage.getItem('owAdminPluginsOpen') === '1') self.togglePluginSub(true); } catch (e) {}
@@ -1560,7 +1560,7 @@
             },
             anns: function (main) {
                 OwApi.post('admin_anns', {}, function (r) {
-                    var h = '<h2>系统公告</h2><p class="ow-admin-desc">创建公告与欢迎消息，可绑定聊天室，支持优先级排序与轮播展示。</p>'
+                    var h = '<h2>系统公告</h2><p class="ow-admin-desc">创建公告与欢迎消息，可绑定群聊，支持优先级排序与轮播展示。</p>'
                         + '<div class="ow-card"><div class="ow-form-row">'
                         + '<div class="ow-form-item" style="flex:1;min-width:220px"><label>内容</label><input class="ow-input" id="owAnContent"></div>'
                         + '<div class="ow-form-item"><label>房间ID（0=全部）</label><input class="ow-input" id="owAnRoom" value="0"></div>'
@@ -1621,8 +1621,8 @@
             },
             rooms: function (main) {
                 OwApi.post('admin_rooms', {}, function (r) {
-                    var h = '<h2>聊天室管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除聊天室，设置访问权限与房主。</p><div class="ow-card">'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建聊天室</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
+                    var h = '<h2>群聊管理</h2><p class="ow-admin-desc">创建 / 编辑 / 删除群聊，设置访问权限与房主。</p><div class="ow-card">'
+                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomForm(0)">新建群聊</button></div><div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>名称</th><th>类型</th><th>最低角色</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
                     for (var i = 0; i < r.data.length; i++) {
                         var d = r.data[i];
                         h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + esc(d.name) + '</td><td>' + esc(cn(ROOM_TYPE_CN, d.type)) + '</td><td>' + esc(cn(ROLE_CN, d.min_role)) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
@@ -1689,7 +1689,7 @@
                         + '<div class="ow-form-item"><label>允许用户创建群聊</label>' + sel('room_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
                         + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
                         + '</div>'
-                        + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在聊天室管理中调整。</p>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在群聊管理中调整。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
                 });
@@ -1702,7 +1702,7 @@
         /* ---------- 房间动作 ---------- */
         roomForm: function (d) {
             d = d || { id: 0, name: '', type: 'public', password: '', min_role: 'guest', owner_id: '', description: '', status: 1 };
-            $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '聊天室</h2><div class="ow-card">'
+            $('owAdminMain').innerHTML = '<h2>' + (d.id ? '编辑' : '新建') + '群聊</h2><div class="ow-card">'
                 + '<input type="hidden" id="owRId" value="' + d.id + '">'
                 + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRName" value="' + esc(d.name) + '" maxlength="30" placeholder="2-30 个字符"></div>'
                 + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owRType" onchange="OwAdmin.roomTypeToggle()">'
@@ -1729,7 +1729,7 @@
             }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('rooms'); });
         },
         roomDel: function (id) {
-            OwAdmin.confirm('确定删除该聊天室？消息将保留但不可访问。', function () {
+            OwAdmin.confirm('确定删除该群聊？消息将保留但不可访问。', function () {
                 OwApi.post('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
             });
         },
