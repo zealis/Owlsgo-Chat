@@ -1002,8 +1002,7 @@
                     items.push({ t: '私信', run: function () { self.pm(m.nickname, m.uid, m.gid); } });
                 if (m.type === 'image' && this.cfg.actor.kind === 'user')
                     items.push({ t: '收藏为贴纸', run: function () { self.collect(m.content); } });
-                if (m.mine || admin)
-                    items.push({ t: '撤回', run: function () { self.recall(m.id); } });
+                // 撤回/删除等「对消息」的操作已移到内容菜单（showContentMenu）
             }
             // 插件扩展（v1.0.54）：如禁言插件按「管理员 / 房主」身份追加菜单项；
             // IP 归属地已移出核心，插件可在此注册（服务端走 ip_loc + ip.location 钩子）
@@ -1361,6 +1360,8 @@
                 items.push({ t: '复制', run: function () { self.copyMsg(m); } });
                 if (this.cfg.actor.kind !== 'none')
                     items.push({ t: '引用', run: function () { self.quoteMsg(m); } });
+                if (m.mine || admin)
+                    items.push({ t: '撤回', run: function () { self.recall(m.id); } });
                 if (m.mine || admin)
                     items.push({ t: '删除', run: function () { self.deleteMsg(m.id); } });
                 for (var i = 0; i < this._ctxExtContent.length; i++) {
