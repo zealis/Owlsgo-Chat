@@ -428,18 +428,28 @@ button { font-family: inherit; cursor: pointer; }
 .ow-input-row .ow-input { resize: none; max-height: 320px; background: var(--ow-bg-sub); }
 .ow-input-row { position: relative; }
 /* 输入框拖拽手柄（右下角，避开发送按钮） */
-/* 引用条（输入框上方，可点 ✕ 取消） */
-.ow-quote-bar { margin: 0 0 8px; }
+/* 引用条：嵌入输入框内部第一行（绝对定位固定在顶部，不随内容滚动/输入量变化） */
+.ow-quote-bar {
+    position: absolute;
+    top: 5px; left: 5px;
+    right: 78px;                       /* 避开右侧发送按钮与拖拽手柄 */
+    z-index: 5;
+    border: 1px solid var(--ow-border);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
 .ow-quote-inner {
     position: relative;
-    padding: 6px 30px 6px 10px;
+    padding: 5px 28px 5px 8px;
     border-left: 3px solid var(--ow-primary);
     background: var(--ow-bg-sub);
-    border-radius: 0 4px 4px 0;
     font-size: 12px;
     line-height: 1.5;
     color: var(--ow-text-sub);
 }
+/* 有引用时输入框顶部留出引用条的空间，保证引用始终独占第一行 */
+.ow-input-row .ow-input.ow-has-quote { padding-top: 42px; }
 .ow-quote-nick { color: var(--ow-text); font-weight: 600; }
 .ow-quote-text { word-break: break-all; }
 .ow-quote-del {

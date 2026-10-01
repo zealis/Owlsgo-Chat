@@ -1421,6 +1421,13 @@
             var box = $('owQuoteBar');
             if (!box) return;
             var q = this.quote;
+            var input = $('owInput');
+            // 有引用时输入框顶部留白，让引用条独占输入框内第一行
+            if (input) {
+                if (q && (q.nick || q.text)) input.className = 'ow-input ow-has-quote';
+                else input.className = 'ow-input';
+                this.autoGrow();   // padding 变化后重算高度
+            }
             if (!q || (!q.nick && !q.text)) { this.quote = null; box.style.display = 'none'; box.innerHTML = ''; return; }
             box.style.display = 'block';
             box.innerHTML = '<div class="ow-quote-inner"><span class="ow-quote-nick">' + esc(q.nick) + '：</span>'
