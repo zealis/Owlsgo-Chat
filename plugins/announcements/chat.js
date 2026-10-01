@@ -104,15 +104,16 @@
                 };
             })(cards2[j]);
         }
-        // 删除（敏感操作）
+        // 删除（敏感操作，自研确认弹窗）
         var dels = d.querySelectorAll('#owModal .oa-card-del');
         for (var k = 0; k < dels.length; k++) {
             (function (el) {
                 el.onclick = function () {
-                    if (!w.confirm('确定删除该公告？')) return;
-                    OwApi.secure('plugin_announcements_del', { room_id: current.roomId, id: el.getAttribute('data-id') }, function (r) {
-                        toast(r.msg);
-                        if (r.ok) { w.OwChat.closeModal(); load(); }
+                    w.OwChat.confirm('确定删除该公告？删除后成员端立即不再展示。', function () {
+                        OwApi.secure('plugin_announcements_del', { room_id: current.roomId, id: el.getAttribute('data-id') }, function (r) {
+                            toast(r.msg);
+                            if (r.ok) { w.OwChat.closeModal(); load(); }
+                        });
                     });
                 };
             })(dels[k]);

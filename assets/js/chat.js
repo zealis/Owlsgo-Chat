@@ -1181,8 +1181,24 @@
         },
 
         pm: function (nick, uid, gid) {
-            var content = w.prompt('私信 ' + nick + '：');
-            if (content) this.send({ type: 'private', content: content, to_user_id: uid || '', to_guest_id: gid || '', to_nickname: nick });
+            // v1.0.112：原生 prompt 改自研弹窗（私信输入 + 发送）
+            var self = this;
+            this.openModal(
+                '<h3>私信 ' + esc(nick) + '</h3>'
+                + '<div class="ow-form-item"><textarea class="ow-input" id="owPmText" rows="3" maxlength="2000" placeholder="输入私信内容（仅对方可见）"></textarea></div>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
+                + '<button class="ow-btn ow-btn-primary" id="owPmSend">发送</button></div>'
+            );
+            var sendPm = function () {
+                var content = $('owPmText').value.replace(/^\s+|\s+$/g, '');
+                if (!content) { toast('私信内容不能为空'); return; }
+                self.send({ type: 'private', content: content, to_user_id: uid || '', to_guest_id: gid || '', to_nickname: nick });
+                self.closeModal();
+            };
+            $('owPmSend').onclick = sendPm;
+            $('owPmText').onkeydown = function (e) { e = e || window.event; if ((e.key === 'Enter' || e.keyCode === 13) && (e.ctrlKey || e.metaKey)) sendPm(); };
+            $('owPmText').focus();
         },
 
         collect: function (url) {
@@ -1764,7 +1780,29 @@
             $('owModalMask').style.display = '-webkit-flex';
             $('owModalMask').style.display = 'flex';
         },
-        closeModal: function () { $('owModalMask').style.display = 'none'; }
+        closeModal: function () { $('owModalMask').style.display = 'none'; },
+
+        /** 自研确认弹窗（v1.0.112 前台版）：替代原生 confirm——全站禁止浏览器原生弹窗 */
+        confirm: function (text, onOk) {
+            var mask = document.createElement('div');
+            mask.className = 'ow-modal-mask';
+            mask.style.display = 'flex';
+            mask.style.zIndex = 200;   // 叠在普通弹窗（z-index 100）之上
+            mask.innerHTML = '<div class="ow-modal" style="width:340px;max-width:92%">'
+                + '<button class="ow-modal-close">✕</button>'
+                + '<h3>确认操作</h3>'
+                + '<p class="ow-modal-desc">' + esc(text).replace(/\n/g, '<br>') + '</p>'
+                + '<div class="ow-modal-actions">'
+                + '<button class="ow-btn ow-btn-ghost">取消</button>'
+                + '<button class="ow-btn ow-btn-danger">确定</button></div></div>';
+            document.body.appendChild(mask);
+            var close = function () { if (mask.parentNode) document.body.removeChild(mask); };
+            mask.querySelector('.ow-modal-close').onclick = close;
+            var bs = mask.querySelectorAll('.ow-modal-actions .ow-btn');
+            bs[0].onclick = close;
+            bs[1].onclick = function () { close(); if (onOk) onOk(); };
+            mask.onclick = function (e) { if (e.target === mask) close(); };
+        },
     };
 
     /* ==========================================================================
