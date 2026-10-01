@@ -579,7 +579,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-modal-close { float: right; border: none; background: none; font-size: 18px; color: var(--ow-text-sub); }
 /* 弹窗说明文字与底部按钮行（密码房弹窗等复用） */
 .ow-modal-desc { font-size: 13px; color: var(--ow-text-sub); line-height: 1.6; margin-bottom: 14px; }
-.ow-modal-actions { display: flex; display: -webkit-flex; justify-content: flex-end; -webkit-justify-content: flex-end; gap: 8px; }
+.ow-modal-actions { display: flex; display: -webkit-flex; justify-content: flex-end; -webkit-justify-content: flex-end; gap: 8px; margin-top: 16px; }   /* 与上方输入框/说明文字保持一致间隔（相邻兄弟 margin 折叠取大值） */
 @media (max-width: 720px) {
     .ow-modal-actions .ow-btn { flex: 1; -webkit-flex: 1; }
 }
