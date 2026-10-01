@@ -1748,7 +1748,8 @@
         },
 
         /* ---------- 弹层 ---------- */
-        openModal: function (html) {
+        /** 打开弹窗；width 可选（px），供内容较宽的弹窗（如群公告页面）覆盖默认 380px */
+        openModal: function (html, width) {
             // 后台页（OwAdmin）没有静态浮层：动态补建（closeModal 同样兼容）
             if (!$('owModalMask') || !$('owModal')) {
                 var mask = document.createElement('div');
@@ -1758,6 +1759,7 @@
                 mask.innerHTML = '<div class="ow-modal" id="owModal"></div>';
                 document.body.appendChild(mask);
             }
+            $('owModal').style.maxWidth = width ? (parseInt(width, 10) + 'px') : '';
             $('owModal').innerHTML = '<button class="ow-modal-close" onclick="OwChat.closeModal()">✕</button>' + html;
             $('owModalMask').style.display = '-webkit-flex';
             $('owModalMask').style.display = 'flex';
@@ -1945,26 +1947,8 @@
         },
 
         pages: {
-            /* 用户管理（v1.0.44）、禁言管理（v1.0.52）已剥离为插件，见 plugins/ 对应目录 */
-            words: function (main) {
-                OwApi.post('admin_words', {}, function (r) {
-                    var h = '<h2>敏感词过滤</h2><p class="ow-admin-desc">添加敏感词及替换词，支持启用 / 停用。</p>'
-                        + '<div class="ow-card"><div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>敏感词</label><input class="ow-input" id="owWWord"></div>'
-                        + '<div class="ow-form-item"><label>替换为</label><input class="ow-input" id="owWRep" value="***"></div>'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.wordAdd()">添加</button></div></div>'
-                        + '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>敏感词</th><th>替换为</th><th>状态</th><th>操作</th></tr>';
-                    for (var i = 0; i < r.data.length; i++) {
-                        var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.word) + '</td><td>' + esc(d.replacement) + '</td>'
-                           + '<td>' + (d.enabled == 1 ? '<span class="ow-tag ow-tag-green">启用</span>' : '<span class="ow-tag ow-tag-guest">停用</span>') + '</td>'
-                           + '<td><a href="javascript:;" onclick="OwAdmin.wordToggle(' + d.id + ',' + (d.enabled == 1 ? 0 : 1) + ')">' + (d.enabled == 1 ? '停用' : '启用') + '</a> '
-                           + '<a href="javascript:;" onclick="OwAdmin.wordDel(' + d.id + ')">删除</a></td></tr>';
-                    }
-                    main.innerHTML = h + '</table></div>';
-                });
-            },
-            /* 系统公告（v1.0.102）已剥离为 announcements 插件（群公告体系），见 plugins/announcements/ */
+            /* 用户管理（v1.0.44）、禁言管理（v1.0.52）、系统公告（v1.0.102）、
+               敏感词过滤（v1.0.104）已剥离为插件，见 plugins/ 对应目录 */
             plugins: function (main) {
                 OwApi.post('admin_plugins', {}, function (r) {
                     var h = '<h2>插件管理</h2><p class="ow-admin-desc">安装（上传 zip）、启用 / 停用、下载与卸载插件。插件存放于 plugins/ 目录。</p>'
@@ -2257,16 +2241,8 @@ logs: function (main) {
             });
         },
 
-        /* ---------- 其他动作（banAdd/banDel 已随 v1.0.52 剥离为插件 ban-manager） ---------- */
-        wordAdd: function () {
-            OwApi.post('admin_word_add', { word: $('owWWord').value, replacement: $('owWRep').value }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('words'); });
-        },
-        wordToggle: function (id, en) { OwApi.post('admin_word_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('words'); }); },
-        wordDel: function (id) {
-            OwAdmin.confirm('确定删除该敏感词？', function () {
-                OwApi.secure('admin_word_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('words'); });
-            });
-        },
+        /* ---------- 其他动作（banAdd/banDel 已随 v1.0.52 剥离为插件 ban-manager；
+           wordAdd/wordToggle/wordDel 已随 v1.0.104 剥离为插件 sensitive-words） ---------- */
         /* 系统公告管理（v1.0.102）已随公告剥离为 announcements 插件 */
         pluginToggle: function (name, en) {
             OwApi.post('admin_plugin_toggle', { name: name, enabled: en }, function (r) {

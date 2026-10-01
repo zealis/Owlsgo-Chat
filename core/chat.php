@@ -110,16 +110,12 @@ class Chat
     }
 
     // ---------- 敏感词 ----------
-    public static function filterWords(string $content): string
+    // （v1.0.104）过滤逻辑已剥离为 sensitive-words 插件；核心只提供 text.filter 钩子——
+    // 所有输入的文字内容在入库前触发：Plugin::fire('text.filter', [&$text, $scene, $actor])，
+    // 场景 scene：message / nickname / room_name / room_desc / announcement。
+    public static function filterText(string &$text, string $scene, array $actor = []): void
     {
-        static $words = null;
-        if ($words === null) $words = DB::all('SELECT word, replacement FROM sensitive_words WHERE enabled=1');
-        foreach ($words as $w) {
-            if ($w['word'] !== '') {
-                $content = mb_ereg_replace(preg_quote($w['word'], '/'), $w['replacement'], $content);
-            }
-        }
-        return $content;
+        Plugin::fire('text.filter', [&$text, $scene, $actor]);
     }
 
     // ---------- 发送消息 ----------
@@ -183,7 +179,7 @@ class Chat
             $content = trim($content);
             if ($content === '') return [false, '消息不能为空'];
             if (mb_strlen($content) > 2000) return [false, '消息过长（最多 2000 字）'];
-            $content = self::filterWords($content);
+            self::filterText($content, 'message', $actor);
         }
 
         // 引用快照：前端传 {nick,text}，服务端只保留两个字段并截断，避免塞入任意结构
@@ -383,8 +379,8 @@ class Chat
         $description = trim($description);
         if (mb_strlen($description) > 200) return [false, '群简介不能超过 200 字'];
         // 敏感词过滤（与发言同一套词库：命中替换）
-        $name = self::filterWords($name);
-        $description = self::filterWords($description);
+        self::filterText($name, 'room_name', $actor);
+        self::filterText($description, 'room_desc', $actor);
         // 头像：仅接受本站头像目录下的相对路径（由上传接口产出），空串表示不修改
         $avatar = trim($avatar);
         if ($avatar !== '' && strpos($avatar, 'uploads/avatar/') !== 0) return [false, '头像路径不合法'];

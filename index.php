@@ -409,8 +409,9 @@ if ($action !== '') {
             }
             $name = trim($p('name'));
             if (mb_strlen($name) < 2 || mb_strlen($name) > 30) Api::json(['ok' => false, 'msg' => '群名称需 2-30 个字符']);
-            $name = Chat::filterWords($name);   // 敏感词过滤
-            $desc = Chat::filterWords(trim((string)($_POST['description'] ?? '')));
+            Chat::filterText($name, 'room_name', $actor);   // 敏感词过滤
+            $desc = trim((string)($_POST['description'] ?? ''));
+            Chat::filterText($desc, 'room_desc', $actor);
             $type = $p('type');
             if (!in_array($type, ['public', 'password', 'role'], true)) Api::json(['ok' => false, 'msg' => '非法的群类型']);
             $minRole = in_array($p('min_role'), ['guest', 'member', 'vip', 'admin'], true) ? $p('min_role') : 'guest';
@@ -446,7 +447,7 @@ if ($action !== '') {
                         'password' => $type === 'password' ? $p('password') : null,
                         'min_role' => $minRole,
                         'owner_id' => $uid,
-                        'description' => mb_substr($desc, 0, 200),   // 已过滤（filterWords）
+                        'description' => mb_substr($desc, 0, 200),   // 已过滤（text.filter 钩子）
                         'status' => 1,
                         'created_at' => time(),
                     ]);
