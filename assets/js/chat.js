@@ -1307,6 +1307,26 @@
          * 打开裁剪弹窗：圆形取景框内即最终头像，拖动滑块缩放图片。
          * @param File file 用户选择的原始图片
          */
+        /**
+         * 独立裁剪浮层（参考论坛 dialog 方案）：不复用 owModal——
+         * 裁剪时编辑弹窗 / 后台表单保持完好，裁剪完直接回填预览。
+         */
+        openCropOverlay: function (html) {
+            this.closeCropOverlay();
+            var mask = document.createElement('div');
+            mask.className = 'ow-modal-mask';
+            mask.id = 'owCropMask';
+            mask.style.zIndex = '110';   // 盖在普通弹窗（z100）之上
+            mask.innerHTML = '<div class="ow-modal" id="owCropModal">'
+                + '<button class="ow-modal-close" onclick="OwChat.closeCropOverlay()">✕</button>' + html + '</div>';
+            document.body.appendChild(mask);
+        },
+
+        closeCropOverlay: function () {
+            var m = $('owCropMask');
+            if (m && m.parentNode) m.parentNode.removeChild(m);
+        },
+
         avatarCrop: function (file) {
             this._cropTarget = 'me';
             this.cropForTarget(file);
@@ -1329,41 +1349,39 @@
             }
             var reader = new FileReader();
             reader.onload = function (ev) {
-                self.openModal(
+                self.openCropOverlay(
                     '<h3>调整头像</h3>'
-                    + '<p class="ow-modal-desc">点击箭头缩放图片，方框内即为最终头像区域。</p>'
-                    + '<div class="ow-crop-wrap"><div class="ow-crop-stage" id="owCropStage"><img id="owCropImg" src="' + esc(String(ev.target.result)) + '" alt=""></div></div>'
+                    + '<div class="ow-crop-wrap"><canvas id="owCropCanvas" width="200" height="200"></canvas></div>'
                     + '<div class="ow-crop-ctrl">'
-                    + '<button type="button" class="ow-btn ow-btn-ghost ow-crop-btn" id="owCropMinus" title="缩小">−</button>'
+                    + '<input type="range" id="owCropZoom" min="1" max="3" step="0.01" value="1">'
                     + '<span class="ow-crop-val" id="owCropVal">100%</span>'
-                    + '<button type="button" class="ow-btn ow-btn-ghost ow-crop-btn" id="owCropPlus" title="放大">＋</button>'
                     + '</div>'
                     + '<div class="ow-modal-actions">'
                     + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.avatarCropCancel()">取消</button>'
                     + '<button class="ow-btn ow-btn-primary" onclick="OwChat.avatarCropSave()">确定</button></div>'
                 );
-                var img = $('owCropImg'), minus = $('owCropMinus'), plus = $('owCropPlus'), val = $('owCropVal');
-                var stage = 128;                       // 取景框边长
-                var min = 1, max = 3;                  // 缩放边界：1 = 恰好填满取景框（再小会露出边界）
-                var s = 1;
-                var apply = function () {
-                    var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-                    var f = stage / Math.min(iw, ih);  // 短边适配：恰好填满取景框
-                    img.style.width = (iw * f) + 'px';
-                    img.style.height = (ih * f) + 'px';
-                    // 居中定位（用负 margin，transform 只负责缩放）
-                    img.style.marginLeft = -(iw * f / 2) + 'px';
-                    img.style.marginTop = -(ih * f / 2) + 'px';
-                    img.style.transform = 'scale(' + s + ')';
-                    val.textContent = Math.round(s * 100) + '%';
-                    minus.disabled = s <= min + 0.001;
-                    plus.disabled = s >= max - 0.001;
+                var canvas = $('owCropCanvas'), zoom = $('owCropZoom'), val = $('owCropVal');
+                var ctx = canvas.getContext('2d');
+                var SIZE = canvas.width;                 // 200：取景框即 canvas 本身
+                var img = new Image();
+                var draw = function () {
+                    if (!img.width || !ctx) return;
+                    ctx.clearRect(0, 0, SIZE, SIZE);
+                    ctx.fillStyle = '#fff';              // 白底：透明区转 jpg 不返黑
+                    ctx.fillRect(0, 0, SIZE, SIZE);
+                    // cover 基准：铺满画布所需最小缩放；滑块在此基础上 1~3 倍
+                    var base = Math.max(SIZE / img.width, SIZE / img.height);
+                    var z = parseFloat(zoom.value);
+                    if (!isFinite(z) || z < 1) z = 1;
+                    var s2 = base * z;
+                    var dw = img.width * s2, dh = img.height * s2;
+                    ctx.drawImage(img, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
+                    val.textContent = Math.round(z * 100) + '%';
                 };
-                // 图片加载完成后才能拿到 naturalWidth，需再算一次定位
-                img.onload = function () { s = 1; apply(); };
-                if (img.complete && img.naturalWidth) img.onload();
-                minus.onclick = function () { if (s > min + 0.001) { s = Math.max(min, s - 0.1); apply(); } };
-                plus.onclick = function () { if (s < max - 0.001) { s = Math.min(max, s + 0.1); apply(); } };
+                img.onload = function () { draw(); };
+                img.src = String(ev.target.result);
+                zoom.oninput = draw;
+                zoom.onchange = draw;                    // 老浏览器无 input 事件时兜底
             };
             reader.readAsDataURL(file);
         },
@@ -1492,12 +1510,7 @@
             );
             $('owRoomAvatarFile').onchange = function () {
                 if (!this.files || !this.files[0]) return;
-                // 裁剪弹窗会替换本弹窗：先暂存输入，上传完成后带新头像重建
-                self._roomEditDraft = {
-                    name: $('owRoomEditName').value,
-                    desc: $('owRoomEditDesc').value,
-                };
-                self.roomAvatarCrop(this.files[0]);
+                self.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，本弹窗保持完好
                 this.value = '';
             };
         },
@@ -1566,40 +1579,26 @@
             });
         },
 
-        /** 取消裁剪：回到个人设置弹窗 */
+        /** 取消裁剪：仅关闭独立裁剪浮层（底下的弹窗/表单保持原状） */
         avatarCropCancel: function () {
-            this.closeModal();
-            this.openSettings();
+            this.closeCropOverlay();
         },
 
         /** 按当前缩放导出正方形头像并上传（上传后仍需点「保存」写入资料） */
         avatarCropSave: function () {
-            var self = this, img = $('owCropImg');
-            if (!img || !img.naturalWidth) { toast('图片未加载完成'); return; }
-            var stage = 128, size = this.avatarCropSize;
-            var iw = img.naturalWidth, ih = img.naturalHeight;
-            var f = stage / Math.min(iw, ih);
-            // 取景框 128px 对应的源图边长（受当前缩放 s 影响）
-            var mt = /scale\(([\d.]+)\)/.exec(img.style.transform || '');
-            var sc = mt ? parseFloat(mt[1]) : 1;
-            var vis = stage / (f * sc);
-            var c = document.createElement('canvas');
-            c.width = size; c.height = size;
-            var ctx = c.getContext('2d');
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(0, 0, size, size);                       // 白底：透明区转 jpg 不返黑
-            ctx.drawImage(img, (iw - vis) / 2, (ih - vis) / 2, vis, vis, 0, 0, size, size);
-
+            var self = this, canvas = $('owCropCanvas');
+            if (!canvas) { toast('裁剪弹窗已关闭'); return; }
             var done = function (blob) {
+                self.closeCropOverlay();
                 if (!blob) { toast('当前浏览器无法处理图片，请更换浏览器'); return; }
                 if (self._cropTarget === 'room') self.roomAvatarUpload(blob, 'room.jpg');
                 else self.avatarUpload(blob, 'avatar.jpg');
             };
-            if (c.toBlob) {
-                c.toBlob(function (b) { done(b); }, 'image/jpeg', 0.9);
+            if (canvas.toBlob) {
+                canvas.toBlob(function (b) { done(b); }, 'image/jpeg', 0.9);
             } else {
                 // 老浏览器：toDataURL → 手工转 Blob
-                var b64 = c.toDataURL('image/jpeg', 0.9).split(',')[1] || '';
+                var b64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1] || '';
                 var bin = w.atob ? w.atob(b64) : '';
                 var arr = new Uint8Array(bin.length), i;
                 for (i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
@@ -1640,8 +1639,6 @@
                     self.cfg.me.avatar = url;
                     var pv = $('owSetAvatarPreview');
                     if (pv) pv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
-                    self.closeModal();
-                    self.openSettings();
                     self.renderMe();
                     toast('头像已上传，点击保存生效');
                 });
@@ -1656,23 +1653,12 @@
             self.uploadAvatarBlob(file, filename, function (url) {
                 self._roomAvatar = url;
                 var pv = $('owRoomAvatarPreview');
-                // 前台：编辑弹窗已被裁剪弹窗替换 → 带新头像与草稿重建
-                if (!pv && self._roomEditId) {
-                    self.openRoomEdit(self._roomEditId, {
-                        name: self._roomEditDraft ? self._roomEditDraft.name : '',
-                        desc: self._roomEditDraft ? self._roomEditDraft.desc : '',
-                        avatar: url,
-                    });
-                    toast('群头像已上传，点击保存生效');
-                    return;
-                }
                 if (pv) {
-                    // 前台弹窗用头像组件，后台表单用图片预览
+                    // 前台弹窗用头像组件，后台表单用图片预览（裁剪浮层独立，两者都完好）
                     if (pv.getAttribute('class').indexOf('ow-set-avatar-btn') >= 0)
                         pv.innerHTML = avatarHtml(url, '', false, 'member');
                     else
                         pv.innerHTML = '<img src="' + esc(url) + '" alt="">';
-                    self.closeModal();   // 后台表单场景：裁剪弹窗盖在表单上方，上传后关闭
                 }
                 toast('群头像已上传，点击保存生效');
             });
