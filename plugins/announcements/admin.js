@@ -13,7 +13,7 @@
     w.OwOA = {
         /** 分页加载群公告列表 */
         list: function (page) {
-            OwApi.post('plugin_announcements_admin', { page: page || 1, size: 20 }, function (r) {
+            OwApi.post('plugin_announcements_admin', { page: page || 1, size: 30 }, function (r) {
                 var table = d.getElementById('oaAdmTable');
                 var pager = d.getElementById('oaAdmPager');
                 if (!table || !r.ok) { if (table) table.innerHTML = '<tr><td style="color:#5C5C5C">加载失败</td></tr>'; return; }

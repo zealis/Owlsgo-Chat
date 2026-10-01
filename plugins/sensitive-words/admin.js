@@ -17,7 +17,7 @@
 
         /** 分页加载词库 */
         list: function (page) {
-            OwApi.post('plugin_sensitive_words_admin', { page: page || 1, size: 50 }, function (r) {
+            OwApi.post('plugin_sensitive_words_admin', { page: page || 1, size: 30 }, function (r) {
                 var table = d.getElementById('owSWTable');
                 var pager = d.getElementById('owSWPager');
                 if (!table || !r.ok) { if (table) table.innerHTML = '<tr><td style="color:#5C5C5C">加载失败</td></tr>'; return; }
