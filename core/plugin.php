@@ -115,7 +115,7 @@ class Plugin
 
     private static function blankManifestParts(): array
     {
-        return ['hooks' => [], 'routes' => [], 'pages' => [],
+        return ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [],
                 'assets' => ['css' => [], 'js' => []],
                 'stats' => ['hooks' => 0, 'routes' => 0, 'pages' => 0]];
     }
@@ -126,7 +126,7 @@ class Plugin
         if (!self::$dirty || self::$cacheDir === '') return;
         if (!is_dir(self::$cacheDir)) @mkdir(self::$cacheDir, 0775, true);
         $data = ['v' => 1, 'plugins' => []];
-        $keep = array_flip(['hooks', 'routes', 'pages', 'assets', 'stats', 'sig']);
+        $keep = array_flip(['hooks', 'routes', 'pages', 'sensitive', 'assets', 'stats', 'sig']);
         foreach (self::$manifest as $n => $m) {
             $data['plugins'][$n] = array_intersect_key($m, $keep)
                 + ['sig' => self::sigOf($n), 'meta' => self::$meta[$n] ?? []]
@@ -149,7 +149,7 @@ class Plugin
         $main = self::$dir . '/' . $name . '/main.php';
         if (!is_file($main)) return;
 
-        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'assets' => ['css' => [], 'js' => []]];
+        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'assets' => ['css' => [], 'js' => []]];
         self::$loading = $name;
         try { require $main; } catch (Throwable $e) { Sec::log('plugin_error', $name, ['error' => $e->getMessage()]); }
         self::$loading = '';
@@ -160,7 +160,7 @@ class Plugin
         self::$stats[$name] = $stats;
         $old = self::$manifest[$name] ?? null;
         $m = ($old ?? []) + self::blankManifestParts() + ['sig' => []];
-        foreach (['hooks', 'routes', 'pages'] as $k) {
+        foreach (['hooks', 'routes', 'pages', 'sensitive'] as $k) {
             $m[$k] = array_values(array_unique(array_merge($m[$k], $p[$k])));
         }
         foreach (['css', 'js'] as $t) {
@@ -184,10 +184,24 @@ class Plugin
         if (self::$pending !== null) self::$pending['hooks'][] = $hook;
     }
 
-    public static function route(string $action, callable $fn): void
+    /**
+     * 注册 API 路由。$opts['sensitive'] = true 标记为敏感操作：
+     * 服务端会要求一次性操作票据（见 PLUGIN.md「敏感操作安全校验」），
+     * 前端须用 OwApi.secure() 调用（自动先取票再提交）。
+     */
+    public static function route(string $action, callable $fn, array $opts = []): void
     {
         self::$routes[$action] = $fn;
-        if (self::$pending !== null) self::$pending['routes'][] = $action;
+        if (self::$pending === null) return;
+        self::$pending['routes'][] = $action;
+        if (!empty($opts['sensitive'])) self::$pending['sensitive'][] = $action;
+    }
+
+    /** 单独标记某路由为敏感操作（多行闭包注册后追加声明用；也可用 route 的 $opts['sensitive']） */
+    public static function sensitive(string $action): void
+    {
+        if (self::$pending === null) return;
+        if (!in_array($action, self::$pending['sensitive'], true)) self::$pending['sensitive'][] = $action;
     }
 
     public static function adminPage(string $slug, string $title, callable $fn): void
@@ -230,6 +244,15 @@ class Plugin
         }
         if (isset(self::$routes[$action])) return call_user_func(self::$routes[$action], $ctx);
         return null;
+    }
+
+    /** 该 action 是否被插件声明为敏感操作（清单查询，不触发加载） */
+    public static function isSensitive(string $action): bool
+    {
+        foreach (self::$manifest as $m) {
+            if (in_array($action, $m['sensitive'] ?? [], true)) return true;
+        }
+        return false;
     }
 
     /** 后台页集合：先按清单把声明了后台页的启用插件加载进来，再返回（保持既有行为） */
@@ -355,7 +378,7 @@ class Plugin
         if (!is_file($main)) return ['hooks' => 0, 'routes' => 0, 'pages' => 0];
         $before = self::snapshot();
         $beforeAssets = self::$assets;
-        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'assets' => ['css' => [], 'js' => []]];
+        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'assets' => ['css' => [], 'js' => []]];
         self::$loading = $name;
         try { require $main; $stats = ['hooks' => count(self::$pending['hooks']), 'routes' => count(self::$pending['routes']), 'pages' => count(self::$pending['pages'])]; }
         catch (Throwable $e) { $stats = ['hooks' => 0, 'routes' => 0, 'pages' => 0]; }
@@ -369,7 +392,7 @@ class Plugin
         self::$assets = $beforeAssets;
         // 刷新清单与签名（后续后台列表免探测）
         $m = (self::$manifest[$name] ?? []) + self::blankManifestParts() + ['sig' => []];
-        foreach (['hooks', 'routes', 'pages'] as $k) {
+        foreach (['hooks', 'routes', 'pages', 'sensitive'] as $k) {
             $m[$k] = array_values(array_unique(array_merge($m[$k], $p[$k])));
         }
         foreach (['css', 'js'] as $t) {

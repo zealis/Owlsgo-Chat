@@ -45,6 +45,30 @@ class Sec
         return false;
     }
 
+    // ---------- 敏感操作一次性票据（v1.0.91） ----------
+    // 签名只证明「请求来自持钥客户端」，窗口期内可重放；删除 / 恢复 / 禁用 / 退出登录
+    // 等敏感操作额外要求一次性票据：先调 ?action=ticket 签发（写入会话），提交时校验并
+    // 立即作废——被劫持者即使拿到旧请求也无法重放，拿到票据也因一次性而难以复用。
+
+    /** 签发一次性操作票据（写入会话，5 分钟有效） */
+    public static function ticketIssue(): string
+    {
+        $t = bin2hex(random_bytes(16));
+        $_SESSION['op_ticket'] = ['v' => $t, 'ts' => time()];
+        return $t;
+    }
+
+    /** 校验一次性票据：不匹配 / 过期 / 已使用均拒绝；验证通过立即作废 */
+    public static function ticketVerify(string $given): bool
+    {
+        $s = $_SESSION['op_ticket'] ?? null;
+        if (!is_array($s) || !is_string($given) || $given === '') return false;
+        if ((time() - (int)$s['ts']) > 300) return false;
+        if (!hash_equals((string)$s['v'], $given)) return false;
+        unset($_SESSION['op_ticket']);   // 一次性：用后即焚
+        return true;
+    }
+
     public static function clientKey(): string
     {
         return bin2hex(random_bytes(16));

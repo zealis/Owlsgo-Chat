@@ -214,9 +214,30 @@ if ($action !== '') {
         Api::json(['ok' => false, 'msg' => '签名验证失败，请刷新页面'], 403);
     }
 
+    // ---------- 敏感操作安全校验（v1.0.91） ----------
+    // 覆盖：退出登录、删除内容（消息/贴纸/公告/敏感词）、群聊删除/恢复/批量处置、
+    // 插件卸载，以及插件声明了 sensitive 的路由（用户禁用、附件删除、禁言、关闭两步验证等）。
+    // 校验：仅接受 POST + 一次性操作票据（先调 ?action=ticket 签发，用后即焚，防重放/防劫持）。
+    $SENSITIVE = [
+        'logout', 'msg_delete', 'recall', 'sticker_del',
+        'admin_room_del', 'admin_room_trash_undo', 'admin_room_batch',
+        'admin_ann_del', 'admin_word_del', 'admin_plugin_uninstall',
+    ];
+    $isSensitive = in_array($action, $SENSITIVE, true) || Plugin::isSensitive($action);
+    if ($isSensitive) {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            Api::json(['ok' => false, 'msg' => '敏感操作仅接受 POST 提交'], 405);
+        }
+        if (!Sec::ticketVerify((string)($_POST['ticket'] ?? ''))) {
+            Sec::log('sensitive_reject', $action, ['ip' => Sec::ip()]);
+            Api::json(['ok' => false, 'msg' => '安全校验失败，请刷新页面后重试'], 403);
+        }
+    }
+
     // 关键：长轮询等只读动作提前释放会话锁，避免阻塞同会话的发消息等请求（PHP-FPM 生产环境必需）
-    // room_join 需要写入密码房通行缓存，必须保留会话写入能力
-    if (!in_array($action, ['login', 'logout', 'register', 'reset', 'send_code', 'room_join'], true)) {
+    // room_join 需要写入密码房通行缓存；ticket 与敏感操作需要读写会话（票据签发/作废），必须保留会话
+    $keepSession = in_array($action, ['login', 'logout', 'register', 'reset', 'send_code', 'room_join', 'ticket'], true) || $isSensitive;
+    if (!$keepSession) {
         session_write_close();
     }
 
@@ -275,6 +296,10 @@ if ($action !== '') {
         case 'logout':
             Auth::logout();
             Api::json(['ok' => true]);
+
+        case 'ticket':
+            // 敏感操作一次性票据签发：需签名（走到这里说明已验签），写入会话
+            Api::json(['ok' => true, 'ticket' => Sec::ticketIssue()]);
 
         // ---------- 聊天 ----------
         case 'rooms':

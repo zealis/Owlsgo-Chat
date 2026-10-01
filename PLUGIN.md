@@ -63,6 +63,30 @@ Plugin::on('page.footer', function () {
 - `plugins/` 目录已加入 `.gitignore`，不随 Git 仓库分发；插件随部署环境安装维护。
 - 启停与安装会写安全日志（`Sec::log`）。
 
+## 敏感操作安全校验（v1.0.91 起）
+
+凡是**删除数据、恢复数据、禁用账号 / 禁言、退出登录、关闭安全功能**之类的插件路由，
+必须标记为敏感操作，服务端会强制「POST + 一次性操作票据」校验，防止请求重放与跨站劫持。
+
+```php
+// 方式一：注册时声明
+Plugin::route('plugin_xxx_delete', function (array $ctx) { ... }, ['sensitive' => true]);
+
+// 方式二：多行闭包注册后单独声明（推荐，可读性好）
+Plugin::route('plugin_xxx_delete', function (array $ctx) { ... });
+Plugin::sensitive('plugin_xxx_delete');
+```
+
+前端调用必须用 `OwApi.secure(action, data, cb)`（签名同 post；自动先请求
+`?action=ticket` 取一次性票据再随请求提交，服务端校验后立即作废票据）。
+不要用 `OwApi.post` 调敏感接口——会被 403 拒绝并记入安全日志（`sensitive_reject`）。
+
+约定要点：
+- 票据 5 分钟有效、一次性；签名验证依旧先行，票据是额外一道防线；
+- 敏感操作在 UI 层保留二次确认弹窗，与票据校验形成双层防护；
+- 核心 action 的敏感清单在 index.php `$SENSITIVE`；插件一律用上面的声明方式，
+  清单随插件缓存（plugins.json）持久化，无需手工维护。
+
 ## 后台页面（Plugin::adminPage）
 
 ```php

@@ -223,6 +223,21 @@
             x.send(body);
             return x;
         },
+
+        /**
+         * 敏感操作（v1.0.91）：退出登录 / 删除内容 / 管理员删·恢复 / 禁用等。
+         * 先取一次性操作票据（?action=ticket，签名保护），随请求提交，服务端校验后作废，
+         * 防止签名窗口期内的请求重放与跨站劫持。用法与 post 相同：OwApi.secure(action, data, cb)
+         */
+        secure: function (action, data, cb) {
+            this.post('ticket', {}, function (t) {
+                if (!t.ok || !t.ticket) { cb({ ok: false, msg: t.msg || '安全校验组件不可用' }); return; }
+                var d = {}, k;
+                for (k in (data || {})) if (data.hasOwnProperty(k)) d[k] = data[k];
+                d.ticket = t.ticket;
+                OwApi.post(action, d, cb);
+            });
+        },
     };
 
     /* 提示音（内置短音 data URI，旧浏览器静默降级） */
@@ -557,7 +572,7 @@
             var lo = $('owBtnLogout');
             if (lo) lo.onclick = function () {
                 self.confirmModal('确定退出登录吗？', function () {
-                    OwApi.post('logout', {}, function () { location.href = '?page=login'; });
+                    OwApi.secure('logout', {}, function () { location.href = '?page=login'; });
                 });
             };
             var st = $('owBtnSettings');
@@ -1132,7 +1147,7 @@
         recall: function (id) {
             var self = this;
             this.confirmModal('确定撤回这条消息吗？', function () {
-                OwApi.post('recall', { id: id }, function (r) {
+                OwApi.secure('recall', { id: id }, function (r) {
                     if (r.ok) self.markRecalled(id);
                     else toast(r.msg);
                 });
@@ -1306,7 +1321,7 @@
             if (this.cfg.actor.role === 'admin') items.push({ t: '管理后台', run: function () { location.href = '?page=admin'; } });
             items.push({ t: '退出登录', run: function () {
                 self.confirmModal('确定退出登录吗？', function () {
-                    OwApi.post('logout', {}, function () { location.href = '?page=login'; });
+                    OwApi.secure('logout', {}, function () { location.href = '?page=login'; });
                 });
             } });
             this._ctxItems = items;
@@ -1619,7 +1634,7 @@
         deleteMsg: function (id) {
             var self = this;
             this.confirmModal('确定删除这条消息吗？删除后不可恢复。', function () {
-                OwApi.post('msg_delete', { id: id }, function (r) {
+                OwApi.secure('msg_delete', { id: id }, function (r) {
                     if (!r.ok) { toast(r.msg); return; }
                     var el = $('owMsg' + id);
                     if (el && el.parentNode) el.parentNode.removeChild(el);
@@ -2126,7 +2141,7 @@ logs: function (main) {
         },
         roomTrashUndo: function (id) {
             OwAdmin.confirm('确定撤销该审核操作？', function () {
-                OwApi.post('admin_room_trash_undo', { id: id }, function (r) {
+                OwApi.secure('admin_room_trash_undo', { id: id }, function (r) {
                     toast(r.msg);
                     if (r.ok) { OwAdmin.roomTrashLoad(OwAdmin._roomTrashPage || 1); OwAdmin.roomLoad(OwAdmin._roomPage || 1); }
                 });
@@ -2186,6 +2201,24 @@ logs: function (main) {
             this.uiBatchSync('owRVChk', ['owRVBatchName', 'owRVBatchAvatar', 'owRVBatchBan', 'owRVBatchDel'], 'owRVStat', '共 ' + ((this._roomAll || []).length) + ' 条');
         },
 
+        /** 批量审核（v1.0.83 补实现 v1.0.91）：act = reset_name / reset_avatar / toggle_status / delete */
+        roomBatch: function (act) {
+            var boxes = document.getElementsByClassName('owRVChk'), ids = [];
+            for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) ids.push(parseInt(boxes[i].value, 10) || 0);
+            if (!ids.length) { toast('未选择群聊'); return; }
+            var ACT = { reset_name: '批量重置名称', reset_avatar: '批量重置头像', toggle_status: '批量封禁/解封', delete: '批量删除' };
+            var self = this;
+            this.confirm('确定对已选 ' + ids.length + ' 个群聊执行「' + (ACT[act] || act) + '」？', function () {
+                OwApi.secure('admin_room_batch', { act: act, ids: ids.join(',') }, function (r) {
+                    toast(r.msg);
+                    if (r.ok) {
+                        self.roomLoad(self._roomPage || 1);
+                        self.roomTrashLoad(self._roomTrashPage || 1);
+                    }
+                });
+            });
+        },
+
         /** 审核回收站：服务端分页列出最近处置，可撤销 */
         roomTrashLoad: function (page) {
             this._roomTrashPage = page || this._roomTrashPage || 1;
@@ -2232,7 +2265,7 @@ logs: function (main) {
         },
         roomDel: function (id) {
             OwAdmin.confirm('确定删除该群聊？删除后可在「审核回收站」撤销恢复。', function () {
-                OwApi.post('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
+                OwApi.secure('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
             });
         },
 
@@ -2243,7 +2276,7 @@ logs: function (main) {
         wordToggle: function (id, en) { OwApi.post('admin_word_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('words'); }); },
         wordDel: function (id) {
             OwAdmin.confirm('确定删除该敏感词？', function () {
-                OwApi.post('admin_word_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('words'); });
+                OwApi.secure('admin_word_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('words'); });
             });
         },
         annAdd: function () {
@@ -2255,7 +2288,7 @@ logs: function (main) {
         annToggle: function (id, en) { OwApi.post('admin_ann_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('anns'); }); },
         annDel: function (id) {
             OwAdmin.confirm('确定删除该公告？', function () {
-                OwApi.post('admin_ann_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('anns'); });
+                OwApi.secure('admin_ann_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('anns'); });
             });
         },
         pluginToggle: function (name, en) {
@@ -2268,7 +2301,7 @@ logs: function (main) {
         /* 卸载：删除插件目录，二次确认后执行 */
         pluginUninstall: function (name) {
             OwAdmin.confirm('确定卸载插件「' + name + '」吗？\n将停用并删除 plugins/' + name + ' 目录，不可恢复！', function () {
-                OwApi.post('admin_plugin_uninstall', { name: name }, function (r) {
+                OwApi.secure('admin_plugin_uninstall', { name: name }, function (r) {
                     toast(r.msg);
                     setTimeout(function () { location.reload(); }, 500);
                 });
