@@ -498,6 +498,7 @@
             };
             $('owToggleOnline').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
+            setPanel(false);   // 默认不展开成员面板（宽屏收起为 hidden，窄屏本就收起）
             $('owMask').onclick = function () { setSide(false); setPanel(false); };
             // 创建群聊：侧栏底部按钮（仅登录用户渲染）→ 弹窗
             if ($('owBtnCreateRoom')) $('owBtnCreateRoom').onclick = function () {
