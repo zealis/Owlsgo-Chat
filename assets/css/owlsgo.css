@@ -327,7 +327,9 @@ button { font-family: inherit; cursor: pointer; }
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     padding: 12px 16px;
-    background: var(--ow-bg);
+    background-color: var(--ow-bg);
+    /* 群聊背景界面（v1.0.95）：蓝青渐变，消息气泡均为实底色保证可读 */
+    background-image: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
 }
 .ow-load-more {
     text-align: center;
