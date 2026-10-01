@@ -110,8 +110,8 @@ button { font-family: inherit; cursor: pointer; }
     vertical-align: middle;
 }
 .ow-tag-green { background: #f6ffed; color: var(--ow-green); border: 1px solid #b7eb8f; }
-/* 群主（v1.0.86）：橙底 #FF7D00，文字同色系加深保证可读 */
-.ow-tag-owner { background: #FF7D00; color: #8C4200; border: 1px solid #E67000; }
+/* 群主（v1.0.87）：亮橙底 #FFA940，文字同色系加深保证可读 */
+.ow-tag-owner { background: #FFA940; color: #874300; border: 1px solid #F5913A; }
 .ow-tag-vip { background: #fff7e6; color: var(--ow-orange); border: 1px solid #ffd591; }
 /* 会员（v1.0.86）：默认灰底 */
 .ow-tag-member { background: #E4E4E4; color: #595959; border: 1px solid #D0D0D0; }
