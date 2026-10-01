@@ -75,7 +75,7 @@ if ($installed && $dbOk && !$user) {
     $guest = Auth::guest();
 }
 $actor = Auth::actor($user, $guest);
-if ($installed && $dbOk) Plugin::init($CFG['plugin_dir']);
+if ($installed && $dbOk) Plugin::init($CFG['plugin_dir'], $CFG['data_dir'] . '/cache');
 
 $action = $_GET['action'] ?? '';
 $page = $_GET['page'] ?? 'chat';
