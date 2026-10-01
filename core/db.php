@@ -377,13 +377,17 @@ class DB
             if (self::setting($k) === null) self::setSetting($k, $v);
         }
         if (!self::val('SELECT COUNT(*) FROM rooms')) {
-            // 默认房间固定占用 001（v1.0.51 起新房间 ID 为随机 3 位起步）
+            // 默认房间固定占用 001（v1.0.51 起新房间 ID 为随机 3 位起步），
+            // 群主固定指向超级管理员（管理员固定占用用户 001，安装流程在其后创建）
             DB::insert('rooms', [
                 'id' => 1,
                 'name' => '综合闲聊', 'slug' => 'public', 'type' => 'public',
                 'min_role' => 'guest', 'description' => '默认公共群聊',
+                'owner_id' => 1,
                 'status' => 1, 'created_at' => time(),
             ]);
         }
+        // 存量库修正（v1.0.80）：老版本安装的默认群聊没有群主，补指向超级管理员
+        DB::run('UPDATE rooms SET owner_id=1 WHERE id=1 AND (owner_id IS NULL OR owner_id=0) AND EXISTS(SELECT 1 FROM users WHERE id=1)');
     }
 }
