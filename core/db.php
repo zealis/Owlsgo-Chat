@@ -170,10 +170,8 @@ class DB
             "CREATE TABLE IF NOT EXISTS sensitive_words (
                 id $id, word $str NOT NULL, replacement $str NOT NULL DEFAULT '***',
                 enabled $int NOT NULL DEFAULT 1)",
-            "CREATE TABLE IF NOT EXISTS announcements (
-                id $id, room_id $int NOT NULL DEFAULT 0, content $text NOT NULL,
-                type $str NOT NULL DEFAULT 'announce', priority $int NOT NULL DEFAULT 0,
-                enabled $int NOT NULL DEFAULT 1, created_at $ts NOT NULL)",
+            // announcements（旧系统公告）表已随 v1.0.102 剥离为 announcements 插件，
+            // 由插件表 plugin_announcements 接管；存量库中的旧表保留不删（含迁移源数据）
             "CREATE TABLE IF NOT EXISTS security_logs (
                 id $id, action $str NOT NULL, actor $str, ip $str,
                 data $text, created_at $ts NOT NULL)",

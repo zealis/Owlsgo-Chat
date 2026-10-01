@@ -33,7 +33,7 @@
         }
         bar.innerHTML = '<span class="oa-bar-pin' + (top.pinned === 1 ? ' is-pin' : '') + '">' + (top.pinned === 1 ? '置顶' : '公告') + '</span>'
             + '<span class="oa-bar-text">' + esc(top.content) + '</span>'
-            + '<a class="oa-bar-more" href="javascript:;">群公告 ›</a>';
+            + '<span class="oa-bar-more" title="群公告">›</span>';
         bar.onclick = function () { showPage(); };
     }
 

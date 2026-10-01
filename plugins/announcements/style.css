@@ -24,6 +24,7 @@
 .oa-bar-pin.is-pin { background: #e6f4ff; }
 .oa-bar-text {
     flex: 1; -webkit-flex: 1;
+    min-width: 0; -webkit-min-width: 0;   /* flex 子项防溢出错乱 */
     font-size: 13px;
     color: #43311a;
     display: -webkit-box;
@@ -33,7 +34,13 @@
     line-height: 1.5;
     word-break: break-word;
 }
-.oa-bar-more { flex-shrink: 0; -webkit-flex-shrink: 0; font-size: 12px; color: #0958d9; white-space: nowrap; }
+.oa-bar-more {
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    font-size: 22px;
+    line-height: 1;
+    color: #0958d9;
+    padding: 0 2px;
+}
 
 /* ---------- 置顶标签（蓝） ---------- */
 .oa-pin {
@@ -80,4 +87,12 @@
 .oa-popup-meta b { color: #262626; }
 .oa-popup-body { font-size: 13px; color: #333; line-height: 1.7; word-break: break-word; }
 
-.oa-check { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 6px; font-size: 13px; color: #333; cursor: pointer; }
+/* 置顶复选框与文字平行（覆盖 .ow-form-item label 的 block 样式） */
+.ow-form-item .oa-check {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
+    cursor: pointer;
+}
+.ow-form-item .oa-check input[type="checkbox"] { width: auto; margin: 0; transform: scale(1.15); }

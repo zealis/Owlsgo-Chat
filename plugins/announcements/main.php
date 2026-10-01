@@ -60,9 +60,9 @@ $oaCanManage = function (array $ctx, int $roomId): bool {
 };
 
 /* ---------- 后台管理页：全部群公告列表 ---------- */
-Plugin::adminPage('announcements', '群公告', function () {
+Plugin::adminPage('announcements', '群聊公告', function () {
     $rows = DB::all('SELECT * FROM plugin_announcements ORDER BY pinned DESC, id DESC LIMIT 200');
-    $h = '<h2>群公告</h2><p class="ow-admin-desc">各群聊由群主发布的公告（聊天室上方公告条 / 进群弹窗通知）。删除需谨慎，成员端立即不再展示。</p>'
+    $h = '<h2>群聊公告</h2><p class="ow-admin-desc">各群聊由群主发布的公告（聊天室上方公告条 / 进群弹窗通知）。删除需谨慎，成员端立即不再展示。</p>'
         . '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>群聊ID</th><th>发布者</th><th>内容</th><th>类型</th><th>置顶</th><th>时间</th><th>操作</th></tr>';
     if (!$rows) $h .= '<tr><td colspan="8" style="color:#5C5C5C">暂无公告</td></tr>';
     foreach ($rows as $r) {
