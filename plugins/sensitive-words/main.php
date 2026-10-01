@@ -28,7 +28,7 @@ Plugin::on('text.filter', function (&$text, $scene, $actor) {
     }
 });
 
-/* ---------- 后台管理页（自核心 words 页迁来） ---------- */
+/* ---------- 后台管理页（v1.0.110 对齐通用列表样式：多选框 + 批量删除 + 分页轮子） ---------- */
 Plugin::adminPage('sensitive-words', '敏感词过滤', function () {
     $rows = DB::all('SELECT * FROM sensitive_words ORDER BY id DESC LIMIT 200');
     $h = '<h2>敏感词过滤</h2><p class="ow-admin-desc">添加敏感词及替换词，支持启用 / 停用。对所有输入文字生效（发言、昵称、群名称、群简介、群公告等）。</p>'
@@ -36,9 +36,13 @@ Plugin::adminPage('sensitive-words', '敏感词过滤', function () {
         . '<div class="ow-form-item"><label>敏感词</label><input class="ow-input" id="owWWord"></div>'
         . '<div class="ow-form-item"><label>替换为</label><input class="ow-input" id="owWRep" value="***"></div>'
         . '<button class="ow-btn ow-btn-primary" onclick="OwSW.wordAdd()">添加</button></div></div>'
-        . '<div class="ow-card"><table class="ow-table" id="owSWTable"></table></div>'
-        . '<div id="owSWPager"></div>'
-        . '<script>if (window.OwSW && OwSW.init) OwSW.init();</script>';
+        . '<div class="ow-card">'
+        . '<div class="ow-admin-batch">'
+        . '<button class="ow-btn ow-btn-danger" id="owSWBatchDel" onclick="OwSW.batchDelete()" disabled>批量删除</button>'
+        . '<span id="owSWStat" style="color:var(--ow-text-sub);font-size:12px"></span>'
+        . '</div>'
+        . '<div class="ow-table-wrap"><table class="ow-table" id="owSWTable"></table></div>'
+        . '<div id="owSWPager"></div></div>';
     return $h;
 });
 
@@ -46,11 +50,22 @@ Plugin::adminPage('sensitive-words', '敏感词过滤', function () {
 Plugin::route('plugin_sensitive_words_admin', function (array $ctx) {
     if (($ctx['actor']['role'] ?? '') !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
     $page = max(1, (int)($ctx['post']['page'] ?? 1));
-    $size = min(100, max(1, (int)($ctx['post']['size'] ?? 50)));
+    $size = min(100, max(1, (int)($ctx['post']['size'] ?? 30)));
     $total = (int)DB::val('SELECT COUNT(*) FROM sensitive_words');
     $rows = DB::all('SELECT * FROM sensitive_words ORDER BY id DESC LIMIT ' . $size . ' OFFSET ' . (($page - 1) * $size));
     Api::json(['ok' => true, 'data' => ['list' => $rows, 'total' => $total, 'page' => $page, 'size' => $size]]);
 });
+
+/** 批量删除（敏感操作） */
+Plugin::route('plugin_sensitive_words_batch', function (array $ctx) {
+    if (($ctx['actor']['role'] ?? '') !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
+    $ids = array_filter(array_map('intval', explode(',', (string)($ctx['post']['ids'] ?? ''))));
+    if (!$ids) Api::json(['ok' => false, 'msg' => '未选择敏感词']);
+    $ok = 0;
+    foreach ($ids as $id) { DB::run('DELETE FROM sensitive_words WHERE id=?', [$id]); $ok++; }
+    Sec::log('sensitive_word_batch_del', $ctx['actor']['nickname'], ['count' => $ok]);
+    Api::json(['ok' => $ok > 0, 'msg' => '批量删除：成功 ' . $ok . ' 条']);
+}, ['sensitive' => true]);
 
 /* ---------- 添加 ---------- */
 Plugin::route('plugin_sensitive_words_add', function (array $ctx) {
