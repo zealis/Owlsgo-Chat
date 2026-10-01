@@ -55,7 +55,7 @@
 }
 
 /* ---------- 群公告页面（弹窗） ---------- */
-.oa-page { width: 100%; box-sizing: border-box; }
+.oa-page { width: 100%; max-width: 100%; box-sizing: border-box; }
 .oa-page-title { font-size: 22px; font-weight: bold; color: #262626; padding: 4px 4px 0; }
 .oa-page-sub { font-size: 12px; color: #8c8c8c; padding: 2px 4px 12px; border-bottom: 1px solid #f0f0f0; margin-bottom: 12px; }
 .oa-list { max-height: 46vh; overflow-y: auto; overflow-x: hidden; padding: 2px; }
@@ -98,3 +98,14 @@
     cursor: pointer;
 }
 .ow-form-item .oa-check input[type="checkbox"] { width: auto; margin: 0; transform: scale(1.15); }
+
+/* 发布弹窗 textarea：拉手只允许竖向拖拽（横向拖大会撑破弹窗布局），宽度锁定 */
+.oa-page textarea.ow-input,
+.ow-modal textarea.ow-input {
+    resize: vertical;
+    min-height: 88px;
+    max-height: 260px;
+    max-width: 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+}

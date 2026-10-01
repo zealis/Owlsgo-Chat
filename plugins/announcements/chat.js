@@ -86,7 +86,8 @@
         w.OwChat.openModal(
             '<div class="oa-page"><div class="oa-page-title">' + esc(current.roomName) + '</div>'
             + '<div class="oa-page-sub">群公告</div>'
-            + '<div class="oa-list">' + cards + '</div>' + manage + '</div>'
+            + '<div class="oa-list">' + cards + '</div>' + manage + '</div>',
+            560
         );
         // 卡片展开 / 收起（内容过长时折叠）
         var cards2 = d.querySelectorAll('#owModal .oa-card');
@@ -126,7 +127,7 @@
         w.OwChat.openModal(
             '<h3>发布群公告</h3>'
             + '<div class="ow-form-item"><label>公告内容</label>'
-            + '<textarea class="ow-input" id="oaContent" rows="4" maxlength="1000" placeholder="最多 1000 字"></textarea></div>'
+            + '<textarea class="ow-input" id="oaContent" rows="4" maxlength="600" placeholder="最多 600 字"></textarea></div>'
             + '<div class="ow-form-item"><label>展示类型</label>'
             + '<select class="ow-input" id="oaType"><option value="bar">聊天室上方公告条</option><option value="popup">进群弹窗通知</option></select></div>'
             + '<div class="ow-form-item"><label class="oa-check"><input type="checkbox" id="oaPinned"> 置顶该公告（在公告条与列表优先展示）</label></div>'

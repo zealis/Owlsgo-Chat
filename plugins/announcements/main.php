@@ -98,7 +98,7 @@ Plugin::route('plugin_announcements_add', function (array $ctx) use ($oaCanManag
         'room_id' => $roomId,
         'user_id' => (int)($ctx['actor']['id'] ?? 0),
         'nickname' => (string)($ctx['actor']['nickname'] ?? ''),
-        'content' => mb_substr($content, 0, 1000),
+        'content' => mb_substr($content, 0, 600),
         'type' => $type,
         'pinned' => !empty($ctx['post']['pinned']) ? 1 : 0,
         'created_at' => time(),
