@@ -13,6 +13,55 @@ class Admin
 
     public static function handle(string $action, array $actor): void
     {
+        /**
+         * 单条群聊审核处置（v1.0.78，v1.0.83 提取为闭包供单条/批量共用）。
+         * 处置写入回收站（room_review_trash），可撤销；delete 走独立逻辑（见 admin_room_del）。
+         * @return array [bool, string]
+         */
+        $roomReview = function (array $actor, int $id, string $act): array {
+            $room = DB::one('SELECT * FROM rooms WHERE id=?', [$id]);
+            if (!$room) return [false, '群聊不存在'];
+            $trash = function (string $action, array $before) use ($id, $room): void {
+                DB::insert('room_review_trash', [
+                    'room_id' => $id, 'room_name' => $room['name'],
+                    'action' => $action, 'before_data' => json_encode($before, JSON_UNESCAPED_UNICODE),
+                    'undone' => 0, 'created_at' => time(),
+                ]);
+            };
+            if ($act === 'reset_name') {
+                $trash('reset_name', ['name' => $room['name']]);
+                DB::run("UPDATE rooms SET name=? WHERE id=?", ['未命名群聊', $id]);
+                Sec::log('room_review', (string)$id, ['act' => 'reset_name']);
+                Plugin::fire('room.after_update', [$id, ['name' => '未命名群聊'], $actor]);
+                return [true, '已重置为「未命名群聊」（可在回收站撤销）'];
+            }
+            if ($act === 'reset_avatar') {
+                $old = (string)$room['avatar'];
+                $trash('reset_avatar', ['avatar' => $old]);
+                DB::run("UPDATE rooms SET avatar='' WHERE id=?", [$id]);
+                // 违规头像文件移入回收目录（不删除，撤销时移回）
+                if ($old !== '' && strpos($old, 'uploads/avatar/') === 0) {
+                    $src = dirname(__DIR__) . '/' . $old;
+                    if (is_file($src)) {
+                        $trashDir = dirname(__DIR__) . '/data/avatar_trash';
+                        if (!is_dir($trashDir)) @mkdir($trashDir, 0775, true);
+                        @rename($src, $trashDir . '/' . basename($old));
+                    }
+                }
+                Sec::log('room_review', (string)$id, ['act' => 'reset_avatar']);
+                Plugin::fire('room.after_update', [$id, ['avatar' => ''], $actor]);
+                return [true, '头像已恢复默认（可在回收站撤销）'];
+            }
+            if ($act === 'toggle_status') {
+                $to = (int)$room['status'] === 1 ? 0 : 1;
+                $trash('toggle_status', ['status' => (int)$room['status']]);
+                DB::run('UPDATE rooms SET status=? WHERE id=?', [$to, $id]);
+                Sec::log('room_review', (string)$id, ['act' => $to ? 'unban' : 'ban']);
+                return [true, ($to ? '已解封' : '已封禁') . '（可在回收站撤销）'];
+            }
+            return [false, '未知审核动作'];
+        };
+
         self::requireAdmin($actor);
         $p = fn($k, $d = '') => trim((string)($_POST[$k] ?? $d));
 
@@ -51,52 +100,41 @@ class Admin
 
             case 'admin_room_review':
                 // 群聊审核（v1.0.78）：超级管理员仅能做合规处置，不代改群聊内容。
-                // v1.0.81：所有处置写入回收站（room_review_trash），可撤销。
-                $id = (int)$p('id', '0');
-                $room = DB::one('SELECT * FROM rooms WHERE id=?', [$id]);
-                if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
-                $act = (string)$p('act', '');
-                $trash = function (string $action, array $before) use ($id, $room): void {
-                    DB::insert('room_review_trash', [
-                        'room_id' => $id, 'room_name' => $room['name'],
-                        'action' => $action, 'before_data' => json_encode($before, JSON_UNESCAPED_UNICODE),
-                        'undone' => 0, 'created_at' => time(),
-                    ]);
-                };
-                if ($act === 'reset_name') {
-                    $trash('reset_name', ['name' => $room['name']]);
-                    DB::run("UPDATE rooms SET name=? WHERE id=?", ['未命名群聊', $id]);
-                    Sec::log('room_review', (string)$id, ['act' => 'reset_name']);
-                    Plugin::fire('room.after_update', [$id, ['name' => '未命名群聊'], $actor]);
-                    Api::json(['ok' => true, 'msg' => '已重置为「未命名群聊」（可在回收站撤销）']);
-                }
-                if ($act === 'reset_avatar') {
-                    $old = (string)$room['avatar'];
-                    $trash('reset_avatar', ['avatar' => $old]);
-                    DB::run("UPDATE rooms SET avatar='' WHERE id=?", [$id]);
-                    // 违规头像文件移入回收目录（不删除，撤销时移回）
-                    if ($old !== '' && strpos($old, 'uploads/avatar/') === 0) {
-                        $src = dirname(__DIR__) . '/' . $old;
-                        if (is_file($src)) {
-                            $trashDir = dirname(__DIR__) . '/data/avatar_trash';
-                            if (!is_dir($trashDir)) @mkdir($trashDir, 0775, true);
-                            @rename($src, $trashDir . '/' . basename($old));
-                        }
-                    }
-                    Sec::log('room_review', (string)$id, ['act' => 'reset_avatar']);
-                    Plugin::fire('room.after_update', [$id, ['avatar' => ''], $actor]);
-                    Api::json(['ok' => true, 'msg' => '头像已恢复默认（可在回收站撤销）']);
-                }
-                if ($act === 'toggle_status') {
-                    $to = (int)$room['status'] === 1 ? 0 : 1;
-                    $trash('toggle_status', ['status' => (int)$room['status']]);
-                    DB::run('UPDATE rooms SET status=? WHERE id=?', [$to, $id]);
-                    Sec::log('room_review', (string)$id, ['act' => $to ? 'unban' : 'ban']);
-                    Api::json(['ok' => true, 'msg' => ($to ? '已解封' : '已封禁') . '（可在回收站撤销）']);
-                }
-                Api::json(['ok' => false, 'msg' => '未知审核动作']);
+                // 处置写入回收站（room_review_trash），可撤销。
+                [$rok, $rmsg] = $roomReview($actor, (int)$p('id', '0'), (string)$p('act', ''));
+                Api::json(['ok' => $rok, 'msg' => $rmsg]);
 
-            case 'admin_room_trash_list':
+            case 'admin_room_batch':
+                // 批量审核（v1.0.83）：ids 逗号分隔，act 同单条（reset_name /
+                // reset_avatar / toggle_status / delete）。逐条走同一逻辑（均入回收站），
+                // 返回成功/失败计数；失败不影响其余条目。
+                $actB = (string)$p('act', '');
+                $idsB = array_filter(array_map('intval', explode(',', (string)$p('ids', ''))));
+                if (!$idsB) Api::json(['ok' => false, 'msg' => '未选择群聊']);
+                $okB = 0; $failB = 0; $lastMsg = '';
+                foreach ($idsB as $idB) {
+                    if ($actB === 'delete') {
+                        // 批量删除：与 admin_room_del 同款（整行快照入回收站 + 默认房间保护）
+                        $del = DB::one('SELECT * FROM rooms WHERE id=? AND slug!=?', [$idB, 'public']);
+                        if (!$del) { $failB++; $lastMsg = '群聊不存在（默认房间不可删除）'; continue; }
+                        DB::insert('room_review_trash', [
+                            'room_id' => $idB, 'room_name' => $del['name'],
+                            'action' => 'delete', 'before_data' => json_encode(['row' => $del], JSON_UNESCAPED_UNICODE),
+                            'undone' => 0, 'created_at' => time(),
+                        ]);
+                        DB::run('DELETE FROM rooms WHERE id=? AND slug!=?', [$idB, 'public']);
+                        Sec::log('room_review', (string)$idB, ['act' => 'delete']);
+                        $okB++;
+                        continue;
+                    }
+                    [$rok, $rmsg] = $roomReview($actor, $idB, $actB);
+                    if ($rok) { $okB++; } else { $failB++; $lastMsg = $rmsg; }
+                }
+                Api::json(['ok' => $okB > 0,
+                    'msg' => '批量' . ($actB === 'delete' ? '删除' : '处置') . '：成功 ' . $okB . ' 条'
+                        . ($failB ? '，失败 ' . $failB . ' 条（' . $lastMsg . '）' : '')]);
+
+            case 'admin_room_trash_list':            case 'admin_room_trash_list':
                 $rows = DB::all('SELECT * FROM room_review_trash ORDER BY id DESC LIMIT 200');
                 foreach ($rows as &$r) {
                     $r['before_data'] = json_decode((string)$r['before_data'], true) ?: new stdClass();

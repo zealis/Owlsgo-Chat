@@ -1913,25 +1913,32 @@
                 });
             },
             rooms: function (main) {
-                // 群聊审核（v1.0.78）：仅封禁/解封、删除、重置违规名称与头像
+                // 群聊审核（v1.0.78/v1.0.83）：搜索过滤 + 多选批量 + 回收站可撤销
                 OwApi.post('admin_rooms', {}, function (r) {
-                    var h = '<h2>群聊审核</h2><p class="ow-admin-desc">对群聊做合规处置：名称 / 头像不合法可重置，违规群聊可封禁或删除。</p><div class="ow-card">'
-                        + '<table class="ow-table"><tr><th>ID</th><th>头像</th><th>名称</th><th>房主ID</th><th>状态</th><th>操作</th></tr>';
-                    for (var i = 0; i < r.data.length; i++) {
-                        var d = r.data[i];
-                        var av = d.avatar
-                            ? '<img src="' + esc(d.avatar) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;vertical-align:middle;display:block">'
-                            : '<span style="display:block;width:28px;height:28px;border-radius:50%;background:var(--ow-bg-sub);color:var(--ow-text-sub);font-size:12px;line-height:28px;text-align:center">' + esc(d.name.charAt(0)) + '</span>';
-                        h += '<tr><td>' + esc(fmtUid(d.id)) + '</td><td>' + av + '</td><td>' + esc(d.name) + '</td><td>' + (d.owner_id ? esc(fmtUid(d.owner_id)) : '-') + '</td>'
-                           + '<td>' + (d.status == 1 ? '正常' : '<span style="color:#C41D1F">已封禁</span>') + '</td>'
-                           + '<td style="white-space:nowrap">'
-                           + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'reset_name\')">名称不合法</a> '
-                           + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'reset_avatar\')">头像不合法</a> '
-                           + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'toggle_status\')">' + (d.status == 1 ? '封禁' : '解封') + '</a> '
-                           + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
-                    }
-                    main.innerHTML = h + '</table></div>'
+                    main.innerHTML = '<h2>群聊审核</h2><p class="ow-admin-desc">对群聊做合规处置：名称 / 头像不合法可重置，违规群聊可封禁或删除。所有处置均可在回收站撤销。</p>'
+                        + '<div class="ow-card"><div class="ow-form-row">'
+                        + '<div class="ow-form-item" style="min-width:120px"><label>房主用户ID</label>'
+                        + '<input class="ow-input" id="owRVRoomOwner" type="number" min="0" placeholder="0=全部" value="0" onkeydown="if(event.key===\'Enter\')OwAdmin.roomLoad()"></div>'
+                        + '<div class="ow-form-item" style="min-width:120px"><label>群聊ID</label>'
+                        + '<input class="ow-input" id="owRVRoomId" type="number" min="0" placeholder="0=全部" value="0" onkeydown="if(event.key===\'Enter\')OwAdmin.roomLoad()"></div>'
+                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.roomLoad()">搜索</button>'
+                        + '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.roomResetFilter()">重置</button>'
+                        + '</div></div>'
+                        + '<div class="ow-card">'
+                        + '<div style="margin-bottom:10px">'
+                        + '<button class="ow-btn ow-btn-ghost" id="owRVBatchName" onclick="OwAdmin.roomBatch(\'reset_name\')" disabled>批量重置名称</button>'
+                        + '<button class="ow-btn ow-btn-ghost" id="owRVBatchAvatar" onclick="OwAdmin.roomBatch(\'reset_avatar\')" disabled>批量重置头像</button>'
+                        + '<button class="ow-btn ow-btn-ghost" id="owRVBatchBan" onclick="OwAdmin.roomBatch(\'toggle_status\')" disabled>批量封禁</button>'
+                        + '<button class="ow-btn ow-btn-danger" id="owRVBatchDel" onclick="OwAdmin.roomBatch(\'delete\')" disabled>批量删除</button>'
+                        + '<span id="owRVStat" style="margin-left:12px;color:var(--ow-text-sub);font-size:12px"></span>'
+                        + '</div>'
+                        + '<div class="ow-table-wrap"><table class="ow-table" id="owRVTable">'
+                        + '<tr><th style="width:32px"><input type="checkbox" id="owRVCheckAll" onchange="OwAdmin.roomToggleAll(this)"></th>'
+                        + '<th>ID</th><th>头像</th><th>名称</th><th>房主ID</th><th>状态</th><th>操作</th></tr>'
+                        + '</table></div></div>'
                         + '<div class="ow-card"><h3 style="margin:0 0 10px;font-size:14px">审核回收站</h3><div id="owRoomTrash">读取中…</div></div>';
+                    OwAdmin._roomAll = r.data;
+                    OwAdmin.roomLoad();
                     OwAdmin.roomTrash();
                 });
             },
@@ -2034,6 +2041,92 @@
                 });
             });
         },
+        /* ---------- 群聊审核：搜索过滤 / 多选批量（v1.0.83） ---------- */
+
+        /** 按房主ID / 群聊ID 过滤并渲染表格 */
+        roomLoad: function () {
+            var all = this._roomAll || [];
+            var owner = parseInt(($('owRVRoomOwner') || {}).value || 0, 10);
+            var rid = parseInt(($('owRVRoomId') || {}).value || 0, 10);
+            var rows = [];
+            for (var i = 0; i < all.length; i++) {
+                var d = all[i];
+                if (owner > 0 && parseInt(d.owner_id || 0, 10) !== owner) continue;
+                if (rid > 0 && parseInt(d.id, 10) !== rid) continue;
+                rows.push(d);
+            }
+            this._roomRows = rows;
+            var h = '';
+            for (var j = 0; j < rows.length; j++) {
+                var d2 = rows[j];
+                var av = d2.avatar
+                    ? '<img src="' + esc(d2.avatar) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;display:block">'
+                    : '<span style="display:block;width:28px;height:28px;border-radius:50%;background:var(--ow-bg-sub);color:var(--ow-text-sub);font-size:12px;line-height:28px;text-align:center">' + esc(d2.name.charAt(0)) + '</span>';
+                h += '<tr><td><input type="checkbox" class="owRVChk" value="' + d2.id + '" onchange="OwAdmin.roomSyncBatch()"></td>'
+                   + '<td>' + esc(fmtUid(d2.id)) + '</td><td>' + av + '</td><td>' + esc(d2.name) + '</td>'
+                   + '<td>' + (d2.owner_id ? esc(fmtUid(d2.owner_id)) : '-') + '</td>'
+                   + '<td>' + (d2.status == 1 ? '正常' : '<span style="color:#C41D1F">已封禁</span>') + '</td>'
+                   + '<td style="white-space:nowrap">'
+                   + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d2.id + ',\'reset_name\')">名称不合法</a> '
+                   + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d2.id + ',\'reset_avatar\')">头像不合法</a> '
+                   + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d2.id + ',\'toggle_status\')">' + (d2.status == 1 ? '封禁' : '解封') + '</a> '
+                   + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d2.id + ')">删除</a></td></tr>';
+            }
+            var tb = $('owRVTable');
+            if (tb) {
+                tb.innerHTML = '<tr><th style="width:32px"><input type="checkbox" id="owRVCheckAll" onchange="OwAdmin.roomToggleAll(this)"></th>'
+                    + '<th>ID</th><th>头像</th><th>名称</th><th>房主ID</th><th>状态</th><th>操作</th></tr>' + h;
+            }
+            var stat = $('owRVStat');
+            if (stat) stat.textContent = '共 ' + rows.length + ' 条（全部 ' + all.length + ' 条）';
+            this.roomSyncBatch();
+        },
+
+        roomResetFilter: function () {
+            $('owRVRoomOwner').value = '0';
+            $('owRVRoomId').value = '0';
+            this.roomLoad();
+        },
+
+        roomToggleAll: function (cb) {
+            var boxes = document.getElementsByClassName('owRVChk');
+            for (var i = 0; i < boxes.length; i++) boxes[i].checked = cb.checked;
+            this.roomSyncBatch();
+        },
+
+        /** 同步批量按钮可用态与已选计数 */
+        roomSyncBatch: function () {
+            var boxes = document.getElementsByClassName('owRVChk'), n = 0;
+            for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) n++;
+            var ids = ['owRVBatchName', 'owRVBatchAvatar', 'owRVBatchBan', 'owRVBatchDel'];
+            for (var j = 0; j < ids.length; j++) { var b = $(ids[j]); if (b) b.disabled = n === 0; }
+            var stat = $('owRVStat');
+            if (stat) {
+                var base = stat.textContent.replace(/，已选 \d+ 条/, '');
+                stat.textContent = n ? base + '，已选 ' + n + ' 条' : base;
+            }
+        },
+
+        /** 批量处置：act ∈ reset_name / reset_avatar / toggle_status / delete（均入回收站可撤销） */
+        roomBatch: function (act) {
+            var boxes = document.getElementsByClassName('owRVChk'), ids = [];
+            for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) ids.push(boxes[i].value);
+            if (!ids.length) { toast('请先选择群聊'); return; }
+            var tips = {
+                reset_name: '确定将选中的 ' + ids.length + ' 个群聊名称重置为「未命名群聊」？',
+                reset_avatar: '确定将选中的 ' + ids.length + ' 个群聊头像恢复默认？',
+                toggle_status: '确定对选中的 ' + ids.length + ' 个群聊执行封禁 / 解封（按各自当前状态翻转）？',
+                delete: '确定删除选中的 ' + ids.length + ' 个群聊？删除后可在回收站撤销恢复。'
+            };
+            var self = this;
+            OwAdmin.confirm(tips[act] || '确定执行批量操作？', function () {
+                OwApi.post('admin_room_batch', { ids: ids.join(','), act: act }, function (r) {
+                    toast(r.msg);
+                    if (r.ok) OwAdmin.page('rooms');
+                });
+            });
+        },
+
         roomReview: function (id, act) {
             var tips = {
                 reset_name: '确定该群聊名称不合法？将重置为「未命名群聊」。',
