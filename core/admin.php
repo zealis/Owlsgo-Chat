@@ -94,9 +94,20 @@ class Admin
 
             // ---------- 群聊管理 ----------
             case 'admin_rooms':
-                // 审核列表：不返回密码字段
-                $rows = DB::all('SELECT id, name, avatar, type, min_role, owner_id, status, created_at FROM rooms ORDER BY id');
-                Api::json(['ok' => true, 'data' => $rows]);
+                // 审核列表：服务端分页 + 房主/群聊ID搜索；不返回密码字段
+                $pageR = max(1, (int)$p('page', '1'));
+                $sizeR = min(100, max(1, (int)$p('size', '20')));
+                $where = [];
+                $args = [];
+                $ownerR = (int)$p('owner', '0');
+                if ($ownerR > 0) { $where[] = 'owner_id=?'; $args[] = $ownerR; }
+                $ridR = (int)$p('rid', '0');
+                if ($ridR > 0) { $where[] = 'id=?'; $args[] = $ridR; }
+                $wR = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+                $totalR = (int)DB::val('SELECT COUNT(*) FROM rooms' . $wR, $args);
+                $listR = DB::all('SELECT id, name, avatar, type, min_role, owner_id, status, created_at FROM rooms'
+                    . $wR . ' ORDER BY id LIMIT ' . $sizeR . ' OFFSET ' . (($pageR - 1) * $sizeR), $args);
+                Api::json(['ok' => true, 'data' => ['list' => $listR, 'total' => $totalR, 'page' => $pageR, 'size' => $sizeR]]);
 
             case 'admin_room_review':
                 // 群聊审核（v1.0.78）：超级管理员仅能做合规处置，不代改群聊内容。
@@ -135,11 +146,16 @@ class Admin
                         . ($failB ? '，失败 ' . $failB . ' 条（' . $lastMsg . '）' : '')]);
 
             case 'admin_room_trash_list':            case 'admin_room_trash_list':
-                $rows = DB::all('SELECT * FROM room_review_trash ORDER BY id DESC LIMIT 200');
-                foreach ($rows as &$r) {
+                // 回收站：服务端分页
+                $pageT = max(1, (int)$p('page', '1'));
+                $sizeT = min(100, max(1, (int)$p('size', '20')));
+                $totalT = (int)DB::val('SELECT COUNT(*) FROM room_review_trash');
+                $rowsT = DB::all('SELECT * FROM room_review_trash ORDER BY id DESC LIMIT ' . $sizeT . ' OFFSET ' . (($pageT - 1) * $sizeT));
+                foreach ($rowsT as &$r) {
                     $r['before_data'] = json_decode((string)$r['before_data'], true) ?: new stdClass();
                 }
-                Api::json(['ok' => true, 'data' => $rows]);
+                unset($r);
+                Api::json(['ok' => true, 'data' => ['list' => $rowsT, 'total' => $totalT, 'page' => $pageT, 'size' => $sizeT]]);
 
             case 'admin_room_trash_undo':
                 // 撤销审核操作。顺序约束：恢复名称/头像/状态前，群聊必须仍存在
