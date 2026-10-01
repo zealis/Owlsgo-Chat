@@ -1790,14 +1790,41 @@
                 return;
             }
             var h = '<div class="ow-pager">';
-            h += '<button type="button" class="ow-btn ow-btn-ghost"' + (page <= 1 ? ' disabled' : '') + ' data-pg="' + (page - 1) + '">上一页</button>';
-            h += '<span class="ow-pager-info">第 ' + page + ' / ' + pages + ' 页 · 共 ' + total + ' 条</span>';
-            h += '<button type="button" class="ow-btn ow-btn-ghost"' + (page >= pages ? ' disabled' : '') + ' data-pg="' + (page + 1) + '">下一页</button>';
+            if (page > 1) h += '<button type="button" class="ow-btn ow-btn-ghost" data-pg="' + (page - 1) + '">上一页</button>';
+            // 数字页码：当前页前后各 2 页，首末页与区间之间用省略号
+            var start = Math.max(1, page - 2), end = Math.min(pages, page + 2);
+            if (start > 1) {
+                h += '<button type="button" class="ow-btn ow-btn-ghost" data-pg="1">1</button>';
+                if (start > 2) h += '<span class="ow-pager-dots">…</span>';
+            }
+            for (var i = start; i <= end; i++) {
+                h += '<button type="button" class="ow-btn ' + (i === page ? 'ow-btn-primary' : 'ow-btn-ghost') + '"' + (i === page ? ' disabled' : '') + ' data-pg="' + i + '">' + i + '</button>';
+            }
+            if (end < pages) {
+                if (end < pages - 1) h += '<span class="ow-pager-dots">…</span>';
+                h += '<button type="button" class="ow-btn ow-btn-ghost" data-pg="' + pages + '">' + pages + '</button>';
+            }
+            if (page < pages) h += '<button type="button" class="ow-btn ow-btn-ghost" data-pg="' + (page + 1) + '">下一页</button>';
+            // 页码跳转：输入页码回车直接跳
+            h += '<span class="ow-pager-jump">跳至<input type="number" class="ow-pager-jump-input" min="1" max="' + pages + '" value="' + page + '">页</span>';
+            h += '<span class="ow-pager-info">共 ' + total + ' 条</span>';
             h += '</div>';
             el.innerHTML = h;
             var btns = el.getElementsByTagName('button');
-            for (var i = 0; i < btns.length; i++) {
-                btns[i].onclick = function () { go(parseInt(this.getAttribute('data-pg'), 10)); };
+            for (var b = 0; b < btns.length; b++) {
+                btns[b].onclick = function () {
+                    var pg = parseInt(this.getAttribute('data-pg'), 10);
+                    if (pg >= 1 && pg <= pages && pg !== page) go(pg);
+                };
+            }
+            var jump = el.querySelector('.ow-pager-jump-input');
+            if (jump) {
+                var doJump = function () {
+                    var v = parseInt(jump.value, 10);
+                    if (v >= 1 && v <= pages && v !== page) go(v); else jump.value = page;
+                };
+                jump.onkeydown = function (e) { e = e || window.event; if (e.key === 'Enter' || e.keyCode === 13) doJump(); };
+                jump.onchange = doJump;
             }
         },
 

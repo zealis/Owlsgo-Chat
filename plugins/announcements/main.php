@@ -59,22 +59,46 @@ $oaCanManage = function (array $ctx, int $roomId): bool {
     return $owner !== 0 && $owner === (int)$a['id'];
 };
 
-/* ---------- 后台管理页：全部群公告列表（服务端分页 + 列表轮子） ---------- */
+/* ---------- 后台管理页（v1.0.108 模仿附件列表：群聊ID搜索 + 多选批量 + 通用分页） ---------- */
 Plugin::adminPage('announcements', '群聊公告', function () {
     return '<h2>群聊公告</h2><p class="ow-admin-desc">各群聊由群主发布的公告（聊天室上方公告条 / 进群弹窗通知）。删除需谨慎，成员端立即不再展示。</p>'
-        . '<div class="ow-card"><table class="ow-table" id="oaAdmTable"></table></div>'
-        . '<div id="oaAdmPager"></div>';
+        . '<div class="ow-card"><div class="ow-form-row">'
+        . '<div class="ow-form-item" style="min-width:140px"><label>群聊ID</label>'
+        . '<input class="ow-input" id="oaAdmRoom" type="number" min="0" placeholder="0=全部" value="0" onkeydown="if(event.key===\'Enter\')OwOA.load(1)"></div>'
+        . '<button class="ow-btn ow-btn-primary" onclick="OwOA.load(1)">搜索</button>'
+        . '<button class="ow-btn ow-btn-ghost" onclick="OwOA.resetFilter()">重置</button>'
+        . '</div></div>'
+        . '<div class="ow-card">'
+        . '<div class="ow-admin-batch">'
+        . '<button class="ow-btn ow-btn-danger" id="oaAdmBatchDel" onclick="OwOA.batchDelete()" disabled>批量删除</button>'
+        . '<span id="oaAdmStat" style="color:var(--ow-text-sub);font-size:12px"></span>'
+        . '</div>'
+        . '<div class="ow-table-wrap"><table class="ow-table" id="oaAdmTable"></table></div>'
+        . '<div id="oaAdmPager"></div></div>';
 });
 
-/** 后台分页数据（v1.0.104 接入通用列表轮子） */
+/** 后台分页数据（支持群聊ID过滤） */
 Plugin::route('plugin_announcements_admin', function (array $ctx) {
     if (($ctx['actor']['role'] ?? '') !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
     $page = max(1, (int)($ctx['post']['page'] ?? 1));
-    $size = min(100, max(1, (int)($ctx['post']['size'] ?? 20)));
-    $total = (int)DB::val('SELECT COUNT(*) FROM plugin_announcements');
-    $rows = DB::all('SELECT * FROM plugin_announcements ORDER BY pinned DESC, id DESC LIMIT ' . $size . ' OFFSET ' . (($page - 1) * $size));
+    $size = min(100, max(1, (int)($ctx['post']['size'] ?? 30)));
+    $roomId = (int)($ctx['post']['room_id'] ?? 0);
+    $where = $roomId > 0 ? ' WHERE room_id=' . $roomId : '';
+    $total = (int)DB::val('SELECT COUNT(*) FROM plugin_announcements' . $where);
+    $rows = DB::all('SELECT * FROM plugin_announcements' . $where . ' ORDER BY pinned DESC, id DESC LIMIT ' . $size . ' OFFSET ' . (($page - 1) * $size));
     Api::json(['ok' => true, 'data' => ['list' => $rows, 'total' => $total, 'page' => $page, 'size' => $size]]);
 });
+
+/** 批量删除（后台仅管理员可达；敏感操作） */
+Plugin::route('plugin_announcements_batch', function (array $ctx) {
+    if (($ctx['actor']['role'] ?? '') !== 'admin') Api::json(['ok' => false, 'msg' => '需要管理员权限'], 403);
+    $ids = array_filter(array_map('intval', explode(',', (string)($ctx['post']['ids'] ?? ''))));
+    if (!$ids) Api::json(['ok' => false, 'msg' => '未选择公告']);
+    $ok = 0;
+    foreach ($ids as $id) { DB::run('DELETE FROM plugin_announcements WHERE id=?', [$id]); $ok++; }
+    Sec::log('group_ann_batch_del', $ctx['actor']['nickname'], ['count' => $ok]);
+    Api::json(['ok' => $ok > 0, 'msg' => '批量删除：成功 ' . $ok . ' 条']);
+}, ['sensitive' => true]);
 
 /* ---------- 列表（按群；room_id=0 为全站公告，对所有群生效） ---------- */
 Plugin::route('plugin_announcements_list', function (array $ctx) {

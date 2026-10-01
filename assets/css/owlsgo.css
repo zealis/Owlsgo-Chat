@@ -724,8 +724,12 @@ button { font-family: inherit; cursor: pointer; }
 /* 后台批量操作按钮区：按钮间 8px 间隙，移动端换行后上下也有 row-gap */
 .ow-admin-batch { display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; gap: 8px; align-items: center; -webkit-align-items: center; margin-bottom: 10px; }
 /* 分页条 */
-.ow-pager { display: flex; display: -webkit-flex; gap: 10px; align-items: center; -webkit-align-items: center; }
+.ow-pager { display: flex; display: -webkit-flex; gap: 10px; align-items: center; -webkit-align-items: center; flex-wrap: wrap; }
 .ow-pager-info { font-size: 12px; color: var(--ow-text-sub); }
+.ow-pager-dots { color: var(--ow-text-sub); padding: 0 2px; align-self: center; }
+.ow-pager-jump { font-size: 12px; color: var(--ow-text-sub); margin-left: 10px; display: inline-flex; display: -webkit-inline-flex; align-items: center; -webkit-align-items: center; gap: 6px; }
+.ow-pager-jump-input { width: 56px; padding: 5px 6px; border: 1px solid var(--ow-border-control); border-radius: 4px; text-align: center; font-size: 12px; background: var(--ow-bg-sub); color: var(--ow-text); }
+.ow-pager-jump-input:focus { outline: none; border-color: var(--ow-primary-strong); }
 
 @media (max-width: 720px) {
     /* 后台内容层：窄屏收窄留白 + 表格保证最小列宽后横向滚动 */
