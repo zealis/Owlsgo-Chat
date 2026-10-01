@@ -202,8 +202,51 @@ class Sec
             'lifetime' => 86400 * 7,
             'path'     => '/',
             'httponly' => true,
+            'secure'   => self::isHttps(),   // https 部署时强制仅加密通道传输（v1.0.94）
             'samesite' => 'Lax',
         ]);
         if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+        // 会话指纹（v1.0.94）：会话创建时记录客户端特征，后续请求比对；
+        // 登录 Cookie 被跨站窃取 / 本地读取后，换浏览器或换网络重放将无法通过校验。
+        if (!isset($_SESSION['sec_fp'])) $_SESSION['sec_fp'] = self::fingerprint();
+    }
+
+    /** https 部署探测（本地 http 为 false，不影响现有部署） */
+    public static function isHttps(): bool
+    {
+        return !empty($_SERVER['HTTPS']) || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    }
+
+    /** 客户端指纹：User-Agent + IP 前两段（IPv4）或前三组（IPv6），降低换网络误杀 */
+    public static function fingerprint(): string
+    {
+        $ip = self::ip();
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $seg = implode(':', array_slice(explode(':', $ip), 0, 3));
+        } else {
+            $parts = explode('.', $ip);
+            $seg = implode('.', array_slice($parts, 0, 2));
+        }
+        return hash('sha256', ($_SERVER['HTTP_USER_AGENT'] ?? '') . '|' . $seg);
+    }
+
+    /**
+     * 会话指纹守卫（v1.0.94）：每个请求在认证前调用。
+     * 会话中已有指纹且与当前客户端不符 → 判定为 Cookie 被窃取后在其它环境重放，
+     * 立即销毁会话（登录态 / 游客身份一并失效），需重新登录或重新生成游客身份。
+     */
+    public static function fingerprintGuard(): void
+    {
+        if (!isset($_SESSION['sec_fp'])) return;   // 新会话（sessionStart 已写入）
+        if (hash_equals((string)$_SESSION['sec_fp'], self::fingerprint())) return;
+        self::log('session_fingerprint_mismatch', (string)($_SESSION['uid'] ?? ($_SESSION['gid'] ?? '')), ['ip' => self::ip()]);
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $p = session_get_cookie_params();
+            setcookie(session_name(), '', [
+                'expires' => time() - 42000, 'path' => $p['path'], 'httponly' => true, 'samesite' => 'Lax',
+            ]);
+        }
+        session_destroy();
     }
 }

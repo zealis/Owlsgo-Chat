@@ -44,7 +44,8 @@ Sec::init($CFG);
 if (empty($_COOKIE['owl_akey']) || !preg_match('/^[a-f0-9]{32}$/', (string)$_COOKIE['owl_akey'])) {
     $akey = Sec::clientKey();
     setcookie('owl_akey', $akey, [
-        'expires' => time() + 86400 * 30, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+        'expires' => time() + 86400 * 7, 'path' => '/', 'httponly' => true,
+        'secure' => Sec::isHttps(), 'samesite' => 'Lax',
     ]);
     $_COOKIE['owl_akey'] = $akey;
 }
@@ -65,6 +66,10 @@ try {
     $dbOk = false;
     $dbErr = $e->getMessage();
 }
+
+// 会话指纹守卫（v1.0.94）：登录 Cookie 被窃取后在其它浏览器 / 网络重放时销毁会话。
+// 必须在 DB::init 之后（守卫拒绝时会写安全日志），且在认证（Auth::user）之前执行。
+if ($installed && $dbOk) Sec::fingerprintGuard();
 
 Upload::init($CFG);
 

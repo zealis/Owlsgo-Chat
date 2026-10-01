@@ -48,7 +48,7 @@ class Auth
         ]);
         setcookie('owl_guest', $token, [
             'expires' => time() + 86400 * 365, 'path' => '/',
-            'httponly' => true, 'samesite' => 'Lax',
+            'httponly' => true, 'secure' => Sec::isHttps(), 'samesite' => 'Lax',
         ]);
         return DB::one('SELECT * FROM guests WHERE id=?', [$id]);
     }
