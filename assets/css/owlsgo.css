@@ -431,25 +431,24 @@ button { font-family: inherit; cursor: pointer; }
 /* 引用条：嵌入输入框内部第一行（绝对定位固定在顶部，不随内容滚动/输入量变化） */
 .ow-quote-bar {
     position: absolute;
-    top: 5px; left: 5px;
+    top: 3px; left: 4px;
     right: 78px;                       /* 避开右侧发送按钮与拖拽手柄 */
     z-index: 5;
     border: 1px solid var(--ow-border);
-    border-radius: 6px;
+    border-radius: 5px;
     overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
 }
 .ow-quote-inner {
     position: relative;
-    padding: 5px 28px 5px 8px;
+    padding: 3px 26px 3px 8px;         /* 紧凑高度（与独立引用条时期一致） */
     border-left: 3px solid var(--ow-primary);
     background: var(--ow-bg-sub);
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--ow-text-sub);
 }
 /* 有引用时输入框顶部留出引用条的空间，保证引用始终独占第一行 */
-.ow-input-row .ow-input.ow-has-quote { padding-top: 42px; }
+.ow-input-row .ow-input.ow-has-quote { padding-top: 32px; }
 .ow-quote-nick { color: var(--ow-text); font-weight: 600; }
 .ow-quote-text { word-break: break-all; }
 .ow-quote-del {
