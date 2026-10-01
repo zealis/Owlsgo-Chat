@@ -327,10 +327,9 @@ button { font-family: inherit; cursor: pointer; }
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     padding: 12px 16px;
-    /* 群聊背景界面（v1.0.96）：暖灰底 + 双层渐变混合（soft-light/screen） */
-    background-color: #DCD9D4;
-    background-image: linear-gradient(to bottom, rgba(255,255,255,0.50) 0%, rgba(0,0,0,0.50) 100%), radial-gradient(at 50% 0%, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.50) 50%);
-    background-blend-mode: soft-light, screen;
+    /* 群聊背景界面（v1.0.97）：浅灰纵向渐变 */
+    background-color: #eef1f5;
+    background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);
 }
 .ow-load-more {
     text-align: center;
