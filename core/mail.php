@@ -1,71 +1,27 @@
 <?php
 /**
- * 纯 PHP SMTP 客户端（零依赖），用于注册验证码 / 密码找回邮件
+ * 邮件验证码：生成 / 频控 / 校验。
+ *
+ * 发送通道不在核心（v1.0.81 起 SMTP 客户端已移除）：sendCode 触发
+ * `mail.send` 钩子，由邮件插件（SMTP / 第三方 API 等）完成实际发送；
+ * 无人响应时验证码仍入库但不发送，接口返回明确提示。
  */
 class Mailer
 {
-    private array $cfg;
-
-    public function __construct(array $cfg) { $this->cfg = $cfg['mail']; }
-
-    public function send(string $to, string $subject, string $body): bool
+    /**
+     * 触发 mail.send 钩子。插件把 $sent 置为 true 即视为发送成功。
+     *
+     * @param string $to      收件邮箱
+     * @param string $subject 主题
+     * @param string $body    正文（纯文本）
+     * @return bool 是否有插件完成发送
+     */
+    public static function send(string $to, string $subject, string $body): bool
     {
-        if (($this->cfg['driver'] ?? 'smtp') === 'mail') {
-            $headers = "From: =?UTF-8?B?" . base64_encode($this->cfg['from_name']) . "?= <{$this->cfg['from']}>\r\n"
-                     . "Content-Type: text/plain; charset=UTF-8\r\n";
-            return @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
-        }
-        return $this->smtp($to, $subject, $body);
-    }
-
-    private function smtp(string $to, string $subject, string $body): bool
-    {
-        $c = $this->cfg;
-        if (!$c['host']) return false;
-        $host = ($c['secure'] === 'ssl' ? 'ssl://' : '') . $c['host'];
-        $fp = @fsockopen($host, (int)$c['port'], $errno, $errstr, 15);
-        if (!$fp) return false;
-        stream_set_timeout($fp, 15);
-
-        $read = function () use ($fp) {
-            $data = '';
-            while ($line = fgets($fp, 515)) {
-                $data .= $line;
-                if (isset($line[3]) && $line[3] === ' ') break;
-            }
-            return $data;
-        };
-        $cmd = function (string $c) use ($fp, $read) {
-            fwrite($fp, $c . "\r\n");
-            return $read();
-        };
-
-        $read(); // 220
-        $cmd('EHLO ' . ($_SERVER['SERVER_NAME'] ?? 'localhost'));
-        if (($c['secure'] ?? '') === 'tls') {
-            $cmd('STARTTLS');
-            stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
-            $cmd('EHLO ' . ($_SERVER['SERVER_NAME'] ?? 'localhost'));
-        }
-        if ($c['user']) {
-            $cmd('AUTH LOGIN');
-            $cmd(base64_encode($c['user']));
-            $r = $cmd(base64_encode($c['pass']));
-            if (strpos($r, '235') === false) { fclose($fp); return false; }
-        }
-        $cmd("MAIL FROM:<{$c['from']}>");
-        $cmd("RCPT TO:<$to>");
-        $r = $cmd('DATA');
-        if (strpos($r, '354') === false) { fclose($fp); return false; }
-        $headers = "From: =?UTF-8?B?" . base64_encode($c['from_name']) . "?= <{$c['from']}>\r\n"
-                 . "To: <$to>\r\n"
-                 . "Subject: =?UTF-8?B?" . base64_encode($subject) . "?=\r\n"
-                 . "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n";
-        fwrite($fp, $headers . "\r\n" . $body . "\r\n.\r\n");
-        $r = $read();
-        $cmd('QUIT');
-        fclose($fp);
-        return strpos($r, '250') !== false;
+        if (!class_exists('Plugin', false)) return false;
+        $sent = false;
+        Plugin::fire('mail.send', [&$sent, $to, $subject, $body]);
+        return $sent === true;
     }
 
     /** 生成并持久化邮箱验证码，带邮件频率限制 */
@@ -85,12 +41,12 @@ class Mailer
             'expires_at' => time() + 600, 'created_at' => time(),
         ]);
         $site = DB::setting('site_name', 'Owlsgo-Chat');
-        $ok = (new Mailer($cfg))->send(
+        $ok = self::send(
             $email,
             "[$site] 验证码 $code",
             "您的验证码是：$code（10 分钟内有效）。\n若非本人操作请忽略本邮件。"
         );
-        if (!$ok) return [false, '邮件发送失败，请联系管理员检查 SMTP 配置'];
+        if (!$ok) return [false, '站点未启用邮件发送（未安装邮件插件），请联系管理员'];
         return [true, '验证码已发送'];
     }
 

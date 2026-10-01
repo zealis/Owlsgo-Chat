@@ -23,16 +23,7 @@ return [
     'sign_window'  => 1800,                      // 签名时间窗（秒）；前端已用服务器时间校正时钟偏差
 
     // ---------- 邮件（注册验证码 / 密码找回）----------
-    'mail' => [
-        'driver'  => 'smtp',                    // smtp | mail（PHP mail 函数）
-        'host'    => '',
-        'port'    => 465,
-        'secure'  => 'ssl',                     // ssl | tls | ''
-        'user'    => '',
-        'pass'    => '',
-        'from'    => '',
-        'from_name' => 'Owlsgo-Chat',
-    ],
+    // 发送通道由邮件插件提供（v1.0.81 起 SMTP 配置移除），核心只做验证码生成与校验
 
     // ---------- 上传 ----------
     'upload' => [

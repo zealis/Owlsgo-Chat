@@ -133,6 +133,9 @@ ow_abs_url('uploads/a.jpg');    // 拼接绝对地址；第二个参数默认 tr
 - `OwChat.onMsgContent(fn)`：右键**消息内容**（针对「消息」）时追加菜单项——内置复制 / 引用 / 删除，插件可追加翻译、举报等。
 - `OwChat.onQuote(fn)`：构造引用内容时改写（`[quote, msg]`，可改 `quote.nick` / `quote.text`）；服务端另有 `message.quote` 做最终校验。
 
+| `mail.send` | 注册/找回密码发验证码时（`Mailer::send`） | `[&$sent, $to, $subject, $body]` —— 核心 v1.0.81 起不再内置 SMTP；插件完成发送后把 `$sent` 置 true，无人响应时验证码仍入库但接口提示未启用邮件 |
+| `room.restored` | 群聊从审核回收站撤销「删除」后 | `[$roomId, $row, $actor]` —— `$row` 为恢复的整行数据 |
+
 | `login.after_verify` | 登录验证完成（`Auth::login` 内，密码校验通过且会话已建立） | `[$user, $method, $ctx]` —— 通知型，`$method` 为本通过验证的方式（核心仅 `password`；插件实现两步验证时可自行触发本钩子并传 `totp` / `recovery`）；`$ctx` 含 `ip`。**仅在成功登录时触发，验证失败不触发** |
 
 计划任务由长轮询驱动（`Plugin::cronTick()`），也可用系统计划任务调 `?action=cron` 强制触发；回调内自行判断是否到达执行周期，保证可重复运行。

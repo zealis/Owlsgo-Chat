@@ -193,6 +193,11 @@ class DB
                 ip $str, last_seen $ts NOT NULL)",
             "CREATE TABLE IF NOT EXISTS plugins (
                 name $str PRIMARY KEY, enabled $int NOT NULL DEFAULT 0, config $text)",
+            // 群聊审核回收站：before 存操作前快照（delete 为整行 JSON），撤销=按快照还原
+            "CREATE TABLE IF NOT EXISTS room_review_trash (
+                id $id, room_id $int NOT NULL, room_name $str NOT NULL,
+                action $str NOT NULL, before_data $text NOT NULL,
+                undone $int NOT NULL DEFAULT 0, created_at $ts NOT NULL)",
         ];
         foreach ($tables as $sql) self::$pdo->exec($sql);
 

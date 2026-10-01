@@ -100,13 +100,7 @@ if (!$installed) {
                     $src = preg_replace("/'$k'\s*=>\s*'[^']*'/", "'$k'     => '" . addslashes((string)$v) . "'", $src, 1);
                 }
             }
-            foreach (['host' => 'mail', 'user' => 'mail', 'pass' => 'mail', 'from' => 'mail'] as $k => $g) { /* SMTP 可后配 */ }
-            if (!empty($_POST['smtp_host'])) {
-                $src = preg_replace("/'host'\s*=>\s*''/", "'host'    => '" . addslashes($_POST['smtp_host']) . "'", $src, 1);
-                $src = preg_replace("/'user'\s*=>\s*''/", "'user'    => '" . addslashes($_POST['smtp_user'] ?? '') . "'", $src, 1);
-                $src = preg_replace("/'pass'\s*=>\s*''/", "'pass'    => '" . addslashes($_POST['smtp_pass'] ?? '') . "'", $src, 1);
-                $src = preg_replace("/'from'\s*=>\s*''/", "'from'    => '" . addslashes($_POST['smtp_from'] ?? ($_POST['smtp_user'] ?? '')) . "'", $src, 1);
-            }
+            // 邮件发送不再属于核心（v1.0.81 移除 SMTP 配置）：安装后由邮件插件提供
             file_put_contents($cfgFile, $src);
 
             $CFG = require $cfgFile;
@@ -678,10 +672,6 @@ function renderInstall(string $err): void
        . '<div class="ow-form-item"><label>管理员昵称</label><input class="ow-input" name="nickname" required placeholder="2-20 个字符"></div>'
        . '<div class="ow-form-item"><label>管理员邮箱</label><input class="ow-input" type="email" name="email" required></div>'
        . '<div class="ow-form-item"><label>管理员密码</label><input class="ow-input" type="password" name="password" required></div>'
-       . '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#00558F;font-size:13px">SMTP 邮件配置（可选，稍后可在 config.php 修改）</summary>'
-       . '<div class="ow-form-item"><label>SMTP 主机</label><input class="ow-input" name="smtp_host" placeholder="smtp.qq.com"></div>'
-       . '<div class="ow-form-item"><label>SMTP 账号</label><input class="ow-input" name="smtp_user"></div>'
-       . '<div class="ow-form-item"><label>SMTP 密码/授权码</label><input class="ow-input" type="password" name="smtp_pass"></div></details>'
        . '<button type="submit" class="ow-btn ow-btn-primary ow-btn-block">开始安装</button>'
        . '<div id="owInstallMsg" class="ow-form-msg"></div></form></div>'
        . '<script>document.getElementById("owInstallForm").onsubmit=function(e){e.preventDefault();'

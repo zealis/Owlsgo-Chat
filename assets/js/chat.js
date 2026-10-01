@@ -1914,7 +1914,9 @@
                            + '<a href="javascript:;" onclick="OwAdmin.roomReview(' + d.id + ',\'toggle_status\')">' + (d.status == 1 ? '封禁' : '解封') + '</a> '
                            + '<a href="javascript:;" onclick="OwAdmin.roomDel(' + d.id + ')">删除</a></td></tr>';
                     }
-                    main.innerHTML = h + '</table></div>';
+                    main.innerHTML = h + '</table></div>'
+                        + '<div class="ow-card"><h3 style="margin:0 0 10px;font-size:14px">审核回收站</h3><div id="owRoomTrash">读取中…</div></div>';
+                    OwAdmin.roomTrash();
                 });
             },
             logs: function (main) {
@@ -1985,6 +1987,37 @@
 
         /* ---------- 房间动作 ---------- */
         /** 群聊审核动作：重置名称 / 恢复默认头像 / 封禁解封 */
+        /** 审核回收站：列出最近处置，可撤销 */
+        roomTrash: function () {
+            OwApi.post('admin_room_trash_list', {}, function (r) {
+                var el = document.getElementById('owRoomTrash');
+                if (!el) return;
+                var ACT = { reset_name: '重置名称', reset_avatar: '重置头像', toggle_status: '封禁/解封', delete: '删除' };
+                if (!r.data.length) { el.innerHTML = '<span style="font-size:13px;color:#5C5C5C">暂无审核记录</span>'; return; }
+                var h = '<table class="ow-table"><tr><th>时间</th><th>群聊</th><th>操作</th><th>操作前</th><th>状态</th><th></th></tr>';
+                for (var i = 0; i < r.data.length; i++) {
+                    var d = r.data[i];
+                    var before = d.before_data && d.before_data.row ? '（整条群聊记录）'
+                        : (d.before_data && typeof d.before_data === 'object' ? esc(Object.keys(d.before_data).map(function (k) { return k + '=' + d.before_data[k]; }).join('，')) : '-');
+                    h += '<tr><td>' + new Date(d.created_at * 1000).toLocaleString() + '</td>'
+                       + '<td>' + esc(d.room_name) + '（' + esc(fmtUid(d.room_id)) + '）</td>'
+                       + '<td>' + esc(ACT[d.action] || d.action) + '</td>'
+                       + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + before + '</td>'
+                       + '<td>' + (d.undone == 1 ? '<span style="color:#5C5C5C">已撤销</span>' : '-') + '</td>'
+                       + '<td>' + (d.undone == 1 ? '' : '<a href="javascript:;" onclick="OwAdmin.roomTrashUndo(' + d.id + ')">撤销</a>') + '</td></tr>';
+                }
+                el.innerHTML = h + '</table>'
+                    + '<p style="font-size:12px;color:#5C5C5C;margin:8px 0 0">撤销有顺序依赖：群聊被删除后，需先撤销「删除」才能恢复其之前的名称 / 头像 / 封禁状态。</p>';
+            });
+        },
+        roomTrashUndo: function (id) {
+            OwAdmin.confirm('确定撤销该审核操作？', function () {
+                OwApi.post('admin_room_trash_undo', { id: id }, function (r) {
+                    toast(r.msg);
+                    if (r.ok) OwAdmin.page('rooms');
+                });
+            });
+        },
         roomReview: function (id, act) {
             var tips = {
                 reset_name: '确定该群聊名称不合法？将重置为「未命名群聊」。',
@@ -2001,7 +2034,7 @@
             else run();
         },
         roomDel: function (id) {
-            OwAdmin.confirm('确定删除该群聊？消息将保留但不可访问。', function () {
+            OwAdmin.confirm('确定删除该群聊？删除后可在「审核回收站」撤销恢复。', function () {
                 OwApi.post('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
             });
         },
