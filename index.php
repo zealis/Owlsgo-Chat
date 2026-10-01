@@ -810,7 +810,6 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        // 右侧「+」下拉菜单（创建群聊等）
        . '<button class="ow-icon-btn" id="owToggleOnline" aria-label="在线成员">' . ow_icon('users') . '</button>'
        . '</header>'
-       . '<div class="ow-announce" id="owAnnounce" style="display:none"><div class="ow-announce-track" id="owAnnounceTrack"></div></div>'
        . '<div class="ow-messages" id="owMessages"><div class="ow-load-more" id="owLoadMore">加载更早消息…</div></div>'
        . '<div class="ow-inputbar">'
        . '<div class="ow-toolbar">'

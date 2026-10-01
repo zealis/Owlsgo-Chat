@@ -214,25 +214,7 @@ class Admin
                 Api::json(['ok' => true, 'msg' => '已删除（可在回收站撤销）']);
 
             // ---------- 公告 ----------
-            case 'admin_anns':
-                Api::json(['ok' => true, 'data' => DB::all('SELECT * FROM announcements ORDER BY priority DESC, id DESC LIMIT 100')]);
-
-            case 'admin_ann_add':
-                if ($p('content') === '') Api::json(['ok' => false, 'msg' => '内容不能为空']);
-                DB::insert('announcements', [
-                    'room_id' => (int)$p('room_id', '0'), 'content' => $p('content'),
-                    'type' => $p('type') === 'welcome' ? 'welcome' : 'announce',
-                    'priority' => (int)$p('priority', '0'), 'enabled' => 1, 'created_at' => time(),
-                ]);
-                Api::json(['ok' => true, 'msg' => '已发布']);
-
-            case 'admin_ann_del':
-                DB::run('DELETE FROM announcements WHERE id=?', [(int)$p('id')]);
-                Api::json(['ok' => true, 'msg' => '已删除']);
-
-            case 'admin_ann_toggle':
-                DB::run('UPDATE announcements SET enabled=? WHERE id=?', [(int)$p('enabled'), (int)$p('id')]);
-                Api::json(['ok' => true, 'msg' => '已更新']);
+            // ---------- 系统公告（v1.0.102）已剥离为 announcements 插件（群公告体系） ----------
 
             // ---------- 安全日志 ----------
             case 'admin_logs':

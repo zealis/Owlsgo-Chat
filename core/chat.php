@@ -299,7 +299,6 @@ class Chat
             'since' => $sinceId,
             'messages' => $new,
             'online' => self::onlineList($roomId),
-            'announcements' => self::announcements($roomId),
             'server_time' => time(),
         ];
     }
@@ -418,12 +417,6 @@ class Chat
     }
 
     // ---------- 公告 ----------
-    public static function announcements(int $roomId): array
-    {
-        $rows = DB::all(
-            'SELECT * FROM announcements WHERE enabled=1 AND (room_id=0 OR room_id=?) ORDER BY priority DESC, id DESC LIMIT 10',
-            [$roomId]
-        );
-        return array_map(fn($r) => ['id' => (int)$r['id'], 'content' => $r['content'], 'type' => $r['type']], $rows);
-    }
+    // （v1.0.102）系统公告已剥离为 announcements 插件（群公告体系，见 plugins/announcements/），
+    // 核心不再下发 announcements 字段；插件经 onRoomSwitch 钩子按群自行拉取。
 }

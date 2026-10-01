@@ -414,6 +414,7 @@
                 });
             };
             load('');
+            this._fireRoomSwitch();   // 首次进入也通知插件（公告等按群拉取）
         },
 
         bindEvents: function () {
@@ -711,6 +712,23 @@
             CUR_OWNER = 0;
         },
 
+        /* ---------- 前端扩展钩子（v1.0.102，供插件注册） ---------- */
+        _roomSwitchHooks: [],
+        _roomEditHooks: [],
+        /** 注册「切换群聊」回调：fn({ roomId, ownerId, isAdmin })，切群时触发；注册时立即补发当前状态（插件脚本晚于 init 加载） */
+        onRoomSwitch: function (fn) {
+            if (typeof fn !== 'function') return;
+            this._roomSwitchHooks.push(fn);
+            try { fn({ roomId: this.room, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin' }); } catch (e) {}
+        },
+        /** 注册「群聊设置弹窗打开」回调：fn({ roomId, ownerId, isAdmin })，可往 #owREExtras 追加入口 */
+        onRoomEdit: function (fn) { if (typeof fn === 'function') this._roomEditHooks.push(fn); },
+        _fireRoomSwitch: function () {
+            for (var i = 0; i < this._roomSwitchHooks.length; i++) {
+                try { this._roomSwitchHooks[i]({ roomId: this.room, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin' }); } catch (e) {}
+            }
+        },
+
         switchRoom: function (id, name, el, fromPop) {
             this.room = id; this.roomName = name; this.since = 0; this.historyDone = false;
             this.syncRoomOwner();
@@ -742,6 +760,7 @@
                 });
             };
             load();
+            this._fireRoomSwitch();   // 插件钩子：切换群聊（公告等按群拉取）
         },
 
         /* ---------- 长轮询（主通道）+ 断线降级短轮询 ---------- */
@@ -780,7 +799,6 @@
                         if (self.sound) beep();
                     }
                     self.renderOnline(r.online);
-                    self.renderAnnounce(r.announcements);
                     setTimeout(loop, 100);
                 });
             }
@@ -1213,26 +1231,7 @@
         },
 
         /* ---------- 公告轮播 ---------- */
-        renderAnnounce: function (list) {
-            var box = $('owAnnounce'), track = $('owAnnounceTrack');
-            if (!list || !list.length) { box.style.display = 'none'; return; }
-            box.style.display = 'block';
-            var html = '', i;
-            for (i = 0; i < list.length; i++) {
-                html += '<div class="ow-announce-item">' + (list[i].type === 'welcome' ? '[欢迎] ' : '[公告] ') + esc(list[i].content) + '</div>';
-            }
-            if (track._html === html) return;
-            track._html = html;
-            track.innerHTML = html;
-            clearInterval(track._tm);
-            var idx = 0;
-            if (list.length > 1) {
-                track._tm = setInterval(function () {
-                    idx = (idx + 1) % list.length;
-                    track.style.transform = 'translateY(-' + idx * 18 + 'px)';
-                }, 4000);
-            }
-        },
+        renderAnnounce: null,   // v1.0.102 公告已剥离为 announcements 插件（见 plugins/announcements/）
 
         /* ---------- 表情面板 ---------- */
         buildEmojiPanel: function () {
@@ -1571,6 +1570,7 @@
                 + '</div>'
                 + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(name) + '" maxlength="30"></div>'
                 + '<div class="ow-form-item"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(desc) + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
+                + '<div class="ow-form-row" id="owREExtras"></div>'
                 + '<div class="ow-modal-actions">'
                 + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
                 + '<button class="ow-btn ow-btn-primary" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button></div>'
@@ -1580,6 +1580,11 @@
                 self.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，本弹窗保持完好
                 this.value = '';
             };
+            // 插件扩展钩子（v1.0.102）：群公告等入口往 #owREExtras 追加
+            var ctx = { roomId: id, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin', isOwner: CUR_OWNER === (this.cfg.me ? this.cfg.me.id : -1) };
+            for (var hi = 0; hi < this._roomEditHooks.length; hi++) {
+                try { this._roomEditHooks[hi](ctx); } catch (e) {}
+            }
         },
 
         /** 触发群头像文件选择 */
@@ -1959,26 +1964,7 @@
                     main.innerHTML = h + '</table></div>';
                 });
             },
-            anns: function (main) {
-                OwApi.post('admin_anns', {}, function (r) {
-                    var h = '<h2>系统公告</h2><p class="ow-admin-desc">创建公告与欢迎消息，可绑定群聊，支持优先级排序与轮播展示。</p>'
-                        + '<div class="ow-card"><div class="ow-form-row">'
-                        + '<div class="ow-form-item" style="flex:1;min-width:220px"><label>内容</label><input class="ow-input" id="owAnContent"></div>'
-                        + '<div class="ow-form-item"><label>房间ID（0=全部）</label><input class="ow-input" id="owAnRoom" value="0"></div>'
-                        + '<div class="ow-form-item"><label>类型</label><select class="ow-input" id="owAnType"><option value="announce">公告</option><option value="welcome">欢迎消息</option></select></div>'
-                        + '<div class="ow-form-item"><label>优先级</label><input class="ow-input" id="owAnPri" value="0"></div>'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.annAdd()">发布</button></div></div>'
-                        + '<div class="ow-card"><table class="ow-table"><tr><th>ID</th><th>内容</th><th>房间</th><th>类型</th><th>优先级</th><th>状态</th><th>操作</th></tr>';
-                    for (var i = 0; i < r.data.length; i++) {
-                        var d = r.data[i];
-                        h += '<tr><td>' + d.id + '</td><td>' + esc(d.content) + '</td><td>' + (d.room_id == 0 ? '全部' : d.room_id) + '</td><td>' + esc(d.type === 'welcome' ? '欢迎消息' : '公告') + '</td><td>' + d.priority + '</td>'
-                           + '<td>' + (d.enabled == 1 ? '展示中' : '已停用') + '</td>'
-                           + '<td><a href="javascript:;" onclick="OwAdmin.annToggle(' + d.id + ',' + (d.enabled == 1 ? 0 : 1) + ')">' + (d.enabled == 1 ? '停用' : '启用') + '</a> '
-                           + '<a href="javascript:;" onclick="OwAdmin.annDel(' + d.id + ')">删除</a></td></tr>';
-                    }
-                    main.innerHTML = h + '</table></div>';
-                });
-            },
+            /* 系统公告（v1.0.102）已剥离为 announcements 插件（群公告体系），见 plugins/announcements/ */
             plugins: function (main) {
                 OwApi.post('admin_plugins', {}, function (r) {
                     var h = '<h2>插件管理</h2><p class="ow-admin-desc">安装（上传 zip）、启用 / 停用、下载与卸载插件。插件存放于 plugins/ 目录。</p>'
@@ -2281,18 +2267,7 @@ logs: function (main) {
                 OwApi.secure('admin_word_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('words'); });
             });
         },
-        annAdd: function () {
-            OwApi.post('admin_ann_add', {
-                content: $('owAnContent').value, room_id: $('owAnRoom').value,
-                type: $('owAnType').value, priority: $('owAnPri').value
-            }, function (r) { toast(r.msg); if (r.ok) OwAdmin.page('anns'); });
-        },
-        annToggle: function (id, en) { OwApi.post('admin_ann_toggle', { id: id, enabled: en }, function (r) { toast(r.msg); OwAdmin.page('anns'); }); },
-        annDel: function (id) {
-            OwAdmin.confirm('确定删除该公告？', function () {
-                OwApi.secure('admin_ann_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('anns'); });
-            });
-        },
+        /* 系统公告管理（v1.0.102）已随公告剥离为 announcements 插件 */
         pluginToggle: function (name, en) {
             OwApi.post('admin_plugin_toggle', { name: name, enabled: en }, function (r) {
                 toast(r.msg);

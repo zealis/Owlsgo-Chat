@@ -305,19 +305,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-latency { font-size: 12px; color: var(--ow-green); }
 .ow-topbar .ow-icon-btn:last-child { margin-left: auto; }
 
-/* 公告轮播 */
-.ow-announce {
-    background: #fffbe6;
-    border-bottom: 1px solid #ffe58f;
-    padding: 6px 16px;
-    font-size: 12px;
-    color: var(--ow-yellow);
-    overflow: hidden;
-    height: 30px;
-    position: relative;
-}
-.ow-announce-track { transition: transform .4s; }
-.ow-announce-item { height: 18px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 公告轮播（v1.0.102）已剥离为 announcements 插件，样式见 plugins/announcements/assets/ */
 
 /* 消息列表 */
 .ow-messages {
