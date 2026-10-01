@@ -350,6 +350,17 @@
             this.buildEmojiPanel();
             this.bindEvents();
 
+            // 地址路由：初始 URL 规范化为 ?room=当前群聊（replace，不产生历史记录）
+            this.setRoomUrl(this.room, true);
+            // 前进/后退（或手动改 URL 回车）→ 切换到对应群聊
+            w.onpopstate = function () {
+                var rid = self.roomFromUrl();
+                if (!rid || rid === self.room) return;
+                for (var i = 0; i < cfg.rooms.length; i++) {
+                    if (cfg.rooms[i].id === rid) { self.switchRoom(rid, cfg.rooms[i].name, null, true); return; }
+                }
+            };
+
             // 初始加载历史：是否需密码由服务端判定（管理员/已授权会直接放行，不会弹窗）
             var first = null, i;
             for (i = 0; i < cfg.rooms.length; i++) if (cfg.rooms[i].id === this.room) first = cfg.rooms[i];
@@ -647,14 +658,40 @@
             }
         },
 
-        switchRoom: function (id, name, el) {
+        /**
+         * 地址路由：把当前群聊 id 写进 URL（?page=chat&room=ID）。
+         * 刷新、分享链接、前进/后退都停留在对应群聊；保留其他查询参数。
+         */
+        setRoomUrl: function (rid, replace) {
+            try {
+                if (!w.history || !w.history.pushState) return;
+                var search = (w.location.search || '').replace(/^\?/, '')
+                    .replace(/(^|&)room=[^&]*/g, '').replace(/^&+|&+$/g, '');
+                var q = search ? search + '&room=' + rid : 'room=' + rid;
+                var url = w.location.pathname + '?' + q;
+                if (replace) w.history.replaceState({ room: rid }, '', url);
+                else w.history.pushState({ room: rid }, '', url);
+            } catch (e) {}
+        },
+        /** 从当前 URL 解析 room id（无则 0） */
+        roomFromUrl: function () {
+            var mt = (w.location.search || '').match(/[?&]room=(\d+)/);
+            return mt ? parseInt(mt[1], 10) || 0 : 0;
+        },
+
+        switchRoom: function (id, name, el, fromPop) {
             this.room = id; this.roomName = name; this.since = 0; this.historyDone = false;
             $('owRoomName').innerHTML = esc(name);
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             var items = $('owRoomList').getElementsByTagName('li'), i;
-            for (i = 0; i < items.length; i++) items[i].className = items[i].className.replace(' active', '');
+            for (i = 0; i < items.length; i++) {
+                items[i].className = items[i].className.replace(' active', '');
+                // 未传 el（前进/后退、创建群聊跳转等）时按 data-room 自动定位高亮
+                if (!el && String(items[i].getAttribute('data-room')) === String(id)) el = items[i];
+            }
             if (el) el.className += ' active';
             $('owSidebar').className = $('owSidebar').className.replace(' open', '');
+            if (!fromPop) this.setRoomUrl(id, false);
             var self = this;
             var load = function () {
                 OwApi.post('history', { room_id: id, before: 0 }, function (r) {
@@ -880,12 +917,7 @@
                 var found = null, i, j;
                 for (i = 0; i < r.data.length; i++) if (r.data[i].id === gotoId) found = r.data[i];
                 if (found) {
-                    self.room = gotoId; self.roomName = found.name;
                     self.switchRoom(gotoId, found.name, null);
-                    var items = $('owRoomList').getElementsByTagName('li');
-                    for (j = 0; j < items.length; j++) {
-                        if (parseInt(items[j].getAttribute('data-room'), 10) === gotoId) items[j].className += ' active';
-                    }
                 } else if (gotoName) {
                     $('owRoomName').innerHTML = esc(gotoName);
                 }
@@ -1005,9 +1037,7 @@
                 items.push({ t: '@ ' + m.nickname, run: function () { self.mention(m.nickname); } });
                 if (!m.mine && this.cfg.actor.kind === 'user')
                     items.push({ t: '私信', run: function () { self.pm(m.nickname, m.uid, m.gid); } });
-                if (m.type === 'image' && this.cfg.actor.kind === 'user')
-                    items.push({ t: '收藏为贴纸', run: function () { self.collect(m.content); } });
-                // 撤回/删除等「对消息」的操作已移到内容菜单（showContentMenu）
+                // 收藏贴纸已移到内容菜单（showContentMenu）：它是对「图片」的操作，不是对「人」的操作
             }
             // 插件扩展（v1.0.54）：如禁言插件按「管理员 / 房主」身份追加菜单项；
             // IP 归属地已移出核心，插件可在此注册（服务端走 ip_loc + ip.location 钩子）
@@ -1394,6 +1424,8 @@
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
             if (!m.recalled) {
                 items.push({ t: '复制', run: function () { self.copyMsg(m); } });
+                if (m.type === 'image' && this.cfg.actor.kind === 'user')
+                    items.push({ t: '收藏为贴纸', run: function () { self.collect(m.content); } });
                 if (this.cfg.actor.kind !== 'none')
                     items.push({ t: '引用', run: function () { self.quoteMsg(m); } });
                 if (m.mine || admin)

@@ -743,7 +743,14 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
 {
     $rooms = Chat::rooms($actor);
     if (!$rooms) { header('Location: ?page=login'); exit; }
+    // 地址路由：?page=chat&room=ID 直达指定群聊；id 不存在或未传则回退第一个
     $first = $rooms[0];
+    $reqRoom = isset($_GET['room']) ? (int)$_GET['room'] : 0;
+    if ($reqRoom > 0) {
+        foreach ($rooms as $r) {
+            if ((int)$r['id'] === $reqRoom) { $first = $r; break; }
+        }
+    }
     $settings = [
         'guest_chat' => DB::setting('guest_chat', '1'),
         'sound' => DB::setting('sound_default', '1'),
