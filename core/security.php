@@ -8,6 +8,14 @@ class Sec
 
     public static function init(array $cfg): void { self::$cfg = $cfg; }
 
+    /**
+     * 访客 IP（v1.0.98 规范固化）：**仅读取服务器原始地址 REMOTE_ADDR**。
+     * REMOTE_ADDR 由 Web 服务器取自 TCP 连接对端，客户端无法伪造；
+     * X-Forwarded-For / X-Real-IP / CF-Connecting-IP 等请求头均可被客户端任意伪造，
+     * **本函数及任何 IP 相关逻辑（安全日志、禁言、限频、指纹）一律不得读取这些头**。
+     * 若未来部署在可信反向代理之后需要真实客户端 IP，必须同时满足：
+     * 仅在代理层覆盖 REMOTE_ADDR（fastcgi_param REMOTE_ADDR），PHP 代码仍然只读 REMOTE_ADDR。
+     */
     public static function ip(): string
     {
         return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
