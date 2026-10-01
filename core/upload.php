@@ -239,6 +239,14 @@ class Upload
     public static function addSticker(array $actor, string $url): array
     {
         if ($actor['kind'] === 'none') return [false, '请先登录'];
+        // v1.0.100：仅允许收藏本站上传的图片（uploads/ 下的随机文件名），
+        // 杜绝收藏任意外站 URL 引入追踪图片 / 不可控内容
+        $base = rtrim(ow_site_url(true), '/');
+        $rel = ltrim($url);
+        if ($base !== '' && stripos($rel, $base . '/') === 0) $rel = ltrim(substr($rel, strlen($base) + 1));
+        if (!preg_match('#^uploads/(avatar|sticker|image)/[A-Za-z0-9_\-]+\.(jpg|jpeg|png|gif|webp)$#i', $rel)) {
+            return [false, '仅支持收藏本站上传的图片'];
+        }
         $owner = $actor['kind'] . $actor['id'];
         if ((int)DB::val('SELECT COUNT(*) FROM stickers WHERE owner_key=?', [$owner]) >= 100) {
             return [false, '贴纸收藏已满（100 张）'];
