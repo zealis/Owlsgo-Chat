@@ -1286,10 +1286,11 @@
             if (!el) return;
             if (me) {
                 // 昵称与身份标签同行；整块可点击 → 弹出操作菜单（创建群聊/设置/管理后台/退出）
+                // 侧栏不展示「群主」（群主标签只在消息区 / 在线成员列表等群聊场景显示）
                 el.className = 'ow-me ow-me-click';
                 el.innerHTML = avatarHtml(me.avatar, me.nickname, false, me.role)
                     + '<div class="ow-me-info">'
-                    + '<div class="ow-me-line"><span class="ow-me-name">' + esc(me.nickname) + '</span>' + roleTag(me.role, me.title, me.id) + '</div>'
+                    + '<div class="ow-me-line"><span class="ow-me-name">' + esc(me.nickname) + '</span>' + roleTag(me.role, me.title) + '</div>'
                     + '<div style="font-size:11px;color:var(--ow-text-sub)">ID ' + esc(fmtUid(me.id || 0)) + ' · 积分 ' + esc(me.points || 0) + '</div></div>';
                 el.onclick = function (e) {
                     // 阻止冒泡：否则 document 级「点击菜单外关闭」会立刻把刚打开的菜单关掉
