@@ -1806,6 +1806,22 @@
         page: function (name) {
             var main = $('owAdminMain');
             var M = OwAdmin.pages[name];
+            // 移动端适配：主区内任何表格自动套横滚容器（含异步渲染与插件页）
+            if (!main._tableObserver) {
+                main._tableObserver = new MutationObserver(function () {
+                    var tables = main.querySelectorAll('table.ow-table');
+                    for (var i = 0; i < tables.length; i++) {
+                        var t = tables[i];
+                        if (t.parentNode.className !== 'ow-table-wrap') {
+                            var w = document.createElement('div');
+                            w.className = 'ow-table-wrap';
+                            t.parentNode.insertBefore(w, t);
+                            w.appendChild(t);
+                        }
+                    }
+                });
+                main._tableObserver.observe(main, { childList: true, subtree: true });
+            }
             if (name.indexOf('plugin:') === 0) {
                 OwApi.post('admin_plugin_page', { slug: name.substr(7) }, function (r) {
                     main.innerHTML = r.ok ? r.html : '<div class="ow-card">' + esc(r.msg) + '</div>';

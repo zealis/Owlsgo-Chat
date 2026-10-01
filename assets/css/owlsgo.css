@@ -726,7 +726,17 @@ button { font-family: inherit; cursor: pointer; }
     .ow-online-close { display: block; }
 }
 
+/* 后台表格：移动端横向滚动容器（防多列压碎错乱） */
+.ow-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ow-table td a { white-space: nowrap; }
+
 @media (max-width: 720px) {
+    /* 后台内容层：窄屏收窄留白 + 表格保证最小列宽后横向滚动 */
+    .ow-admin-main { padding: 12px; }
+    .ow-admin-main h2 { font-size: 18px; }
+    .ow-admin-main .ow-card { padding: 12px; }
+    .ow-table { min-width: 620px; }
+    .ow-table th, .ow-table td { padding: 7px 8px; }
     .ow-only-mobile { display: block; }
     .ow-sidebar {
         position: fixed;
