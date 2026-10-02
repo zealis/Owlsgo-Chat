@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "mapId": "owlsgo-chat",
-  "revision": 3,
+  "revision": 4,
   "language": "zh",
   "project": {
     "id": "owlsgo-chat",
@@ -635,10 +635,10 @@
     },
     {
       "id": "chat-list-widget",
-      "name": "通用聊天列表样式轮子（1.1.0 规划）",
+      "name": "通用聊天列表轮子",
       "kind": "local",
       "role": "frontend",
-      "responsibility": "拟新增：把现有房间列表抽成与业务无关的通用样式轮子（同一套 DOM 结构 / 样式 / 交互），供群聊与私聊共用；左侧栏标题由「群聊」改为「聊天」；列表统一按最后发言时间倒序排列。",
+      "responsibility": "把房间列表抽成与业务无关的通用轮子 ChatList（同一套 DOM 结构 / 样式 / 交互），供群聊与私聊共用；左侧栏标题为「聊天」；群聊与私聊统一按最后活跃时间倒序排列。v1.1.0 已落地：ChatList.render / ChatList.activate，样式命名空间 .ow-cl-*。",
       "ownership": [
         {
           "kind": "directory",
@@ -648,15 +648,18 @@
       "evidence": [
         {
           "path": "assets/js/chat.js",
-          "line": 1,
-          "note": "现有房间列表渲染入口（renderRooms）待抽象",
-          "quote": "renderRooms"
+          "line": 356,
+          "note": "ChatList 轮子：render 组装 DOM、activate 定位高亮，与业务无关",
+          "quote": "var ChatList = {"
+        },
+        {
+          "path": "assets/css/owlsgo.css",
+          "line": 271,
+          "note": ".ow-cl-* 样式，与 .ow-room-item 同一套视觉",
+          "quote": ".ow-cl-item"
         }
       ],
-      "status": "uncertain",
-      "openQuestions": [
-        "轮子放在核心 assets/ 还是独立插件（需与「插件化优先」约束对齐）"
-      ],
+      "status": "implemented",
       "layout": {
         "row": 6,
         "column": 0
@@ -664,10 +667,10 @@
     },
     {
       "id": "dm-session",
-      "name": "私聊会话编排（1.1.0 规划）",
+      "name": "私聊会话编排",
       "kind": "local",
       "role": "backend",
-      "responsibility": "拟新增：把既有 private 消息（messages.type=private + to_user_id，服务端已按双方过滤）提升为可在左侧栏切换的私聊会话——会话列表接口聚合群聊 + 私聊（按最后发言时间倒序）；群聊内头像菜单增加「私聊」入口；进入私聊页面复用群聊页面骨架（顶部群名位置显示对方昵称）；私聊仅本人与对方可见，其他成员既看不到会话也看不到消息。",
+      "responsibility": "把 private 消息提升为可在左侧栏切换的完整私聊会话：会话列表接口聚合群聊 + 私聊（按最后活跃时间倒序）；群聊内头像菜单与用户资料卡均可进入私聊；私聊页复用群聊骨架（顶部显示对方昵称 + 「私聊」徽标）；私聊仅双方可见，超管与后台亦不可越权。v1.1.0 已落地。",
       "ownership": [
         {
           "kind": "file",
@@ -676,30 +679,48 @@
         {
           "kind": "file",
           "path": "index.php"
+        },
+        {
+          "kind": "file",
+          "path": "assets/js/chat.js"
         }
       ],
       "evidence": [
         {
           "path": "core/chat.php",
-          "line": 155,
-          "note": "私聊消息已支持且仅双方可见",
-          "quote": "if ($type === 'private')"
+          "line": 305,
+          "note": "conversations / dmHistory / dmPoll / dmPeerKey：会话聚合与私聊读写",
+          "quote": "public static function conversations"
         },
         {
           "path": "core/chat.php",
           "line": 230,
-          "note": "可见性过滤：本人或对方",
-          "quote": "((int)$m['user_id'] === $actor['id'] || (int)$m['to_user_id'] === $actor['id'])"
+          "note": "visible() 私聊仅双方可见，已移除管理员越权例外",
+          "quote": "私聊仅双方可见"
+        },
+        {
+          "path": "index.php",
+          "line": 324,
+          "note": "conversations / dm_history / dm_poll 三个路由",
+          "quote": "case 'conversations':"
+        },
+        {
+          "path": "assets/js/chat.js",
+          "line": 806,
+          "note": "openDm：复用群聊骨架进入私聊页",
+          "quote": "openDm: function"
         }
       ],
-      "status": "uncertain",
-      "openQuestions": [
-        "私聊会话是否需要独立会话表（会话元数据 / 已读位点），或完全由 messages 聚合推导"
-      ],
+      "status": "implemented",
       "layout": {
         "row": 6,
         "column": 1
-      }
+      },
+      "notes": [
+        "私聊落在虚拟空间 room_id=0（不隶属任何群聊，故跳过群校验与群禁言）",
+        "对象标识统一 user:<id> / guest:<id>（昵称可重名，不能当身份用）",
+        "群聊与私聊长轮询用世代号（pollGen / dmGen）互斥，避免两个 in-flight 请求互相覆盖 since"
+      ]
     }
   ],
   "relationships": [
@@ -1473,6 +1494,28 @@
         }
       ],
       "verification": "评审新增能力是否落在 plugins/ 且核心仅调用 Plugin::on / Plugin::fire"
+    },
+    {
+      "id": "dm-identity",
+      "severity": "high",
+      "title": "私聊对象一律用数字 ID，昵称仅作展示",
+      "statement": "私聊双方标识统一为 user:<数字id> / guest:<数字id>；昵称允许重名，只作展示快照，禁止用昵称做身份标识或反查。dmPeerKey 负责解析并拒绝自我私聊与非法格式。",
+      "rationale": "昵称可重名且用户可改名，用它当身份会导致串号与越权读取。"
+    },
+    {
+      "id": "dm-privacy",
+      "severity": "high",
+      "title": "私聊仅双方可见，管理员亦不例外",
+      "statement": "messages 中 type=private 的消息，visible() 只放行发送方与接收方；超级管理员与后台管理同样不可越权查看或代读他人私聊。",
+      "rationale": "私聊属通讯隐私，「管理员可看」在合规审计中通常被判定为缺陷。"
+    },
+    {
+      "id": "dm-poll-exclusive",
+      "severity": "medium",
+      "title": "群聊与私聊长轮询必须互斥",
+      "statement": "两条长轮询共用同一消息区与输入栏，切换视图时须自增世代号（pollGen / dmGen）让旧循环自毁，禁止两个 in-flight 请求同时刷新 #owMessages 或互相覆盖 since。",
+      "rationale": "并发长轮询会导致消息重复渲染、since 回退、切换后消息串到别的会话。"
     }
-  ]
+  ],
+  "revisionNote": "v1.1.0 私聊会话落地：chat-list-widget 与 dm-session 由「规划」转为「已实施」；新增私聊虚拟空间 room_id=0、存量私信幂等迁移、跨身份私聊条件修正。"
 }
