@@ -363,11 +363,27 @@ class Chat
         if ($actor['kind'] === 'none') return self::sortConversations($out);
         $mineUser = $actor['kind'] === 'user' ? (int)$actor['id'] : 0;
         $mineGuest = $actor['kind'] === 'guest' ? (int)$actor['id'] : 0;
+
+        // ★ v1.1.0 修复两个缺陷：
+        //   ① 方向缺失：原条件只匹配发送方列（user_id / guest_id = 我），
+        //      「对方发给我」的私聊在接收方列表里完全不出现——这就是「接收不到别人私聊」的根因。
+        //   ② 越权泄漏：未使用的身份列存的是 0 而不是 NULL，
+        //      所以 `to_guest_id = 0`（游客身份时 mineGuest=0）会匹配到所有人的消息，
+        //      任何用户都能看到全站私聊会话。这里对未使用的身份列改用 `> 0` 严格大于判定，
+        //      只让真正属于自己身份的那一支参与匹配。
+        $conds = ['(user_id > 0 AND user_id = ?)', '(to_user_id > 0 AND to_user_id = ?)'];
+        $args = [$mineUser ?: 0, $mineUser ?: 0];
+        if ($mineGuest > 0) {
+            $conds[] = '(guest_id > 0 AND guest_id = ?)';
+            $args[] = $mineGuest;
+            $conds[] = '(to_guest_id > 0 AND to_guest_id = ?)';
+            $args[] = $mineGuest;
+        }
         $rows = DB::all(
             'SELECT * FROM messages WHERE type=\'private\' AND room_id=0
-             AND ((user_id IS NOT NULL AND user_id=?) OR (guest_id IS NOT NULL AND guest_id=?))
+             AND (' . implode(' OR ', $conds) . ')
              ORDER BY id DESC LIMIT 300',
-            [$mineUser ?: 0, $mineGuest ?: 0]
+            $args
         );
         $seen = [];
         foreach ($rows as $m) {

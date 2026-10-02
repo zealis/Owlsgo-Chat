@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "mapId": "owlsgo-chat",
-  "revision": 4,
+  "revision": 5,
   "language": "zh",
   "project": {
     "id": "owlsgo-chat",
@@ -87,7 +87,7 @@
       "name": "聊天室前端界面",
       "kind": "local",
       "role": "frontend",
-      "responsibility": "自研扁平化 UI（类名 ow 开头）：聊天主界面、房间列表、在线成员栏、消息气泡、Emoji/贴纸面板、管理后台界面、登录注册页。AJAX 交互、响应式布局，兼容 PC、移动端及落后内核浏览器（不依赖新 CSS/JS 特性）。Logo 使用 设计文档/index.svg。",
+      "responsibility": "自研扁平化 UI（类名 ow 开头）：聊天主界面、房间列表、在线成员栏、消息气泡、Emoji/贴纸面板、管理后台界面、登录注册页。AJAX 交互、响应式布局，兼容 PC、移动端及落后内核浏览器（不依赖新 CSS/JS 特性）。Logo 使用 设计文档/index.svg。 侧栏列表标题文案为「聊天」（与聚合内容一致）。",
       "ownership": [
         {
           "kind": "directory",
@@ -528,7 +528,7 @@
       "name": "群公告插件（announcements）",
       "kind": "local",
       "role": "backend",
-      "responsibility": "群公告体系（v1.0.102 自核心剥离）：每群公告（内容 / 类型 bar|popup / 置顶）、群主与超管发布、聊天室上方公告条、群公告页面、后台群聊公告管理（分页 + 多选批量 + 群聊ID筛选）。经 onRoomSwitch / onRoomEdit 前端钩子接入，核心只保留钩子。",
+      "responsibility": "群公告体系（v1.0.102 自核心剥离）：每群公告（内容 / 类型 bar|popup / 置顶）、群主与超管发布、聊天室上方公告条、群公告页面、后台群聊公告管理（分页 + 多选批量 + 群聊ID筛选）。经 onRoomSwitch / onRoomEdit 前端钩子接入，核心只保留钩子。 私聊视图下公告条必须消失：公告只对 room_id 生效，私聊为 room_id=0 的虚拟空间，语义上不存在群公告。",
       "ownership": [
         {
           "kind": "directory",
@@ -638,7 +638,7 @@
       "name": "通用聊天列表轮子",
       "kind": "local",
       "role": "frontend",
-      "responsibility": "把房间列表抽成与业务无关的通用轮子 ChatList（同一套 DOM 结构 / 样式 / 交互），供群聊与私聊共用；左侧栏标题为「聊天」；群聊与私聊统一按最后活跃时间倒序排列。v1.1.0 已落地：ChatList.render / ChatList.activate，样式命名空间 .ow-cl-*。",
+      "responsibility": "把房间列表抽成与业务无关的通用轮子 ChatList（同一套 DOM 结构 / 样式 / 交互），供群聊与私聊共用；左侧栏标题为「聊天」，徽标数字为「会话总数」（群聊数 + 私聊会话数）；群聊与私聊统一按最后活跃时间倒序排列；收到新消息时自动重排，无需用户刷新。v1.1.0 已落地 ChatList.render / activate 与 .ow-cl-* 样式。",
       "ownership": [
         {
           "kind": "directory",
@@ -659,18 +659,21 @@
           "quote": ".ow-cl-item"
         }
       ],
-      "status": "implemented",
+      "status": "supported",
       "layout": {
         "row": 6,
         "column": 0
-      }
+      },
+      "openQuestions": [
+        "会话总数徽标：conversations 接口新增 total 字段，还是前端直接取列表 length？（两者等价，前端取 length 无需改接口，但接口加 total 更明确语义）"
+      ]
     },
     {
       "id": "dm-session",
       "name": "私聊会话编排",
       "kind": "local",
       "role": "backend",
-      "responsibility": "把 private 消息提升为可在左侧栏切换的完整私聊会话：会话列表接口聚合群聊 + 私聊（按最后活跃时间倒序）；群聊内头像菜单与用户资料卡均可进入私聊；私聊页复用群聊骨架（顶部显示对方昵称 + 「私聊」徽标）；私聊仅双方可见，超管与后台亦不可越权。v1.1.0 已落地。",
+      "responsibility": "把 private 消息提升为可在左侧栏切换的完整私聊会话：会话列表接口聚合群聊 + 私聊（按最后活跃倒序）；群聊内头像菜单与用户资料卡均可进入私聊；私聊页复用群聊骨架，顶部显示对方昵称；私聊仅双方可见，超管与后台亦不可越权。v1.1.0 已落地。待改三项：① conversations() 私聊聚合缺「对方发给我」方向，接收方列表为空；② openDm() 未清空群级装饰，公告条被带入私聊页；③ 标题去掉「私聊」徽标、消息行去掉「→ 昵称」标签。 URL 路由互斥：setDmUrl / setRoomUrl 各自清掉对方参数，URL 上 dm 与 room 只能存在一个（并存时刷新会因 dmFromUrl 优先而回错视图）。",
       "ownership": [
         {
           "kind": "file",
@@ -688,8 +691,8 @@
       "evidence": [
         {
           "path": "core/chat.php",
-          "line": 305,
-          "note": "conversations / dmHistory / dmPoll / dmPeerKey：会话聚合与私聊读写",
+          "line": 335,
+          "note": "conversations()：群聊 + 私聊聚合；私聊 WHERE 仅含发送方列，接收方查不到（缺陷 1）",
           "quote": "public static function conversations"
         },
         {
@@ -699,27 +702,31 @@
           "quote": "私聊仅双方可见"
         },
         {
+          "path": "core/chat.php",
+          "line": 478,
+          "note": "dmPairConds() 正确的双向条件构造，可作为聚合查询的参照",
+          "quote": "private static function dmPairConds"
+        },
+        {
           "path": "index.php",
-          "line": 324,
+          "line": 325,
           "note": "conversations / dm_history / dm_poll 三个路由",
           "quote": "case 'conversations':"
         },
         {
           "path": "assets/js/chat.js",
           "line": 806,
-          "note": "openDm：复用群聊骨架进入私聊页",
+          "note": "openDm()：复用群聊骨架进入私聊页；未触发 onRoomSwitch 故群装饰残留（缺陷 2），标题含徽标（缺陷 3）",
           "quote": "openDm: function"
         }
       ],
-      "status": "implemented",
+      "status": "supported",
       "layout": {
         "row": 6,
         "column": 1
       },
-      "notes": [
-        "私聊落在虚拟空间 room_id=0（不隶属任何群聊，故跳过群校验与群禁言）",
-        "对象标识统一 user:<id> / guest:<id>（昵称可重名，不能当身份用）",
-        "群聊与私聊长轮询用世代号（pollGen / dmGen）互斥，避免两个 in-flight 请求互相覆盖 since"
+      "openQuestions": [
+        "群级装饰清空改为新增「视图切换」钩子（onViewChange: room|dm），由各插件自行清理，核心不碰插件 DOM。"
       ]
     }
   ],
@@ -1497,25 +1504,199 @@
     },
     {
       "id": "dm-identity",
-      "severity": "high",
-      "title": "私聊对象一律用数字 ID，昵称仅作展示",
-      "statement": "私聊双方标识统一为 user:<数字id> / guest:<数字id>；昵称允许重名，只作展示快照，禁止用昵称做身份标识或反查。dmPeerKey 负责解析并拒绝自我私聊与非法格式。",
-      "rationale": "昵称可重名且用户可改名，用它当身份会导致串号与越权读取。"
+      "name": "私聊对象一律用数字 ID，昵称仅作展示",
+      "note": "私聊双方标识统一为 user:<数字id> / guest:<数字id>；昵称允许重名，只作展示快照，禁止用昵称做身份标识或反查。dmPeerKey 负责解析并拒绝自我私聊与非法格式。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "core/chat.php",
+          "note": "dmPeerKey 正则校验 + 拒绝自我私聊",
+          "quote": "/^(user|guest):(\\d{1,10})$/"
+        }
+      ],
+      "verification": "grep -n \"dmPeerKey\" core/chat.php；CLI 断言：非法 peer / 自我私聊均被拒"
     },
     {
       "id": "dm-privacy",
-      "severity": "high",
-      "title": "私聊仅双方可见，管理员亦不例外",
-      "statement": "messages 中 type=private 的消息，visible() 只放行发送方与接收方；超级管理员与后台管理同样不可越权查看或代读他人私聊。",
-      "rationale": "私聊属通讯隐私，「管理员可看」在合规审计中通常被判定为缺陷。"
+      "name": "私聊仅双方可见，管理员亦不例外",
+      "note": "messages 中 type=private 的消息，visible() 只放行发送方与接收方；超级管理员与后台管理同样不可越权查看或代读他人私聊。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "core/chat.php",
+          "note": "visible() 已移除管理员越权例外",
+          "quote": "私聊仅双方可见"
+        }
+      ],
+      "verification": "CLI 断言：第三方不可见、超管不可越权、双方互见"
     },
     {
       "id": "dm-poll-exclusive",
-      "severity": "medium",
-      "title": "群聊与私聊长轮询必须互斥",
-      "statement": "两条长轮询共用同一消息区与输入栏，切换视图时须自增世代号（pollGen / dmGen）让旧循环自毁，禁止两个 in-flight 请求同时刷新 #owMessages 或互相覆盖 since。",
-      "rationale": "并发长轮询会导致消息重复渲染、since 回退、切换后消息串到别的会话。"
+      "name": "群聊与私聊长轮询必须互斥",
+      "note": "两条长轮询共用同一消息区与输入栏，切换视图时须自增世代号（pollGen / dmGen）让旧循环自毁，禁止两个 in-flight 请求同时刷新 #owMessages 或互相覆盖 since。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "assets/js/chat.js",
+          "note": "pollGen / dmGen 世代号互斥",
+          "quote": "this.dmGen = (this.dmGen || 0) + 1"
+        }
+      ],
+      "verification": "Playwright 断言：私聊时 roomPollRunning=false，切回群聊后为 true"
+    },
+    {
+      "id": "dm-inbox-both-directions",
+      "name": "会话列表必须收发双向，缺一即「收不到私聊」",
+      "note": "conversations() 聚合私聊时，WHERE 条件必须同时覆盖「我发出的」（user_id / guest_id = 我）与「对方发给我的」（to_user_id / to_guest_id = 我）两个方向。只写发送方列时，发送方能看见会话而接收方列表为空——这是「用户接收不到别人的私聊」的唯一根因，改动此查询时必须双向验证。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "core/chat.php",
+          "note": "v1.1.0 实测：user 1 发给 user 20 的私信，user 20 的 conversations 返回 0 条，而 dmHistory 能取到 2 条——证明缺口在聚合查询而非可见性判定",
+          "quote": "AND ((user_id IS NOT NULL AND user_id=?) OR (guest_id IS NOT NULL AND guest_id=?))"
+        },
+        {
+          "path": "core/chat.php",
+          "note": "正确参照：dmPairConds() 已按双向构造（我→对方 / 对方→我）",
+          "quote": "private static function dmPairConds"
+        }
+      ],
+      "verification": "CLI 探针：以接收方身份调 conversations()，断言能看到发送方私聊项（当前实测为 0，缺陷未修）"
+    },
+    {
+      "id": "dm-view-isolates-room-decor",
+      "name": "私聊视图不得残留任何群聊专属装饰",
+      "note": "私聊复用群聊骨架（同一消息区 / 输入栏 / 顶部标题），但群公告条、群设置入口、成员列表等按 room_id 取数的装饰只属于群聊视图。openDm() 不触发 onRoomSwitch，公告插件的 current.roomId 仍指向上一个群，公告条 #oaBar 因此被带进私聊页。进入私聊必须显式清空群级装饰，切回群聊再由 onRoomSwitch 复原。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "assets/js/chat.js",
+          "note": "openDm() 切换视图时不触发 onRoomSwitch，插件侧 roomId 未更新",
+          "quote": "openDm: function"
+        },
+        {
+          "path": "plugins/announcements/chat.js",
+          "note": "公告条只在 onRoomSwitch → load() 时重算，renderBar 在无公告时移除 #oaBar",
+          "quote": "w.OwChat.onRoomSwitch(function (ctx) {"
+        }
+      ],
+      "verification": "Playwright 断言：群聊（有公告）→ 私聊后 #oaBar 不存在；切回该群聊后 #oaBar 复原"
+    },
+    {
+      "id": "dm-title-plain-nickname",
+      "name": "私聊页标题只显示对方昵称，不加任何徽标",
+      "note": "私聊页顶部标题位置沿用群聊的 owRoomName，但内容只写对方昵称：不追加「私聊」徽标（.ow-dm-badge），消息行也不显示「→ 昵称」文字标签。会话类型已由左侧栏位置与 URL（?dm=）表达，标题重复标注属噪音。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "assets/js/chat.js",
+          "note": "openDm 与 dmPollLoop 共 4 处拼接 ow-dm-badge",
+          "quote": "'<span class=\"ow-dm-badge\">私聊</span>'"
+        },
+        {
+          "path": "assets/js/chat.js",
+          "note": "消息行「→ 昵称」当前仅在群聊视图渲染，私聊已抑制",
+          "quote": "m.type === 'private' && m.to_nickname && !this.dm"
+        }
+      ],
+      "verification": "grep -c \"ow-dm-badge\" assets/js/chat.js 期望 0；浏览器断言 owRoomName 文本 === 对方昵称"
+    },
+    {
+      "id": "chat-list-title-chat",
+      "name": "左侧栏列表标题为「聊天」，不得写死为「群聊」",
+      "note": "列表已升级为群聊 + 私聊聚合，标题文案必须与内容一致：index.php 侧栏标题由「群聊」改为「聊天」。地图里 chat-list-widget 的职责已写「聊天」而代码仍为「群聊」，属实现与设计漂移，须对齐。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "index.php",
+          "note": "侧栏标题当前仍为「群聊」，与聚合列表内容不符",
+          "quote": "'<div class=\"ow-side-title\">群聊 <span class=\"ow-badge-num\""
+        }
+      ],
+      "verification": "curl 首页 grep 'ow-side-title' 结果应含「聊天」不含「群聊 <span」（期望值：当前未改）"
+    },
+    {
+      "id": "chat-url-mutex",
+      "name": "URL 上 dm 与 room 互斥，切换视图必须清掉对方参数",
+      "note": "setDmUrl 只清 dm 不清 room、setRoomUrl 只清 room 不清 dm，导致从私聊切回群聊后 URL 变成 ?page=chat&dm=user:20&room=2；刷新时 dmFromUrl() 优先解析 → 强制跳回私聊（若该私聊对象已不可见，表现为「跳到第一个群聊」）。两个 setter 都必须先清理 dm= 与 room= 两个参数，再写入自己那一个。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "assets/js/chat.js",
+          "note": "setRoomUrl 的正则只删 room=，不清 dm=",
+          "quote": ".replace(/(^|&)room=[^&]*/g, '')"
+        },
+        {
+          "path": "assets/js/chat.js",
+          "note": "实测：私聊→群聊2 后 URL 为 ?page=chat&dm=user:20&room=2，刷新后被 dmFromUrl 抢先解析",
+          "quote": "var dpeer = self.dmFromUrl();"
+        }
+      ],
+      "verification": "Playwright 断言：私聊→群聊→刷新后 location.search 只含 room 不含 dm，且 OwChat.room 等于目标群"
+    },
+    {
+      "id": "chat-list-live-reorder",
+      "name": "会话列表按新消息自动前置，不依赖刷新",
+      "note": "任一会话收到新消息即把该会话排到列表最前（即按 last_at 重新倒序），用户无需手动刷新即可看到最新活跃的会话在顶部。群聊 poll 与私聊 dm_poll 收到新消息时都要触发列表重排；重排不得打断当前视图——不切房间、不重载消息区、不得丢失高亮。为避免频繁请求，服务端应支持轻量重排（仅返回列表摘要即可）。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [],
+      "relationships": [],
+      "evidence": [
+        {
+          "path": "assets/js/chat.js",
+          "note": "群聊 poll 收到新消息后只刷新消息区，未刷新会话列表",
+          "quote": "for (i = 0; i < r.messages.length; i++) {"
+        },
+        {
+          "path": "core/chat.php",
+          "note": "conversations() 服务端已按 last_at 倒序，前端重排只需重取该接口",
+          "quote": "public static function conversations"
+        }
+      ],
+      "verification": "Playwright 双客户端断言：A 群发消息后 B 客户端无需刷新，列表首项变为该群；且 B 当前所在会话的高亮与消息区不受影响"
     }
-  ],
-  "revisionNote": "v1.1.0 私聊会话落地：chat-list-widget 与 dm-session 由「规划」转为「已实施」；新增私聊虚拟空间 room_id=0、存量私信幂等迁移、跨身份私聊条件修正。"
+  ]
 }

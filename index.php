@@ -323,7 +323,9 @@ if ($action !== '') {
 
         // ---------- 私聊会话（v1.1.0） ----------
         case 'conversations':   // 会话列表：群聊 + 私聊聚合，按最后活跃时间倒序
-            Api::json(['ok' => true, 'data' => Chat::conversations($actor)]);
+            $list = Chat::conversations($actor);
+            // total = 会话总数（群聊数 + 私聊会话数），侧栏「聊天」徽标用
+            Api::json(['ok' => true, 'data' => $list, 'total' => count($list)]);
 
         case 'dm_history':      // 私聊历史（仅双方可见）
             $peer = Chat::dmPeerKey($actor, $p('peer'));
@@ -828,7 +830,9 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
     // 左侧栏
     echo '<aside class="ow-sidebar" id="owSidebar">'
        . '<div class="ow-brand"><img src="assets/img/logo.svg" alt="logo"><span>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</span></div>'
-       . '<div class="ow-side-title">群聊 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
+       // v1.1.0：列表已是「群聊 + 私聊」聚合，标题改为「聊天」；
+       // 徽标数字含义同步改为「会话总数」，由 conversations 接口返回的 total 在前端回填
+       . '<div class="ow-side-title">聊天 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
        // 登录用户的操作入口收进个人资料区菜单（点击 owMe 弹出）；游客仍直接给登录按钮

@@ -178,4 +178,13 @@
         for (var i = 0; i < rooms.length; i++) if (rooms[i].id === ctx.roomId) current.roomName = rooms[i].name;
         load();
     });
+
+    // 视图切换（v1.1.0）：私聊是 room_id=0 的虚拟空间，语义上不存在「群公告」。
+    // 群聊装饰只属于群聊视图 —— 进入私聊时移除公告条，切回群聊时由 onRoomSwitch 复原。
+    w.OwChat.onViewChange(function (ctx) {
+        if (ctx.view !== 'dm') return;      // 群聊视图：onRoomSwitch 已经负责刷新
+        current.roomId = 0;
+        current.list = [];
+        renderBar();                        // list 为空时 renderBar 会自行移除 #oaBar
+    });
 })(window, document);

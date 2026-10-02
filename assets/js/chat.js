@@ -431,6 +431,7 @@
 
             this.loadConversations();   // 会话列表（群聊+私聊聚合）——私聊路由要靠它取昵称
             this.renderConversations();
+            this.startConvPoll();       // v1.1.0：列表低频轮询，新消息会话自动前置（不打断当前聊天）
             this.renderMe();
             this.buildEmojiPanel();
             this.bindEvents();
@@ -439,17 +440,22 @@
             var dmFromUrl = this.dmFromUrl();
             // 前进/后退（或手动改 URL 回车）→ 切换到对应群聊 / 私聊
             w.onpopstate = function () {
-                var dpeer = self.dmFromUrl();
-                if (dpeer) {
-                    if (self.dm && self.dm.peer === dpeer) return;
-                    self.openDm(dpeer, self.dmNameOf(dpeer));
+                // ★ v1.1.0：dm 与 room 在 URL 上互斥（见 chat-url-mutex 约束）。
+                //   正常情况下只会命中其中一个；这里以 URL 实际内容为准，
+                //   若两个都在（历史遗留 / 外部链接），优先认群聊 room，避免莫名跳进私聊。
+                var rid = self.roomFromUrl();
+                if (rid) {
+                    if (self.dm || rid !== self.room) {
+                        for (var i = 0; i < cfg.rooms.length; i++) {
+                            if (cfg.rooms[i].id === rid) { self.switchRoom(rid, cfg.rooms[i].name, null, true); return; }
+                        }
+                    }
                     return;
                 }
-                var rid = self.roomFromUrl();
-                if (!rid || rid === self.room) return;
-                for (var i = 0; i < cfg.rooms.length; i++) {
-                    if (cfg.rooms[i].id === rid) { self.switchRoom(rid, cfg.rooms[i].name, null, true); return; }
-                }
+                var dpeer = self.dmFromUrl();
+                if (!dpeer) return;
+                if (self.dm && self.dm.peer === dpeer) return;
+                self.openDm(dpeer, self.dmNameOf(dpeer));
             };
 
             if (dmFromUrl) {
@@ -458,7 +464,8 @@
                 // 所以这里直接打开即可，无需轮询等待。
                 this.setDmUrl(dmFromUrl, true);
                 this.openDm(dmFromUrl, this.dmNameOf(dmFromUrl));
-                this._fireRoomSwitch();
+                // ★ 不触发 _fireRoomSwitch：私聊下 this.room=0，插件按 room_id=0 取数据是错的；
+                //   群级装饰由 openDm 末尾的 _fireViewChange 通知插件清理。
                 return;   // 私聊入口不加载群聊历史、不启动群聊长轮询
             }
             this.setRoomUrl(this.room, true);
@@ -739,22 +746,45 @@
          * 拉取会话列表（群聊 + 私聊聚合，服务端已按最后活跃时间倒序），交给通用轮子渲染。
          * v1.1.0：取代旧的 renderRooms —— 群聊与私聊共用同一列表与同一交互。
          */
-        loadConversations: function () {
-            var self = this;
+        loadConversations: function () {            var self = this;
             OwApi.post('conversations', {}, function (r) {
                 if (!r.ok) return;
                 self.conversations = r.data;
+                // 侧栏「聊天」徽标 = 会话总数（群聊数 + 私聊会话数），服务端已回传 total
+                var badge = $('owRoomCount');
+                if (badge) badge.innerHTML = (r.total != null ? r.total : r.data.length);
                 // 私聊视图的标题用的是进入时的昵称；若当时列表未到（标题为占位「私聊」），
                 // 这里用刚取到的真实昵称补正，避免刷新后标题一直停在占位文案
                 if (self.dm && self.roomName === '私聊') {
                     var nm = self.dmNameOf(self.dm.peer);
                     if (nm && nm !== '私聊') {
                         self.roomName = nm;
-                        $('owRoomName').innerHTML = esc(nm) + '<span class="ow-dm-badge">私聊</span>';
+                        $('owRoomName').innerHTML = esc(nm);
                     }
                 }
                 self.renderConversations();
             });
+        },
+
+        /* ---------- 会话列表轻量轮询（v1.1.0） ----------
+           需求：任何会话来了新消息，该会话自动排到列表最前，用户不必手动刷新。
+           为什么不能靠消息长轮询带出来：群聊 poll 只监听「当前所在群」，
+           私聊 dm_poll 只监听「当前所在私聊」——停在群聊2 时收不到群聊1 的消息。
+           所以这里单独开一路低频轮询（10s），只重渲染左侧栏，
+           完全不碰消息区 / 输入栏 / 当前会话，因此不会打断正在进行的聊天。 */
+        _convTimer: null,
+        startConvPoll: function () {
+            var self = this;
+            if (this._convTimer) return;
+            var loop = function () {
+                if (!self.cfg) return;
+                self.loadConversations();   // 内部重渲染列表，幂等
+                self._convTimer = setTimeout(loop, 10000);
+            };
+            this._convTimer = setTimeout(loop, 10000);
+        },
+        stopConvPoll: function () {
+            if (this._convTimer) { clearTimeout(this._convTimer); this._convTimer = null; }
         },
 
         /** 会话列表渲染 + 行点击分发（群聊走密码房流程，私聊进私聊页） */
@@ -818,7 +848,7 @@
             if (this.dm && this.dm.peer === peer) {
                 if (name && name !== this.roomName && name !== '私聊') {
                     this.roomName = name;
-                    $('owRoomName').innerHTML = esc(name) + '<span class="ow-dm-badge">私聊</span>';
+                    $('owRoomName').innerHTML = esc(name);
                 }
                 return;
             }
@@ -834,7 +864,7 @@
             this.syncRoomOwner();
             this.renderMe();
             this.clearQuote();
-            $('owRoomName').innerHTML = esc(this.roomName) + '<span class="ow-dm-badge">私聊</span>';
+            $('owRoomName').innerHTML = esc(this.roomName);
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             ChatList.activate('owRoomList', 'dm:' + peer);
             $('owSidebar').className = $('owSidebar').className.replace(' open', '');
@@ -849,7 +879,7 @@
                 // 靠这里把标题从占位「私聊」换成真实昵称
                 if (r.peer && r.peer.name && r.peer.name !== self.roomName) {
                     self.roomName = r.peer.name;
-                    $('owRoomName').innerHTML = esc(r.peer.name) + '<span class="ow-dm-badge">私聊</span>';
+                    $('owRoomName').innerHTML = esc(r.peer.name);
                 }
                 for (var i = 0; i < r.data.length; i++) self.addMessage(r.data[i], true);
                 if (r.data.length) self.since = r.data[r.data.length - 1].id;
@@ -863,6 +893,8 @@
                 }
             });
             this.dmPollLoop();
+            // v1.1.0：进入私聊视图 → 通知插件清理群级装饰（公告条等）
+            this._fireViewChange();
         },
 
         /**
@@ -927,7 +959,12 @@
         setRoomUrl: function (rid, replace) {
             try {
                 if (!w.history || !w.history.pushState) return;
+                // ★ v1.1.0 修复：dm 与 room 必须互斥。
+                //   原先只删 room=，从私聊切回群聊会留下 ?page=chat&dm=user:20&room=2，
+                //   刷新时 dmFromUrl() 优先解析 → 错误跳回私聊（表现为「跳到第一个群聊」）。
+                //   这里同时清掉 dm= 与 room=，再写入 room=。
                 var search = (w.location.search || '').replace(/^\?/, '')
+                    .replace(/(^|&)dm=[^&]*/g, '')
                     .replace(/(^|&)room=[^&]*/g, '').replace(/^&+|&+$/g, '');
                 var q = search ? search + '&room=' + rid : 'room=' + rid;
                 var url = w.location.pathname + '?' + q;
@@ -961,6 +998,7 @@
         /* ---------- 前端扩展钩子（v1.0.102，供插件注册） ---------- */
         _roomSwitchHooks: [],
         _roomEditHooks: [],
+        _viewChangeHooks: [],
         /** 注册「切换群聊」回调：fn({ roomId, ownerId, isAdmin })，切群时触发；注册时立即补发当前状态（插件脚本晚于 init 加载） */
         onRoomSwitch: function (fn) {
             if (typeof fn !== 'function') return;
@@ -973,6 +1011,32 @@
             for (var i = 0; i < this._roomSwitchHooks.length; i++) {
                 try { this._roomSwitchHooks[i]({ roomId: this.room, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin' }); } catch (e) {}
             }
+        },
+
+        /* ---------- 「视图切换」钩子（v1.1.0） ----------
+           群聊与私聊共用同一套消息区/输入栏/顶部标题，但群级装饰（公告条、群设置入口等）
+           只在群聊视图成立。核心不直接操作插件 DOM——由插件自己注册本钩子，
+           在 view='dm' 时清理自己的群级装饰，view='room' 时按 roomId 复原。
+           ctx: { view: 'room'|'dm', roomId, peer, ownerId, isAdmin }
+           注册时立即补发当前视图（插件脚本晚于 init 加载）。 */
+        onViewChange: function (fn) {
+            if (typeof fn !== 'function') return;
+            this._viewChangeHooks.push(fn);
+            this._fireViewChangeTo(fn);
+        },
+        _fireViewChangeTo: function (fn) {
+            try {
+                fn({
+                    view: this.dm ? 'dm' : 'room',
+                    roomId: this.dm ? 0 : this.room,
+                    peer: this.dm ? this.dm.peer : '',
+                    ownerId: CUR_OWNER,
+                    isAdmin: this.cfg && this.cfg.actor ? this.cfg.actor.role === 'admin' : false
+                });
+            } catch (e) {}
+        },
+        _fireViewChange: function () {
+            for (var i = 0; i < this._viewChangeHooks.length; i++) this._fireViewChangeTo(this._viewChangeHooks[i]);
         },
 
         switchRoom: function (id, name, el, fromPop) {
@@ -1014,6 +1078,7 @@
             };
             load();
             this._fireRoomSwitch();   // 插件钩子：切换群聊（公告等按群拉取）
+            this._fireViewChange();   // v1.1.0：回到群聊视图 → 插件按 roomId 复原群级装饰
         },
 
         /* ---------- 长轮询（主通道）+ 断线降级短轮询 ----------
@@ -1058,6 +1123,8 @@
                     if (hasNew) {
                         self.scrollBottom();
                         if (self.sound) beep();
+                        // v1.1.0：当前群有消息时立刻前置该会话（其余会话由 startConvPoll 兜底）
+                        self.loadConversations();
                     }
                     self.renderOnline(r.online);
                     setTimeout(loop, 100);
