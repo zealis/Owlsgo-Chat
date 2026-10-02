@@ -55,7 +55,7 @@ button { font-family: inherit; cursor: pointer; }
     transition: background .15s;
 }
 .ow-btn-primary { background: var(--ow-primary-strong); color: #fff; }
-.ow-btn-primary:hover { background: var(--ow-primary-dark); }
+.ow-btn-primary:hover { background: var(--ow-primary-dark); color: #fff; }   /* 显式锁白，防 a:hover 级联吞字 */
 .ow-btn-primary:active { background: #005a9e; }
 .ow-btn-ghost { background: transparent; border-color: var(--ow-border-control); }
 .ow-btn-ghost:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }

@@ -809,7 +809,7 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
        // 登录用户的操作入口收进个人资料区菜单（点击 owMe 弹出）；游客仍直接给登录按钮
-       . ($user ? '' : '<div class="ow-side-actions"><a class="ow-btn ow-btn-primary" href="?page=login">登录 / 注册</a></div>')
+       . ($user ? '' : '<div class="ow-side-actions"><a class="ow-btn ow-btn-ghost" href="?page=register">注册</a><a class="ow-btn ow-btn-primary" href="?page=login">登录</a></div>')
        . '</aside>';
 
     // 主聊天区
