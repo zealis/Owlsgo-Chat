@@ -10,6 +10,17 @@ declare(strict_types=1);
 // 避免 CSS/JS 缓存参数 ?v= 永远停在旧版本）；文件缺失时兜底 1.0.33
 define('OWLSGO_VERSION', trim((string)@file_get_contents(__DIR__ . '/VERSION')) ?: '1.0.33');
 
+// ⚠️ DevTools 探测请求短路（v1.0.115）：Chrome 打开开发者工具时会自动请求
+// /.well-known/appspecific/com.chrome.devtools.json，该请求经 try_files 落入本入口，
+// 曾在指纹守卫中被销毁会话 → 登录态丢失（「开 DevTools 就退出登录」）。
+// 它是工具自身的探测请求，与本应用无关，直接 404 且不初始化任何会话。
+if (strpos($_SERVER['REQUEST_URI'] ?? '', '/.well-known/') === 0) {
+    http_response_code(404);
+    header('Content-Type: application/json; charset=utf-8');
+    echo '{"error":"not found"}';
+    exit;
+}
+
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
 

@@ -195,11 +195,20 @@ class Sec
     {
         // 脱敏：不记录密码、验证码
         unset($data['password'], $data['pass'], $data['code'], $data['captcha']);
-        DB::insert('security_logs', [
-            'action' => $action, 'actor' => $actor, 'ip' => self::ip(),
-            'data' => json_encode($data, JSON_UNESCAPED_UNICODE),
-            'created_at' => time(),
-        ]);
+        try {
+            DB::insert('security_logs', [
+                'action' => $action, 'actor' => $actor, 'ip' => self::ip(),
+                'data' => json_encode($data, JSON_UNESCAPED_UNICODE),
+                'created_at' => time(),
+            ]);
+        } catch (Throwable $e) {
+            // 兜底（v1.0.115）：DB 忙/锁超时导致安全日志写入失败时落文件，保证审计不丢
+            @file_put_contents(
+                dirname(__DIR__) . '/data/security_log_fallback.log',
+                date('m-d H:i:s') . ' ' . $action . ' ' . $actor . ' ' . json_encode($data, JSON_UNESCAPED_UNICODE) . "\n",
+                FILE_APPEND | LOCK_EX
+            );
+        }
     }
 
     /** 简单 CSRF 防护已并入签名校验；会话 Cookie 参数统一在此设置 */
@@ -251,7 +260,12 @@ class Sec
                 }
                 public function destroy($id): bool
                 {
-                    @file_put_contents($this->trace, $this->tag() . " !!DESTROY\n", FILE_APPEND | LOCK_EX);
+                    // v1.0.115：DESTROY 记录调用栈——精确定位「谁销毁了会话」
+                    $bt = '';
+                    foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 6) as $f) {
+                        $bt .= (basename((string)($f['file'] ?? '?')) . ':' . ($f['line'] ?? 0) . ' ' . ($f['function'] ?? '') . ' <- ');
+                    }
+                    @file_put_contents($this->trace, $this->tag() . " !!DESTROY by " . $bt . "\n", FILE_APPEND | LOCK_EX);
                     $f = $this->path . '/sess_' . $id;
                     return is_file($f) ? @unlink($f) : true;
                 }
