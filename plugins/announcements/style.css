@@ -10,13 +10,14 @@
        硬撑到 56px 会白吃聊天区高度的 6%，且公告条只是提示性信息、不该抢主内容的空间。
        现在高度完全由内容决定：单行 ≈ 34px，两行（长公告触发 -webkit-line-clamp:2）≈ 52px。 */
     padding: 6px 14px;
-    /* 与群聊界面同款底色（v1.0.121）：自下而上由 #e6e9f0 过渡到 #eef1f5 */
-    background-color: #eef1f5;
-    background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);
+    /* 与群聊界面同款底色（v1.0.121）：自下而上由 #e6e9f0 过渡到 #eef1f5。
+       v1.1.4 起改引用核心变量，保证与消息区、顶栏、两侧边栏完全同一底色 */
+    background-color: var(--ow-bg-chat, #eef1f5);
+    background-image: var(--ow-bg-chat-grad, linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%));
     border-bottom: 1px solid #d9e0e6;
     cursor: pointer;
 }
-.oa-bar:hover { background-image: linear-gradient(to top, #dfe4ec 0%, #e8ecf2 100%); }
+.oa-bar:hover { background-image: var(--ow-bg-chat-hover, linear-gradient(to top, #dfe4ec 0%, #e8ecf2 100%)); }
 .oa-bar-pin {
     flex-shrink: 0; -webkit-flex-shrink: 0;
     font-size: 11px;
