@@ -54,7 +54,8 @@ Plugin::adminPage('dm-compliance', '私聊合规查阅', function () {
        . '<div class="ow-form-item"><label>最多返回条数</label>'
        . '<input class="ow-input" id="owDmLimit" type="number" min="1" max="1000" value="200"></div>'
        . '</div>'
-       . '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.dmComplianceSearch()">查阅</button>'
+       // 两个按钮相邻但 inline-block 之间不留空隙会贴在一起，加 margin 隔开
+       . '<button class="ow-btn ow-btn-primary" style="margin-right:8px" onclick="OwAdmin.dmComplianceSearch()">查阅</button>'
        . '<button class="ow-btn ow-btn-ghost" onclick="OwAdmin.dmComplianceReset()">重置</button>'
        . '<p style="font-size:12px;color:#5C5C5C;margin:10px 0 0">'
        . '日期留空表示不限。该用户参与的所有私聊都会返回（含其与游客的对话），按时间正序排列。</p>'

@@ -392,7 +392,6 @@
                       + '<span class="ow-cl-sub">' + esc(c.last_text || '') + '</span>'
                       + '</span>'
                       + '<span class="ow-cl-time">' + ChatList.time(c.last_at) + '</span>'
-                      + (c.can_edit ? '<button class="ow-cl-more" type="button" title="群聊设置" onclick="OwChat.openRoomEdit(' + c.id + ');event.stopPropagation&&event.stopPropagation();return false;">&#8942;</button>' : '')
                       + '</li>';
             }
             box.innerHTML = html;
@@ -435,6 +434,7 @@
             this.renderMe();
             this.buildEmojiPanel();
             this.bindEvents();
+            this.renderRoomPanel();      // v1.1.1：初始化右侧栏群聊设置区
 
             // 地址路由：私聊 ?dm=user:12 优先（v1.1.0），否则规范化为 ?room=当前群聊（replace）
             var dmFromUrl = this.dmFromUrl();
@@ -580,7 +580,8 @@
             $('owToggleSide').onclick = function () {
                 setSide($('owSidebar').className.indexOf('open') < 0);
             };
-            // 成员面板：宽屏用 hidden 收起（常驻侧栏），窄屏用 open 浮层（默认收起）
+            // 群聊信息面板：宽屏用 hidden 收起（常驻侧栏），窄屏用 open 浮层（默认收起）
+            // v1.1.1：侧栏内容改为「上方群聊设置 + 下方所有成员」，开关时需重渲染设置区
             var isNarrow = function () { return (document.documentElement.clientWidth || w.innerWidth || 1024) <= 960; };
             var setPanel = function (open) {
                 var o = $('owOnline');
@@ -593,8 +594,9 @@
                 var o = $('owOnline');
                 var open = isNarrow() ? (o.className.indexOf('open') >= 0) : (o.className.indexOf('hidden') < 0);
                 setPanel(!open);
+                if (!open) self.renderRoomPanel();   // 打开时刷新设置区（切群后内容可能已过期）
             };
-            $('owToggleOnline').onclick = togglePanel;
+            $('owTogglePanel').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
             // 所有成员面板默认一律不展开（v1.0.101，v1.0.119 恢复：游客入口已移到顶栏）
             setPanel(false);
@@ -609,7 +611,7 @@
                 var o = $('owOnline'), s = $('owSidebar'), em = $('owEmojiPanel');
                 var t = e.target || e.srcElement, inside = false, n = t;
                 while (n) {
-                    if (n === o || n === $('owToggleOnline') || n === s || n === $('owToggleSide')
+                    if (n === o || n === $('owTogglePanel') || n === s || n === $('owToggleSide')
                         || n === em || n === $('owBtnEmoji')) { inside = true; break; }
                     n = n.parentNode;
                 }
@@ -928,6 +930,7 @@
                 }
             });
             this.dmPollLoop();
+            this.renderRoomPanel();   // v1.1.1：私聊视图下侧栏群设置区显示占位提示
             // v1.1.0：进入私聊视图 → 通知插件清理群级装饰（公告条等）
             this._fireViewChange();
         },
@@ -1040,7 +1043,13 @@
             this._roomSwitchHooks.push(fn);
             try { fn({ roomId: this.room, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin' }); } catch (e) {}
         },
-        /** 注册「群聊设置弹窗打开」回调：fn({ roomId, ownerId, isAdmin })，可往 #owREExtras 追加入口 */
+        /**
+         * 注册「群聊设置区渲染」回调：fn({ roomId, ownerId, isAdmin, isOwner })。
+         * v1.1.1：触发时机从「打开群聊设置弹窗」改为「右侧栏群聊设置区渲染」
+         * （init / 切群 / 进私聊 / 打开侧栏 / 保存群资料后都会触发），
+         * 可往 #owREExtras 追加入口。非群主渲染的是只读版，#owREExtras 依然存在，
+         * 但插件应按 ctx.isOwner || ctx.isAdmin 自行决定是否填充。
+         */
         onRoomEdit: function (fn) { if (typeof fn === 'function') this._roomEditHooks.push(fn); },
         _fireRoomSwitch: function () {
             for (var i = 0; i < this._roomSwitchHooks.length; i++) {
@@ -1077,6 +1086,14 @@
         switchRoom: function (id, name, el, fromPop) {
             // v1.1.0：离开私聊态 —— 作废私聊轮询世代号，随后 startPoll 会接管长轮询
             if (this.dm) { this.dmGen = (this.dmGen || 0) + 1; this.dm = null; }
+            // v1.1.1：群聊↔群聊切换同样要作废在途轮询。
+            // 原先只在「私聊→群聊」时重启，导致 A 群切 B 群时在途的那个长轮询
+            // （最长 20s）仍会醒来用 **A 群的 online 列表**刷一次侧栏，
+            // 表现为「切了群但成员列表还是上一个群的」延迟二十秒。
+            if (this._roomPollRunning) {
+                this._roomPollRunning = false;
+                this.pollGen = (this.pollGen || 0) + 1;   // 旧循环醒来即自杀
+            }
             this.room = id; this.roomName = name; this.since = 0; this.historyDone = false;
             this.syncRoomOwner();
             this.renderMe();   // 资料区身份标签随群聊变化（群主/会员归属当前群）
@@ -1113,6 +1130,7 @@
                 });
             };
             load();
+            this.renderRoomPanel();     // v1.1.1：右侧栏群聊设置区跟随切群刷新
             this._fireRoomSwitch();   // 插件钩子：切换群聊（公告等按群拉取）
             this._fireViewChange();   // v1.1.0：回到群聊视图 → 插件按 roomId 复原群级装饰
         },
@@ -1162,7 +1180,7 @@
                         // v1.1.0：当前群有消息时立刻前置该会话（其余会话由 startConvPoll 兜底）
                         self.loadConversations();
                     }
-                    self.renderOnline(r.online);
+                    self.renderOnline(r.online, r.online_status);
                     setTimeout(loop, 100);
                 });
             }
@@ -1640,18 +1658,93 @@
 
         pmHint: function (nick) { toast('游客用户无法查看资料卡'); },
 
-        /* ---------- 在线列表 ---------- */
-        renderOnline: function (list) {
-            $('owOnlineCount').innerHTML = list.length;
+        /* ---------- 成员列表 ---------- */
+        /**
+         * 渲染成员列表。
+         *
+         * v1.1.1：在线状态（绿点/灰点）**仅超级管理员与群主可见**，
+         * 口径由服务端 poll 返回的 online_status 决定，前端不自行判身份——
+         * 否则两处判定漂移，就会重演「服务端允许、前台没有按钮」的契约不一致。
+         * 成员名字对所有人可见（含游客）。
+         */
+        renderOnline: function (list, canStatus) {
+            var box = $('owOnlineList'), cnt = $('owOnlineCount');
+            if (cnt) cnt.innerHTML = list.length;
+            if (!box) return;
             var html = '', i;
             for (i = 0; i < list.length; i++) {
                 var o = list[i];
-                html += '<li class="ow-online-item"><span class="ow-online-dot"></span>'
+                html += '<li class="ow-online-item">'
+                      + (canStatus ? '<span class="ow-online-dot"></span>' : '')
                       + avatarHtml(o.avatar, o.nickname, true, o.role)
                       + '<span class="ow-online-name" onclick="OwChat.userCard(' + (o.uid || 0) + ',\'' + esc(o.nickname) + '\')">' + esc(o.nickname) + '</span>'
                       + roleTag(o.role, '', o.uid) + '</li>';
             }
-            $('owOnlineList').innerHTML = html;
+            box.innerHTML = html;
+        },
+
+        /* ---------- 右侧栏：群聊设置区 ---------- */
+        /**
+         * 渲染右侧栏上方的「群聊设置」。
+         *
+         * v1.1.1：原先群设置是列表项里的三点按钮 → 弹窗，现改为常驻侧栏区块。
+         * 群主 / 超级管理员（room.can_edit）看到可编辑表单 + 保存按钮；
+         * 普通会员与游客看到只读信息。插件入口（群公告等）通过 onRoomEdit
+         * 钩子往 #owREExtras 追加，钩子契约与原弹窗版保持一致。
+         */
+        renderRoomPanel: function () {
+            var box = $('owRoomPanel');
+            if (!box) return;
+            var me = this.cfg.me || {}, isAdmin = this.cfg.actor.role === 'admin';
+            var isDm = this.room === 0;                    // 私聊是 room_id=0 的虚拟空间
+            var r = null, list = this.cfg.rooms || [], i;
+            for (i = 0; i < list.length; i++) { if (list[i].id === this.room) { r = list[i]; break; } }
+
+            if (isDm || !r) {
+                box.innerHTML = '<div class="ow-panel-hint">' + (isDm ? '私聊会话没有群聊设置' : '请先选择一个群聊') + '</div>';
+                return;
+            }
+            var canEdit = !!r.can_edit;
+            var meId = me.id || 0;
+            var isOwner = !!meId && meId === (r.owner_id || 0);
+            var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '公开群');
+            // 待保存头像按群缓存：切群时必须重置，否则会把上一个群的头像带过来
+            if (this._roomAvatarRoom !== this.room) {
+                this._roomAvatarRoom = this.room;
+                this._roomAvatar = r.avatar || '';
+            }
+
+            box.innerHTML = '<div class="ow-panel-room-head">'
+                + '<span class="ow-set-avatar-btn" id="owRoomAvatarPreview"'
+                + (canEdit ? ' title="点击更换群头像" onclick="OwChat.roomAvatarPick()"' : '') + '>'
+                + avatarHtml(this._roomAvatar, r.name, false, 'member') + '</span>'
+                + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none">'
+                + '<div class="ow-panel-room-meta"><b>' + esc(r.name) + '</b>'
+                + '<span class="ow-panel-room-type">' + typeName + '</span></div></div>'
+                + (canEdit
+                    ? '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(r.name) + '" maxlength="30"></div>'
+                      + '<div class="ow-form-item"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(r.description || '') + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
+                      + '<div class="ow-form-row" id="owREExtras"></div>'
+                      + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button>'
+                    // 只读：非群主会员也能看到群名称 / 简介 / 群主，信息不设限，仅不可改
+                    : '<div class="ow-panel-ro">'
+                      + (r.description ? '<p class="ow-panel-ro-desc">' + esc(r.description) + '</p>' : '<p class="ow-panel-ro-desc ow-panel-empty">群主还没有写简介</p>')
+                      + '<div class="ow-form-row" id="owREExtras"></div>'
+                      + '<p class="ow-panel-ro-tip">群主：' + esc(fmtUid(r.owner_id))
+                      + (isAdmin || isOwner ? '' : '　·　仅群主与超级管理员可修改') + '</p></div>');
+
+            var f = $('owRoomAvatarFile');
+            if (f) f.onchange = function () {
+                if (!this.files || !this.files[0]) return;
+                var self2 = OwChat;
+                self2.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，侧栏保持完好
+                this.value = '';
+            };
+            // 插件扩展钩子（v1.0.102）：群公告等入口往 #owREExtras 追加
+            var ctx = { roomId: this.room, ownerId: r.owner_id || 0, isAdmin: isAdmin, isOwner: isOwner };
+            for (var hi = 0; hi < this._roomEditHooks.length; hi++) {
+                try { this._roomEditHooks[hi](ctx); } catch (e) {}
+            }
         },
 
         /* ---------- 公告轮播 ---------- */
@@ -1968,63 +2061,22 @@
         clearQuote: function () { this.quote = null; this.renderQuote(); },
 
         /**
-         * 群聊设置弹窗（列表 ⋮ 入口，管理员/房主）：头像 / 群名称 / 群简介。
-         * 头像复用用户头像上传 API（kind=avatar + 滑块裁剪），保存走 room_update。
+         * 触发群头像文件选择（右侧栏内的隐藏 input，v1.1.1）
          */
-        /**
-         * @param number id 群聊 ID
-         * @param object draft 可选：{name, desc, avatar} —— 头像裁剪回来时恢复输入与新头像
-         */
-        openRoomEdit: function (id, draft) {
-            var self = this;
-            draft = draft || {};
-            var r = null, list = this.cfg.rooms || [], i;
-            for (i = 0; i < list.length; i++) { if (list[i].id === id) { r = list[i]; break; } }
-            if (!r) return;
-            this._roomEditId = id;
-            this._roomAvatar = draft.avatar || r.avatar || '';
-            var name = draft.name !== undefined ? draft.name : r.name;
-            var desc = draft.desc !== undefined ? draft.desc : (r.description || '');
-            this.openModal(
-                '<h3>群聊设置</h3>'
-                + '<div class="ow-set-avatar">'
-                + '<span id="owRoomAvatarPreview" class="ow-set-avatar-btn" title="点击更换群头像" onclick="OwChat.roomAvatarPick()">'
-                + avatarHtml(this._roomAvatar, name, false, 'member') + '</span>'
-                + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none">'
-                + '</div>'
-                + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(name) + '" maxlength="30"></div>'
-                + '<div class="ow-form-item"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(desc) + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
-                + '<div class="ow-form-row" id="owREExtras"></div>'
-                + '<div class="ow-modal-actions">'
-                + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
-                + '<button class="ow-btn ow-btn-primary" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button></div>'
-            );
-            $('owRoomAvatarFile').onchange = function () {
-                if (!this.files || !this.files[0]) return;
-                self.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，本弹窗保持完好
-                this.value = '';
-            };
-            // 插件扩展钩子（v1.0.102）：群公告等入口往 #owREExtras 追加
-            var ctx = { roomId: id, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin', isOwner: CUR_OWNER === (this.cfg.me ? this.cfg.me.id : -1) };
-            for (var hi = 0; hi < this._roomEditHooks.length; hi++) {
-                try { this._roomEditHooks[hi](ctx); } catch (e) {}
-            }
-        },
-
-        /** 触发群头像文件选择 */
         roomAvatarPick: function () { var f = $('owRoomAvatarFile'); if (f) f.click(); },
 
-        /** 保存群聊设置 */
+        /** 保存群聊设置（右侧栏内联表单，v1.1.1 起不再走弹窗） */
         roomEditSave: function (id) {
             var self = this;
+            var nameEl = $('owRoomEditName'), descEl = $('owRoomEditDesc');
+            if (!nameEl || !descEl) { toast('请先打开群聊信息侧栏'); return; }
             OwApi.post('room_update', {
                 id: id,
-                name: $('owRoomEditName').value,
-                description: $('owRoomEditDesc').value,
+                name: nameEl.value,
+                description: descEl.value,
                 avatar: this._roomAvatar || ''
             }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
-                self.closeModal();
                 toast('群聊信息已更新');
                 self.reloadRooms();
             });
@@ -2039,6 +2091,10 @@
                 // v1.1.0：列表已改为「群聊+私聊」聚合，走 conversations 重新拉取，
                 // 直接 renderRooms 会把私聊行冲掉。
                 self.loadConversations();
+                // v1.1.1：群资料已变（名称/简介/头像），侧栏设置区同步刷新。
+                // _roomAvatar 不用动：保存后它与服务端值一致；renderRoomPanel
+                // 只在「换了群」时才重置它（见 _roomAvatarRoom 判断）。
+                self.renderRoomPanel();
             });
         },
 
@@ -2145,14 +2201,14 @@
             }
         },
 
-        /** 上传群聊头像：编辑弹窗内回显（保存时随 room_update 提交） */
+        /** 上传群聊头像：右侧栏内回显（保存时随 room_update 提交） */
         roomAvatarUpload: function (file, filename) {
             var self = this;
             self.uploadAvatarBlob(file, filename, function (url) {
                 self._roomAvatar = url;
                 var pv = $('owRoomAvatarPreview');
                 if (pv) {
-                    // 前台弹窗用头像组件，后台表单用图片预览（裁剪浮层独立，两者都完好）
+                    // 侧栏用头像组件，后台表单用图片预览（裁剪浮层独立，两者都完好）
                     if (pv.getAttribute('class').indexOf('ow-set-avatar-btn') >= 0)
                         pv.innerHTML = avatarHtml(url, '', false, 'member');
                     else

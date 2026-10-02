@@ -150,7 +150,10 @@
         };
     }
 
-    /** 群聊设置弹窗里的「群公告」入口（群主 / 超级管理员可见） */
+    /**
+     * 右侧栏「群聊设置」区里的「群公告」入口（群主 / 超级管理员可见）。
+     * v1.1.1：入口从列表三点弹窗迁到常驻侧栏，#owREExtras 的位置与钩子契约不变。
+     */
     w.OwChat.onRoomEdit(function (ctx) {
         current.roomId = ctx.roomId;
         current.isAdmin = !!ctx.isAdmin;
@@ -163,8 +166,7 @@
                 current.list = r.ok ? (r.data || []) : [];
                 var rooms = (w.OwChat.cfg.rooms || []);
                 for (var i = 0; i < rooms.length; i++) if (rooms[i].id === ctx.roomId) current.roomName = rooms[i].name;
-                w.OwChat.closeModal();
-                setTimeout(showPage, 60);
+                setTimeout(showPage, 60);   // 公告页仍是弹窗；侧栏本身不需要关
             });
         };
     });

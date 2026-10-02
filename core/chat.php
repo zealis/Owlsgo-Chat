@@ -19,9 +19,14 @@ class Chat
                 'avatar' => (string)($r['avatar'] ?? ''),
                 'mine' => (int)($r['owner_id'] ?? 0) === (int)($actor['id'] ?? 0) && $actor['kind'] === 'user',
             ];
-            // 前台可编辑（⋮ 菜单）：仅房主（超级管理员走后台审核，不在此列）
+            // 前台可编辑（群聊设置 ⋮ / 右侧栏入口）：群主 + 超级管理员。
+            // v1.1.0 修正：原先只判群主，导致「非群主的超管」进不去群聊设置，
+            // 连带群公告等插件入口（onRoomEdit 按 isOwner||isAdmin 渲染）也拿不到，
+            // 表现为「服务端允许删除但前台没有删除按钮」的契约不一致。
+            // 判定口径与插件服务端 $oaCanManage 对齐（admin 直接放行）。
             $out[count($out) - 1]['can_edit'] = $actor['kind'] === 'user'
-                && (int)($r['owner_id'] ?? 0) === (int)$actor['id'];
+                && ($actor['role'] === 'admin'
+                    || ((int)($r['owner_id'] ?? 0) === (int)$actor['id']));
         }
         return $out;
     }
@@ -301,8 +306,26 @@ class Chat
             'since' => $sinceId,
             'messages' => $new,
             'online' => self::onlineList($roomId),
+            // v1.1.1：成员在线状态仅超级管理员与群主可见（前端据此决定是否画在线点）。
+            // 名单本身对所有人可见，裁剪只发生在「在线/离线」这一层。
+            'online_status' => self::canSeeOnlineStatus($actor, $roomId),
             'server_time' => time(),
         ];
+    }
+
+    /**
+     * 成员在线状态的可见权限（v1.1.1）。
+     *
+     * 口径：超级管理员 + 群主可见；普通会员与游客一律不可见。
+     * 与公告插件的 $oaCanManage 同源（admin 直接放行 + owner_id 命中），
+     * 避免出现「前端藏起点、后端仍能查到」的口径分裂。
+     */
+    public static function canSeeOnlineStatus(array $actor, int $roomId): bool
+    {
+        if (($actor['role'] ?? '') === 'admin') return true;
+        if (($actor['kind'] ?? '') !== 'user') return false;
+        $owner = (int)(DB::val('SELECT owner_id FROM rooms WHERE id=?', [$roomId]) ?: 0);
+        return $owner !== 0 && $owner === (int)$actor['id'];
     }
 
     // ---------- 私聊会话（v1.1.0） ----------

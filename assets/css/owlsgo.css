@@ -329,14 +329,6 @@ button { font-family: inherit; cursor: pointer; }
     align-self: flex-start; -webkit-align-self: flex-start;
     margin-top: 2px;
 }
-.ow-cl-more {
-    margin-left: auto; -webkit-margin-left: auto;
-    flex-shrink: 0; -webkit-flex-shrink: 0;
-    width: 22px; height: 22px; line-height: 20px; padding: 0;
-    background: transparent; border: none; cursor: pointer;
-    font-size: 14px; color: var(--ow-text-sub); border-radius: 4px;
-}
-.ow-cl-more:hover { background: var(--ow-bg-sub); color: var(--ow-text); }
 .ow-cl-empty {
     padding: 16px 10px;
     text-align: center;
@@ -429,15 +421,14 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg-meta .ow-msg-nick:hover { color: var(--ow-primary-dark); }
 /* meta 行 flex：时间紧跟昵称之后（v1.1.0：不再推到远离头像的一端）。
    显隐由 JS 控制——悬停消息气泡满 2 秒才加 .ow-time-show，
-   CSS :hover 无法表达「持续满 N 秒」，一 hover 就出现会与快速扫读打架。
-   自己的消息整行镜像（row-reverse），但时间仍需跟在昵称**右侧**，
-   故把时间 order 提到最前：头像在右时，昵称与时间一起贴向昵称的延伸方向。 */
+   CSS :hover 无法表达「持续满 N 秒」，一 hover 就出现会与快速扫读打架。 */
 .ow-msg-meta { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 6px; flex-wrap: wrap; }
 .ow-msg-meta .ow-msg-time { display: none; font-size: 12px; color: var(--ow-text-sub); }
 .ow-msg.mine .ow-msg-meta { flex-direction: row-reverse; -webkit-flex-direction: row-reverse; }
 .ow-msg.ow-time-show .ow-msg-meta .ow-msg-time { display: inline; }
-/* row-reverse 下默认会把时间排到昵称前面，用 order 拉回昵称之后 */
-.ow-msg.mine .ow-msg-meta .ow-msg-time { order: -1; -webkit-order: -1; }
+/* 自己的消息（右侧）整行镜像：DOM 顺序 [标签, 昵称, 时间] 被row-reverse
+   渲染成「时间 ← 昵称 ← 标签」，即时间落在昵称**左边** —— 这是右侧消息的
+   原有观感，不要用 order 把它拉回右侧（那会让右侧与左侧的相对位置反而不一致）。 */
 .ow-msg-content {
     display: inline-block;
     padding: 8px 12px;
@@ -644,16 +635,36 @@ button { font-family: inherit; cursor: pointer; }
 .ow-sticker-item { width: 64px; height: 64px; margin: 4px; cursor: pointer; border-radius: 6px; border: 1px solid var(--ow-border); object-fit: cover; }
 .ow-sticker-item:hover { border-color: var(--ow-primary); }
 
-/* 右侧在线列表 */
+/* 右侧栏（v1.1.1）：上方群聊设置 + 下方所有成员 */
 .ow-online {
-    width: 220px;
+    width: 240px;
     border-left: 1px solid var(--ow-border);
     background: var(--ow-bg-sub);
     flex-shrink: 0; -webkit-flex-shrink: 0;
-    overflow-y: auto;
+    display: flex; display: -webkit-flex;
+    flex-direction: column; -webkit-flex-direction: column;
+    overflow: hidden;
 }
 /* 宽屏：常驻侧栏，点按钮可收起 */
 .ow-online.hidden { display: none; }
+/* 两个区块：设置区按内容高度（可长可短），成员区吃掉剩余空间并独立滚动 */
+.ow-panel-sec { display: flex; display: -webkit-flex; flex-direction: column; -webkit-flex-direction: column; min-height: 0; }
+.ow-panel-room { flex-shrink: 0; -webkit-flex-shrink: 0; max-height: 62%; overflow-y: auto; -webkit-overflow-scrolling: touch; border-bottom: 1px solid var(--ow-border); }
+.ow-panel-members { flex: 1; -webkit-flex: 1; overflow: hidden; }
+.ow-panel-room-body { padding: 0 16px 14px; }
+.ow-panel-room-head { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 10px; margin-bottom: 12px; }
+.ow-panel-room-meta { min-width: 0; }
+.ow-panel-room-meta b { display: block; font-size: 14px; color: var(--ow-text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ow-panel-room-type { font-size: 12px; color: var(--ow-text-sub); }
+.ow-panel-hint { padding: 4px 0 10px; font-size: 13px; color: var(--ow-text-sub); }
+.ow-panel-ro-desc { margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: var(--ow-text); word-break: break-word; }
+.ow-panel-ro-desc.ow-panel-empty { color: var(--ow-text-sub); }
+.ow-panel-ro-tip { margin: 8px 0 0; font-size: 12px; color: var(--ow-text-sub); }
+/* 侧栏里的表单间距收紧：240px 宽的输入框在侧栏里要留足呼吸 */
+.ow-panel-room .ow-form-item { margin-bottom: 10px; }
+/* 侧栏里的插件入口（#owREExtras）：整行块级按钮，不要弹窗里那套 flex-end 对齐 */
+.ow-panel-room .ow-form-row { display: block; }
+.ow-panel-room .ow-form-row > .ow-btn { display: block; width: 100%; margin: 0 0 10px; padding-top: 8px; padding-bottom: 8px; }
 /* 关闭按钮仅在窄屏浮层模式下出现 */
 .ow-online-close {
     display: none;
@@ -673,6 +684,8 @@ button { font-family: inherit; cursor: pointer; }
     gap: 8px;
     padding: 7px 14px;
 }
+/* 成员区独立滚动：ul 默认 margin/padding 会让滚动区上下留白、边框错位 */
+.ow-online-list { flex: 1; -webkit-flex: 1; margin: 0; padding: 0 0 10px; list-style: none; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .ow-online-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ow-green); flex-shrink: 0; -webkit-flex-shrink: 0; }
 .ow-online-name { flex: 1; -webkit-flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ow-online-name:hover { color: var(--ow-primary-dark); }
@@ -822,11 +835,11 @@ button { font-family: inherit; cursor: pointer; }
     .ow-mask.show { display: block; }
     .ow-online {
         position: fixed;
-        /* 顶部留出工具栏高度，避免浮层盖住「成员」按钮导致无法收起 */
-        right: -240px; top: 52px; bottom: 0;
+        /* 顶部留出工具栏高度，避免浮层盖住「群聊信息」按钮导致无法收起 */
+        right: -260px; top: 52px; bottom: 0;
         z-index: 90;
         transition: right .2s;
-        width: 220px;
+        width: 240px;
     }
     .ow-online-close { display: block; }
 }

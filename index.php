@@ -677,6 +677,8 @@ function ow_icon(string $name, int $size = 18): string
         'sound'  => '<path d="M4 9.5v5h3.5L13 19V5L7.5 9.5z"/><path d="M16 9a4.5 4.5 0 0 1 0 6"/>',
         // 展开箭头：菜单分类的折叠指示
         'chevron' => '<polyline points="6.5 9.5 12 15 17.5 9.5"/>',
+        // 竖排三点（v1.1.1）：群聊信息入口，替代原「在线成员」人形图标
+        'more-v' => '<circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none"/>',
     ];
     $d = $paths[$name] ?? $paths['chat'];
     return '<svg class="ow-ico" width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
@@ -846,8 +848,8 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<h2 class="ow-room-name" id="owRoomName">' . Sec::e($first['name']) . '</h2>'
        . '<span class="ow-tag ow-tag-green" id="owSpeakTag">可发言</span>'
        . '<span class="ow-latency" id="owLatency"></span>'
-       // 右侧「+」下拉菜单（创建群聊等）
-       . '<button class="ow-icon-btn" id="owToggleOnline" aria-label="在线成员">' . ow_icon('users') . '</button>'
+       // 右侧「竖三点」：打开群聊信息侧栏（v1.1.1 替代原在线成员人形图标）
+       . '<button class="ow-icon-btn" id="owTogglePanel" aria-label="群聊信息" title="群聊信息">' . ow_icon('more-v') . '</button>'
        . '</header>'
        . '<div class="ow-messages" id="owMessages"><div class="ow-load-more" id="owLoadMore">加载更早消息…</div></div>'
        . '<div class="ow-inputbar">'
@@ -871,10 +873,19 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<div class="ow-emoji-panel" id="owEmojiPanel" style="display:none"></div>'
        . '</main>';
 
-    // 右侧在线列表
-    echo '<aside class="ow-online" id="owOnline"><div class="ow-side-title">所有成员 <span class="ow-badge-num" id="owOnlineCount">0</span>'
-       . '<button class="ow-online-close" id="owOnlineClose" aria-label="收起成员列表" title="收起">×</button></div>'
-       . '<ul class="ow-online-list" id="owOnlineList"></ul></aside>';
+    // 右侧栏（v1.1.1）：上方群聊设置、下方所有成员
+    // 私聊（room_id=0）时无「群聊设置」，前端 renderRoomPanel 负责置空该区并提示。
+    echo '<aside class="ow-online" id="owOnline">'
+       . '<div class="ow-panel-sec ow-panel-room">'
+       . '<div class="ow-side-title">群聊设置'
+       . '<button class="ow-online-close" id="owOnlineClose" aria-label="收起侧栏" title="收起">×</button></div>'
+       . '<div class="ow-panel-room-body" id="owRoomPanel"></div>'
+       . '</div>'
+       . '<div class="ow-panel-sec ow-panel-members">'
+       . '<div class="ow-side-title">所有成员 <span class="ow-badge-num" id="owOnlineCount">0</span></div>'
+       . '<ul class="ow-online-list" id="owOnlineList"></ul>'
+       . '</div>'
+       . '</aside>';
     echo '</div>';
 
     // 浮层：资料卡 / 图片预览 / 设置 / 密码房间
