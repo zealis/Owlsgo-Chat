@@ -729,7 +729,6 @@ button { font-family: inherit; cursor: pointer; }
         transition: right .2s;
         width: 220px;
     }
-    .ow-online.open { right: 0; }
     .ow-online-close { display: block; }
 }
 
@@ -763,7 +762,9 @@ button { font-family: inherit; cursor: pointer; }
         transition: left .2s;
         width: 250px;
     }
-    .ow-sidebar.open { left: 0; }
+    /* 窄屏浮层（v1.0.121）：开出时的抽屉底色 */
+    .ow-sidebar.open { left: 0; background: #EBF2ED; }
+    .ow-online.open { right: 0; background: #EBF2ED; }
     .ow-msg-body { max-width: 85%; }
     .ow-msg-img { max-width: 180px; max-height: 180px; }
     .ow-emoji-panel { width: 92%; left: 4%; }

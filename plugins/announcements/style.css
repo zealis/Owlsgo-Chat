@@ -7,12 +7,13 @@
     gap: 10px;
     min-height: 56px;
     padding: 10px 16px;
-    /* 冷灰渐变（v1.0.117）：自下而上由 #cfd9df 过渡到 #e2ebf0 */
-    background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
-    border-bottom: 1px solid #c8d4dc;
+    /* 与群聊界面同款底色（v1.0.121）：自下而上由 #e6e9f0 过渡到 #eef1f5 */
+    background-color: #eef1f5;
+    background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);
+    border-bottom: 1px solid #d9e0e6;
     cursor: pointer;
 }
-.oa-bar:hover { background-image: linear-gradient(to top, #c6d2d9 0%, #dae4ea 100%); }
+.oa-bar:hover { background-image: linear-gradient(to top, #dfe4ec 0%, #e8ecf2 100%); }
 .oa-bar-pin {
     flex-shrink: 0; -webkit-flex-shrink: 0;
     font-size: 11px;
