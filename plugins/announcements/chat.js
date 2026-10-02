@@ -105,12 +105,14 @@
             })(cards2[j]);
         }
         // 删除（敏感操作，自研确认弹窗）
+        // v1.1.2：只传 id —— room_id 由服务端按「该公告自身的归属群」判定并判权限，
+        // 前端不再传当前群 id（原先传错导致 SQL 匹配 0 行却仍返回 ok，即「假成功」）。
         var dels = d.querySelectorAll('#owModal .oa-card-del');
         for (var k = 0; k < dels.length; k++) {
             (function (el) {
                 el.onclick = function () {
                     w.OwChat.confirm('确定删除该公告？删除后成员端立即不再展示。', function () {
-                        OwApi.secure('plugin_announcements_del', { room_id: current.roomId, id: el.getAttribute('data-id') }, function (r) {
+                        OwApi.secure('plugin_announcements_del', { id: el.getAttribute('data-id') }, function (r) {
                             toast(r.msg);
                             if (r.ok) { w.OwChat.closeModal(); load(); }
                         });

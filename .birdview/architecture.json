@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "mapId": "owlsgo-chat",
-  "revision": 7,
+  "revision": 8,
   "language": "zh",
   "project": {
     "id": "owlsgo-chat",
@@ -1998,6 +1998,120 @@
         }
       ],
       "verification": "浏览器 uid=1（admin，非 room19 群主）切到 room19：can_edit=true、侧栏出现 oaManageBtn、公告页 cards=2/del=2/add=true"
+    },
+    {
+      "id": "dm-no-cross-identity",
+      "name": "私聊只在注册用户之间，用户↔游客跨身份私聊已彻底下线（v1.1.2）",
+      "note": "v1.1.0 曾把「用户↔游客」跨身份私聊当成缺陷修好，v1.1.2 推翻该设计并从协议层关闭。理由：游客身份随浏览器会话消亡，同一「游客昵称」背后可能是任意多个人，注册用户私聊一个「随时可能是另一个人」的对象既不可靠也无法审计。落地分四层：(a) Chat::dmPeerKey() 对一切跨身份 peer 返回 null，dm_history / dm_poll 都在调它之前先过关；(b) Chat::send() 里 type==='private' 时**独立**校验 to_guest_id 非空即拒、发起方必须是注册用户——不能只靠 dmPeerKey，构造请求能绕前端直接打 send；(c) 前端五处入口同步收口：showUserMenu 头像右键菜单、openDmWith 从消息进入、pm 旧调用点、openDm 含 URL 恢复、send 私聊视图内发消息，外加 dmFromUrl 直接丢弃 guest: 形态；(d) conversations() 游客分支整体跳过，v1.1.0 时期的跨身份存量消息由 dmPeerKey 兜底过滤。存量 12 条私聊全为 user↔user，跨身份 0 条，无数据损失。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [
+        "chat-core",
+        "web-ui"
+      ],
+      "relationships": [
+        "dm-identity",
+        "dm-privacy"
+      ],
+      "evidence": [
+        {
+          "path": "core/chat.php",
+          "note": "协议层：跨身份一律 null",
+          "quote": "if ($kind !== 'user' || $actor['kind'] !== 'user') return null;"
+        },
+        {
+          "path": "core/chat.php",
+          "note": "发送层独立设卡（不依赖 dmPeerKey）",
+          "quote": "if ($toGuestId) return [false, '暂不支持与游客私聊'];"
+        },
+        {
+          "path": "assets/js/chat.js",
+          "note": "前端入口补上「对方也须是注册用户」",
+          "quote": "if (!m.mine && this.cfg.actor.kind === 'user' && m.uid)"
+        },
+        {
+          "path": "assets/js/chat.js",
+          "note": "URL 恢复丢弃 guest: 形态",
+          "quote": "return v.indexOf('user:') === 0 ? v : '';"
+        }
+      ],
+      "verification": "Playwright 26 项回归：uid980 右击游客只有「@」、右击会员仍有「私信」；A4 openDm(guest:) 被拒、A5 openDmWith/pm 不进入私聊；服务端 dm_history / dm_poll 返「私聊对象不合法」、send 返「暂不支持与游客私聊」、游客发起返「请先登录后再发起私聊」；游客会话列表无私聊项；user↔user 私聊历史仍可读"
+    },
+    {
+      "id": "announcement-no-system-wide",
+      "name": "群公告只隶属具体群聊，room_id=0 不再代表「系统公告 / 全站公告」（v1.1.2）",
+      "note": "room_id=0 曾被当作「对所有群生效」的全站公告标记，与私聊虚拟空间（同样是 room_id=0）语义打架，更要命的是它制造了一条必然假成功的删除路径。announcements 插件现改为公告一律隶属具体群聊：list 只查本群、add 拒绝 room_id<=0、del 按**公告自身归属群**判权限并以 rowCount 为唯一成功判据。旧 announcements 表的迁移代码删除（存量库中的旧表保留不删，仅不再被读取），$oa_boot 里一次性 DELETE WHERE room_id<=0 清掉遗留全站公告（幂等）。建表时 room_id 去掉 DEFAULT 0，让非正数在库层面就不合法。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [
+        "announcements-plugin",
+        "chat-core"
+      ],
+      "relationships": [
+        "room-manage-entry-aligned"
+      ],
+      "evidence": [
+        {
+          "path": "plugins/announcements/main.php",
+          "note": "list 只查本群",
+          "quote": "WHERE room_id=? ORDER BY pinned DESC, id DESC LIMIT 100"
+        },
+        {
+          "path": "plugins/announcements/main.php",
+          "note": "add 拒绝 room_id<=0",
+          "quote": "if ($roomId <= 0) Api::json(['ok' => false, 'msg' => '非法群聊'], 400);"
+        },
+        {
+          "path": "plugins/announcements/main.php",
+          "note": "按公告自身归属判权限",
+          "quote": "$row = DB::one('SELECT id, room_id FROM plugin_announcements WHERE id=?', [$id]);"
+        },
+        {
+          "path": "plugins/announcements/main.php",
+          "note": "一次性清理遗留全站公告",
+          "quote": "DB::run('DELETE FROM plugin_announcements WHERE room_id<=0');"
+        }
+      ],
+      "verification": "群主 uid20 在 room19 发公告后只传 id 删除，列表由 2 条降为 1 条（真删）；删不存在的 id 返回「公告不存在或已被删除」；room_id=0 的 add 与 list 均返「非法群聊」；超管视角 list 亦只含本群；查库确认 room_id<=0 条数为 0"
+    },
+    {
+      "id": "delete-must-check-rowcount",
+      "name": "DELETE 类操作一律以 rowCount 判定成败，禁止无条件返回成功（v1.1.2）",
+      "note": "本项目最隐蔽的一类缺陷，完整链条是：SQL 写成 `DELETE FROM plugin_announcements WHERE id=? AND room_id=?`，而 room_id 来自**调用方传的当前群**；目标公告不属于当前群时（旧全站公告即 room_id=0）匹配 0 行，数据库什么都没删——但代码**无条件返回 ok:true**，从不检查 rowCount。表现是：接口说「公告已删除」、前端弹 toast 关弹窗，刷新后公告纹丝不动，用户完全无从判断真假，只能重新表述成「删不掉」。附带还造成前后台口径分裂：后台批量删除只按 id、无 room_id 过滤（能删掉），前台带着当前群 room_id（删不掉）。修法统一为：先取目标行自身的 room_id 判权限 → 再仅以 id 删除 → 以 rowCount 作为唯一成功判据，0 行时返回明确错误。后台批量删除同样按 rowCount 累计并回报不存在的条数。",
+      "origin": "local",
+      "strength": "required",
+      "applicability": "applicable",
+      "scope": "project",
+      "modules": [
+        "announcements-plugin",
+        "chat-core"
+      ],
+      "relationships": [
+        "room-manage-entry-aligned",
+        "announcement-no-system-wide"
+      ],
+      "evidence": [
+        {
+          "path": "plugins/announcements/main.php",
+          "note": "以 rowCount 为唯一成功判据",
+          "quote": "$n = is_object($st) && method_exists($st, 'rowCount') ? (int)$st->rowCount() : 0;"
+        },
+        {
+          "path": "plugins/announcements/main.php",
+          "note": "0 行时明确报错而非静默成功",
+          "quote": "if ($n <= 0) Api::json(['ok' => false, 'msg' => '删除失败，公告可能已被删除'], 409);"
+        },
+        {
+          "path": "plugins/announcements/chat.js",
+          "note": "前端只传 id，room_id 交服务端判定",
+          "quote": "OwApi.secure('plugin_announcements_del', { id: el.getAttribute('data-id') }"
+        }
+      ],
+      "verification": "修复前：直调 del(room_id=19, id=2) 返回 {\"ok\":true,\"msg\":\"公告已删除\"} 但查库 id=2 仍在。修复后：del(id=...) 真删（列表 2→1），del(id=999999) 返回「公告不存在或已被删除」，batch(不存在的 ids) 返回「成功 0 条（2 条不存在或已删除）」"
     }
   ]
 }

@@ -874,12 +874,14 @@
         /**
          * 打开私聊会话（v1.1.0）：复用群聊骨架——消息区、输入栏、轮询全部沿用，
          * 仅切换「对方昵称」标题、会话目标（room_id=0 + to_user_id）与列表高亮。
-         * peer 形如 'user:12' / 'guest:34'（服务端据此做双方可见性校验）。
+         * peer 形如 'user:12'（服务端据此做双方可见性校验）。
+         * v1.1.2：跨身份私聊下线，peer 里的 'guest:' 形态直接拒绝。
          */
         openDm: function (peer, name) {
             var self = this;
             var m = /^(\w+):(\d+)$/.exec(peer || '');
             if (!m) return;
+            if (m[1] !== 'user') { toast('游客暂不支持私聊'); return; }
             // 已在该私聊：若只是补来了真实昵称（此前为占位「私聊」），只更新标题即可，不重载历史
             if (this.dm && this.dm.peer === peer) {
                 if (name && name !== this.roomName && name !== '私聊') {
@@ -1016,12 +1018,14 @@
             return mt ? parseInt(mt[1], 10) || 0 : 0;
         },
 
-        /** 私聊地址解析：?dm=user:12 / ?dm=guest:34（v1.1.0，兼容 %3A 编码形式） */
+        /** 私聊地址解析：?dm=user:12（v1.1.0，兼容 %3A 编码形式）
+         *  v1.1.2：跨身份私聊下线，guest: 形态直接丢弃（否则会走进一个必然报错的空会话） */
         dmFromUrl: function () {
             var mt = (w.location.search || '').match(/[?&]dm=([^&]+)/);
             if (!mt) return '';
             var v = decodeURIComponent(mt[1]);   // 外部链接可能带 %3A，需还原
-            return /^(\w+:\d{1,10})$/.test(v) ? v : '';
+            if (!/^(\w+:\d{1,10})$/.test(v)) return '';
+            return v.indexOf('user:') === 0 ? v : '';
         },
 
         /** 同步当前群聊的 owner 用户 ID 到模块变量 CUR_OWNER（roleTag 群主标签用） */
@@ -1494,7 +1498,10 @@
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
             if (!m.recalled && !m.deleted) {
                 items.push({ t: '@ ' + m.nickname, run: function () { self.mention(m.nickname); } });
-                if (!m.mine && this.cfg.actor.kind === 'user')
+                // v1.1.2：**只有对方也是注册用户才给「私信」**（m.uid 为空即游客）。
+                // 原先只判自己是不是注册用户，于是「注册用户 → 游客」的入口一直挂着，
+                // 而服务端已彻底关闭跨身份私聊 —— 前端不收口就会变成点进去必然报错的死按钮。
+                if (!m.mine && this.cfg.actor.kind === 'user' && m.uid)
                     items.push({ t: '私信', run: function () { self.openDmWith(m); } });
                 // 收藏贴纸已移到内容菜单（showContentMenu）：它是对「图片」的操作，不是对「人」的操作
             }
@@ -1545,10 +1552,13 @@
             };
             // 私聊视图：未显式指定消息类型（文本/图片/文件等富类型）时，一律发往对方
             if (this.dm && !opt.type) {
+                // v1.1.2：跨身份私聊已下线 —— 理论上不会进入 guest 分支（入口已收口），
+                // 这里仍硬拦一道，避免任何残留状态发出必然被服务端拒绝的请求
+                if (this.dm.kind !== 'user') { toast('游客暂不支持私聊'); return; }
                 payload.room_id = 0;
                 payload.type = 'private';
-                payload.to_user_id = this.dm.kind === 'user' ? this.dm.id : '';
-                payload.to_guest_id = this.dm.kind === 'guest' ? this.dm.id : '';
+                payload.to_user_id = this.dm.id;
+                payload.to_guest_id = '';
                 payload.to_nickname = this.roomName;
             }
             var wasDm = !!this.dm;
@@ -1607,17 +1617,16 @@
          * 从一条消息进入与该作者的私聊（v1.1.0）。
          * 私聊不再用「弹窗写一条」的一次性交互，而是进入完整会话页——
          * 历史可翻、双方可继续对话，与群聊共用同一套消息区与输入栏。
-         * 对象标识用 user:<id> / guest:<id>（昵称允许重名，不能当身份用）。
+         * 对象标识用 user:<id>（v1.1.2 起仅注册用户，游客不再提供私聊入口）。
          */
         openDmWith: function (m) {
-            var peer = m.uid ? ('user:' + m.uid) : (m.gid ? ('guest:' + m.gid) : '');
-            if (!peer) { toast('无法确定私聊对象'); return; }
-            this.openDm(peer, m.nickname);
+            if (!m || !m.uid) { toast('游客暂不支持私聊'); return; }
+            this.openDm('user:' + m.uid, m.nickname);
         },
         /** 兼容旧调用点（插件可能仍调 pm）；v1.1.0 起统一进入私聊会话页 */
         pm: function (nick, uid, gid) {
             if (uid) return this.openDm('user:' + uid, nick);
-            if (gid) return this.openDm('guest:' + gid, nick);
+            if (gid) { toast('游客暂不支持私聊'); return; }   // v1.1.2：跨身份私聊已下线
             toast('无法确定私聊对象');
         },
 

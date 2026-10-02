@@ -162,6 +162,11 @@ class Chat
             $toGuestId = isset($opt['to_guest_id']) ? (int)$opt['to_guest_id'] : null;
             $toNickname = trim((string)($opt['to_nickname'] ?? ''));
             if (!$toUserId && !$toGuestId) return [false, '私信缺少接收对象'];
+            // v1.1.2：跨身份私聊已下线，服务端同步收口。
+            // 判定不能只靠 dmPeerKey —— 构造请求可以绕过前端入口直接打 send。
+            if ($toGuestId) return [false, '暂不支持与游客私聊'];
+            if ($actor['kind'] !== 'user') return [false, '请先登录后再发起私聊'];
+            if ($toUserId === (int)$actor['id']) return [false, '不能给自己发私信'];
         } elseif ($type === 'text' && preg_match('/(^|\s)@[^\s@]+/u', $content)) {
             $type = 'mention';
         } elseif (!in_array($type, ['text', 'image', 'file', 'system'], true)) {
@@ -332,7 +337,14 @@ class Chat
     // 存储约定：私聊消息 room_id=0（虚拟私聊空间），to_user_id / to_guest_id 标识接收方；
     // 可见性由 visible() 收口为「仅双方」，超管亦不可越权。会话列表 = 群聊 + 私聊按最后活跃时间倒序。
 
-    /** 解析对方标识：'user:12' / 'guest:34' → [kind, id] */
+    /**
+     * 解析对方标识：'user:12' / 'guest:34' → [kind, id]
+     *
+     * v1.1.2：**只允许注册用户之间私聊**，跨身份（user↔guest）一律拒绝。
+     * 游客会话生命周期极短（浏览器一关即失效），且发言可匿名顶替，
+     * 允许注册用户去私聊一个「随时可能是另一个人」的游客既不可靠也不可审计，
+     * 故从协议层彻底关闭。前端入口同步收敛（chat.js showUserMenu / openDmWith / pm）。
+     */
     public static function dmPeerKey(array $actor, string $peer): ?array
     {
         if (!preg_match('/^(user|guest):(\d{1,10})$/', trim($peer), $m)) return null;
@@ -341,6 +353,8 @@ class Chat
         if ($id <= 0) return null;
         // 不能与自己私聊
         if ($kind === $actor['kind'] && $id === (int)$actor['id']) return null;
+        // v1.1.2：跨身份私聊已下线 —— 双方都必须是注册用户
+        if ($kind !== 'user' || $actor['kind'] !== 'user') return null;
         return [$kind, $id];
     }
 
@@ -386,26 +400,12 @@ class Chat
             ];
         }
 
-        // 私聊：与我有关的私聊消息按对方分组，各取最新一条
-        if ($actor['kind'] === 'none') return self::sortConversations($out);
-        $mineUser = $actor['kind'] === 'user' ? (int)$actor['id'] : 0;
-        $mineGuest = $actor['kind'] === 'guest' ? (int)$actor['id'] : 0;
-
-        // ★ v1.1.0 修复两个缺陷：
-        //   ① 方向缺失：原条件只匹配发送方列（user_id / guest_id = 我），
-        //      「对方发给我」的私聊在接收方列表里完全不出现——这就是「接收不到别人私聊」的根因。
-        //   ② 越权泄漏：未使用的身份列存的是 0 而不是 NULL，
-        //      所以 `to_guest_id = 0`（游客身份时 mineGuest=0）会匹配到所有人的消息，
-        //      任何用户都能看到全站私聊会话。这里对未使用的身份列改用 `> 0` 严格大于判定，
-        //      只让真正属于自己身份的那一支参与匹配。
+        // 私聊：与我有关的私聊消息按对方分组，各取最新一条。
+        // v1.1.2：跨身份私聊已下线 → 游客身份没有任何私聊会话，游客分支整体跳过。
+        if ($actor['kind'] !== 'user') return self::sortConversations($out);
+        $mineUser = (int)$actor['id'];
         $conds = ['(user_id > 0 AND user_id = ?)', '(to_user_id > 0 AND to_user_id = ?)'];
-        $args = [$mineUser ?: 0, $mineUser ?: 0];
-        if ($mineGuest > 0) {
-            $conds[] = '(guest_id > 0 AND guest_id = ?)';
-            $args[] = $mineGuest;
-            $conds[] = '(to_guest_id > 0 AND to_guest_id = ?)';
-            $args[] = $mineGuest;
-        }
+        $args = [$mineUser, $mineUser];
         $rows = DB::all(
             'SELECT * FROM messages WHERE type=\'private\' AND room_id=0
              AND (' . implode(' OR ', $conds) . ')
@@ -414,12 +414,10 @@ class Chat
         );
         $seen = [];
         foreach ($rows as $m) {
-            // 对方 = 另一方。私聊可能是「用户↔用户」「游客↔游客」「用户↔游客」三种组合，
-            // 所以两个分支都必须先判断【本条消息是谁发的】，再按接收列（to_user_id / to_guest_id，
-            // 恒有且仅有一个非空）取对方——不能假定双方同 kind。
-            $sentByMe = $actor['kind'] === 'user'
-                ? ((int)($m['user_id'] ?? 0) === $mineUser)
-                : ((int)($m['guest_id'] ?? 0) === $mineGuest);
+            // 对方 = 另一方。v1.1.2 起只可能是「用户↔用户」，
+            // 但库内可能残留 v1.1.0 时期写入的跨身份消息，故仍按「谁发的」两分支取对方，
+            // 再用 dmPeerKey 做一次协议层校验，非法的直接跳过（不展示、也不可进入）。
+            $sentByMe = (int)($m['user_id'] ?? 0) === $mineUser;
             if ($sentByMe) {
                 $pKind = ((int)($m['to_user_id'] ?? 0) > 0) ? 'user' : 'guest';
                 $pId = (int)(($m['to_user_id'] ?? 0) ?: ($m['to_guest_id'] ?? 0));
@@ -429,6 +427,7 @@ class Chat
             }
             if ($pId <= 0) continue;           // 接收方缺失的异常数据，直接跳过
             $key = $pKind . ':' . $pId;
+            if (!self::dmPeerKey($actor, $key)) continue;   // v1.1.2：跨身份会话不展示
             if (isset($seen[$key])) continue;   // 已取到最新一条
             $seen[$key] = true;
             $info = self::dmPeerInfo($pKind, $pId);
@@ -605,7 +604,8 @@ class Chat
      *    EMULATE_PREPARES=false 下会复用错位的绑定值 → 只查得到自己发出的那条。
      * 2. 「对方 → 我」这一支的发送方列必须换成对方的列（跨身份时是 guest_id ↔ user_id 互换），
      *    否则该支永远不成立。
-     * 已验证：用户↔用户、用户↔游客、游客↔用户三种视角均能取到双向完整历史。
+     * 已验证：用户↔用户双向完整历史。v1.1.2 起跨身份私聊已下线，
+     * dmPeerKey() 会在 dm_history / dm_poll 之前就挡掉，这里保留双列结构只是防御性兜底。
      *
      * @return array [ [cond1, args1], [cond2, args2] ]
      */

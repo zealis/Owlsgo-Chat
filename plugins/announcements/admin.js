@@ -6,14 +6,14 @@
     'use strict';
     var $ = function (id) { return d.getElementById(id); };
 
-    /* 当前查询状态 */
+    /* 当前查询状态（v1.1.2：room_id 必 > 0，0 = 不按群过滤 = 全部） */
     var state = { room_id: 0, page: 1, size: 30, total: 0 };
 
     w.OwOA = {
         init: function () { OwOA.load(1); },
 
         resetFilter: function () {
-            $('oaAdmRoom').value = '0';
+            $('oaAdmRoom').value = '';
             OwOA.load(1);
         },
 
@@ -39,13 +39,14 @@
             for (var i = 0; i < rows.length; i++) {
                 var a = rows[i];
                 h += '<tr><td><input type="checkbox" class="oaAdmChk" value="' + a.id + '" onchange="OwOA.syncBatch()"></td>'
-                    + '<td>' + a.id + '</td><td>' + (a.room_id == 0 ? '全部' : a.room_id) + '</td>'
+                    + '<td>' + a.id + '</td><td>' + esc(String(a.room_id)) + '</td>'
                     + '<td>' + esc(a.nickname) + '</td>'
                     + '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(a.content) + '</td>'
                     + '<td>' + (a.type === 'popup' ? '弹窗通知' : '公告条') + '</td>'
                     + '<td>' + (a.pinned == 1 ? '<span class="ow-tag ow-tag-green">置顶</span>' : '-') + '</td>'
                     + '<td>' + new Date(a.created_at * 1000).toLocaleString() + '</td>'
-                    + '<td><a href="javascript:;" onclick="OwOA.delOne(' + a.id + ',' + (a.room_id == 0 ? 0 : a.room_id) + ')">删除</a></td></tr>';
+                    // v1.1.2：room_id=0 语义已删，不再有「全部」分支；删除改由服务端按公告自身归属判权限
+                    + '<td><a href="javascript:;" onclick="OwOA.delOne(' + a.id + ')">删除</a></td></tr>';
             }
             if (!rows.length) h += '<tr><td colspan="9" style="color:#5C5C5C">暂无公告</td></tr>';
             tbl.innerHTML = h;
@@ -79,9 +80,9 @@
             });
         },
 
-        delOne: function (id, roomId) {
+        delOne: function (id) {
             w.OwAdmin.confirm('确定删除该公告？删除后成员端立即不再展示。', function () {
-                OwApi.secure('plugin_announcements_del', { id: id, room_id: roomId }, function (r) {
+                OwApi.secure('plugin_announcements_del', { id: id }, function (r) {
                     toast(r.msg);
                     if (r.ok) OwOA.load(state.page);
                 });
