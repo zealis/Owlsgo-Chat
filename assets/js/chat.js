@@ -353,6 +353,68 @@
     /* ==========================================================================
        OwChat：聊天主程序
        ========================================================================== */
+    /**
+     * 通用聊天列表轮子（v1.1.0）：群聊与私聊会话共用的列表渲染器。
+     * 与业务无关——只负责「头像 + 名称 + 右侧摘要/时间 + 标签 + 选中态」的 DOM 组装与点击分发，
+     * 数据形状：[{ conv:'room'|'dm', id, peer, name, avatar, last_at, last_text, tag }]
+     * opts: { container, activeKey, onClick(item, el), emptyText }
+     */
+    var ChatList = {
+        time: function (ts) {
+            if (!ts) return '';
+            var d = new Date(ts * 1000), now = new Date();
+            function p(n) { return (n < 10 ? '0' : '') + n; }
+            var sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+            if (sameDay) return p(d.getHours()) + ':' + p(d.getMinutes());
+            if (d.getFullYear() === now.getFullYear()) return (d.getMonth() + 1) + '/' + d.getDate();
+            return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+        },
+        render: function (list, opts) {
+            var box = typeof opts.container === 'string' ? $(opts.container) : opts.container;
+            if (!box) return;
+            if (!list || !list.length) {
+                box.innerHTML = '<li class="ow-cl-empty">' + esc(opts.emptyText || '暂无会话') + '</li>';
+                return;
+            }
+            var html = '', i, c;
+            for (i = 0; i < list.length; i++) {
+                c = list[i];
+                var key = c.conv + ':' + (c.conv === 'dm' ? c.peer : c.id);
+                var icon = c.avatar
+                    ? '<span class="ow-cl-icon"><img src="' + esc(c.avatar) + '" alt=""></span>'
+                    : '<span class="ow-cl-icon">' + esc((c.name || '?').charAt(0)) + '</span>';
+                html += '<li class="ow-cl-item' + (key === opts.activeKey ? ' active' : '') + '" data-key="' + esc(key) + '"'
+                      + (c.conv === 'dm' ? ' data-dm="' + esc(c.peer) + '"' : ' data-room="' + (c.conv === 'room' ? c.id : 0) + '"')
+                      + ' data-name="' + esc(c.name) + '" data-pw="' + (c.need_password ? 1 : 0) + '">'
+                      + icon
+                      + '<span class="ow-cl-main">'
+                      + '<span class="ow-cl-title">' + esc(c.name) + (c.tag ? '<span class="ow-cl-tag">' + esc(c.tag) + '</span>' : '') + '</span>'
+                      + '<span class="ow-cl-sub">' + esc(c.last_text || '') + '</span>'
+                      + '</span>'
+                      + '<span class="ow-cl-time">' + ChatList.time(c.last_at) + '</span>'
+                      + (c.can_edit ? '<button class="ow-cl-more" type="button" title="群聊设置" onclick="OwChat.openRoomEdit(' + c.id + ');event.stopPropagation&&event.stopPropagation();return false;">&#8942;</button>' : '')
+                      + '</li>';
+            }
+            box.innerHTML = html;
+            var items = box.getElementsByTagName('li'), k;
+            for (k = 0; k < items.length; k++) {
+                if (items[k]._noClick) continue;
+                items[k].onclick = function () { if (opts.onClick) opts.onClick(this); };
+            }
+        },
+        /** 定位并高亮当前会话对应的行 */
+        activate: function (container, key) {
+            var box = typeof container === 'string' ? $(container) : container;
+            if (!box) return;
+            var items = box.getElementsByTagName('li'), i;
+            for (i = 0; i < items.length; i++) {
+                items[i].className = items[i].className.replace(' active', '');
+                if (items[i].getAttribute('data-key') === key) items[i].className += ' active';
+            }
+        }
+    };
+    w.ChatList = ChatList;
+
     var OwChat = {
         cfg: null, room: 0, since: 0, polling: false, failCount: 0,
         historyDone: false, loadingHistory: false, sound: true, lastMsgId: 0,
@@ -367,21 +429,39 @@
             this.sound = cfg.settings.sound === '1';
             var self = this;
 
-            this.renderRooms(cfg.rooms);
+            this.loadConversations();   // 会话列表（群聊+私聊聚合）——私聊路由要靠它取昵称
+            this.renderConversations();
             this.renderMe();
             this.buildEmojiPanel();
             this.bindEvents();
 
-            // 地址路由：初始 URL 规范化为 ?room=当前群聊（replace，不产生历史记录）
-            this.setRoomUrl(this.room, true);
-            // 前进/后退（或手动改 URL 回车）→ 切换到对应群聊
+            // 地址路由：私聊 ?dm=user:12 优先（v1.1.0），否则规范化为 ?room=当前群聊（replace）
+            var dmFromUrl = this.dmFromUrl();
+            // 前进/后退（或手动改 URL 回车）→ 切换到对应群聊 / 私聊
             w.onpopstate = function () {
+                var dpeer = self.dmFromUrl();
+                if (dpeer) {
+                    if (self.dm && self.dm.peer === dpeer) return;
+                    self.openDm(dpeer, self.dmNameOf(dpeer));
+                    return;
+                }
                 var rid = self.roomFromUrl();
                 if (!rid || rid === self.room) return;
                 for (var i = 0; i < cfg.rooms.length; i++) {
                     if (cfg.rooms[i].id === rid) { self.switchRoom(rid, cfg.rooms[i].name, null, true); return; }
                 }
             };
+
+            if (dmFromUrl) {
+                // 私聊视图：昵称取自会话列表，但列表是异步到达的。
+                // openDm 允许传入临时名（'私聊'），列表到达后 loadConversations 会重渲染并补上正确昵称，
+                // 所以这里直接打开即可，无需轮询等待。
+                this.setDmUrl(dmFromUrl, true);
+                this.openDm(dmFromUrl, this.dmNameOf(dmFromUrl));
+                this._fireRoomSwitch();
+                return;   // 私聊入口不加载群聊历史、不启动群聊长轮询
+            }
+            this.setRoomUrl(this.room, true);
 
             // 初始加载历史：是否需密码由服务端判定（管理员/已授权会直接放行，不会弹窗）
             var first = null, i;
@@ -398,7 +478,9 @@
                     } else {
                         self.passRemember(self.room, j.ttl);
                     }
+                    if (self.dm) return;   // 等待期间用户已切到私聊
                     OwApi.post('history', { room_id: self.room, before: 0 }, function (r) {
+                        if (self.dm) return;
                         if (r.ok) {
                             for (var k = 0; k < r.data.length; k++) self.addMessage(r.data[k], true);
                             if (r.data.length) self.since = r.data[r.data.length - 1].id;
@@ -409,12 +491,20 @@
                             self.askRoomPassword(self.room, first ? first.name : '', function (pw) { load(pw); });
                             return;
                         }
+                        self._roomPollRunning = true;
                         self.startPoll();
                     });
                 });
             };
             load('');
             this._fireRoomSwitch();   // 首次进入也通知插件（公告等按群拉取）
+        },
+
+        /** 从已加载的会话列表里取私聊对方昵称（供 URL 直达 / 前进后退时补名） */
+        dmNameOf: function (peer) {
+            var list = this.conversations || [], i;
+            for (i = 0; i < list.length; i++) if (list[i].conv === 'dm' && list[i].peer === peer) return list[i].name;
+            return '私聊';
         },
 
         bindEvents: function () {
@@ -524,7 +614,14 @@
             $('owMessages').onscroll = function () {
                 if (this.scrollTop < 40 && !self.historyDone && !self.loadingHistory) self.loadHistory();
             };
-            $('owLoadMore').onclick = function () { self.loadHistory(); };
+            // 「加载更早消息…」每次切换会话都会被 innerHTML 重建，元素换了，
+            // 直接 onclick 绑定会失效（v1.1.0 私聊复用同一消息区后暴露）。改用父容器委托。
+            // 注意：引用跳转仍走 buildMessage 里的内联 onclick（ow-quote-link），不归这里管。
+            $('owMessages').onclick = function (e) {
+                e = e || w.event;
+                var t = e.target || e.srcElement;
+                if (t && t.id === 'owLoadMore') self.loadHistory();
+            };
             // 右键消息气泡 → 操作菜单（@/私信/收藏/撤回，插件可追加）
             $('owMessages').oncontextmenu = function (e) {
                 e = e || w.event;
@@ -638,49 +735,189 @@
         },
 
         /* ---------- 房间 ---------- */
-        renderRooms: function (rooms) {
-            var html = '', i, self = this;
-            for (i = 0; i < rooms.length; i++) {
-                var r = rooms[i];
-                var icon = r.avatar
-                    ? '<span class="ow-room-icon"><img src="' + esc(r.avatar) + '" alt=""></span>'
-                    : '<span class="ow-room-icon">' + esc(r.name.charAt(0)) + '</span>';
-                html += '<li class="ow-room-item' + (r.id === this.room ? ' active' : '') + '" data-room="' + r.id + '" data-name="' + esc(r.name) + '" data-pw="' + (r.need_password ? 1 : 0) + '">'
-                      + icon
-                      + '<span>' + esc(r.name) + '</span>'
-                      + (r.need_password ? '<span class="ow-tag ow-tag-guest ow-room-lock">密码房</span>' : '')
-                      // 群聊信息编辑入口（仅管理员/房主可见）
-                      + (r.can_edit ? '<button class="ow-room-more" type="button" title="群聊设置" onclick="OwChat.openRoomEdit(' + r.id + ');event.stopPropagation&&event.stopPropagation();return false;">&#8942;</button>' : '')
-                      + '</li>';
-            }
-            $('owRoomList').innerHTML = html;
-            var items = $('owRoomList').getElementsByTagName('li');
-            for (i = 0; i < items.length; i++) {
-                items[i].onclick = function () {
-                    var el = this;
-                    var id = parseInt(el.getAttribute('data-room'), 10);
+        /**
+         * 拉取会话列表（群聊 + 私聊聚合，服务端已按最后活跃时间倒序），交给通用轮子渲染。
+         * v1.1.0：取代旧的 renderRooms —— 群聊与私聊共用同一列表与同一交互。
+         */
+        loadConversations: function () {
+            var self = this;
+            OwApi.post('conversations', {}, function (r) {
+                if (!r.ok) return;
+                self.conversations = r.data;
+                // 私聊视图的标题用的是进入时的昵称；若当时列表未到（标题为占位「私聊」），
+                // 这里用刚取到的真实昵称补正，避免刷新后标题一直停在占位文案
+                if (self.dm && self.roomName === '私聊') {
+                    var nm = self.dmNameOf(self.dm.peer);
+                    if (nm && nm !== '私聊') {
+                        self.roomName = nm;
+                        $('owRoomName').innerHTML = esc(nm) + '<span class="ow-dm-badge">私聊</span>';
+                    }
+                }
+                self.renderConversations();
+            });
+        },
+
+        /** 会话列表渲染 + 行点击分发（群聊走密码房流程，私聊进私聊页） */
+        renderConversations: function () {
+            var self = this, list = this.conversations || [];
+            var activeKey = this.dm ? ('dm:' + this.dm.peer) : ('room:' + this.room);
+            ChatList.render(list, {
+                container: 'owRoomList',
+                activeKey: activeKey,
+                emptyText: '暂无会话',
+                onClick: function (el) {
+                    var dm = el.getAttribute('data-dm');
+                    if (dm) return self.openDm(dm, el.getAttribute('data-name'));
+                    var id = parseInt(el.getAttribute('data-room'), 10) || 0;
                     var name = el.getAttribute('data-name');
-                    // 先不带密码尝试一次：是否真需要密码由服务端判定（管理员/已缓存都会直接放行）
+                    if (!id) return;
+                    // 群聊：先不带密码尝试一次（是否需要密码由服务端判定）
                     var tryJoin = function (password) {
-                        OwApi.post('room_join', { room_id: id, password: password || '' }, function (r) {
-                            if (!r.ok) {
-                                if (r.need_password) {
-                                    if (password) toast(r.msg);           // 带密码仍失败 → 提示后重弹
+                        OwApi.post('room_join', { room_id: id, password: password || '' }, function (rr) {
+                            if (!rr.ok) {
+                                if (rr.need_password) {
+                                    if (password) toast(rr.msg);
                                     self.passForget(id);
                                     self.askRoomPassword(id, name, function (pw) { tryJoin(pw); });
                                     return;
                                 }
-                                toast(r.msg);
-                                if (r.need_login) location.href = '?page=login';
+                                toast(rr.msg);
+                                if (rr.need_login) location.href = '?page=login';
                                 return;
                             }
-                            self.passRemember(id, r.ttl);
-                            self.switchRoom(id, r.room.name, el);
+                            self.passRemember(id, rr.ttl);
+                            self.switchRoom(id, rr.room.name, el);
                         });
                     };
                     tryJoin('');
-                };
+                }
+            });
+            // 密码房标签：轮子渲染后补（数据里 need_password 时显示）
+            var items = $('owRoomList').getElementsByTagName('li'), i;
+            for (i = 0; i < items.length; i++) {
+                if (items[i].getAttribute('data-pw') === '1' && items[i].querySelector('.ow-cl-lock')) continue;
+                if (items[i].getAttribute('data-pw') === '1') {
+                    var t = items[i].querySelector('.ow-cl-title');
+                    if (t && !t.querySelector('.ow-cl-lock')) {
+                        t.innerHTML += '<span class="ow-cl-tag ow-cl-lock">密码房</span>';
+                    }
+                }
             }
+        },
+
+        /**
+         * 打开私聊会话（v1.1.0）：复用群聊骨架——消息区、输入栏、轮询全部沿用，
+         * 仅切换「对方昵称」标题、会话目标（room_id=0 + to_user_id）与列表高亮。
+         * peer 形如 'user:12' / 'guest:34'（服务端据此做双方可见性校验）。
+         */
+        openDm: function (peer, name) {
+            var self = this;
+            var m = /^(\w+):(\d+)$/.exec(peer || '');
+            if (!m) return;
+            // 已在该私聊：若只是补来了真实昵称（此前为占位「私聊」），只更新标题即可，不重载历史
+            if (this.dm && this.dm.peer === peer) {
+                if (name && name !== this.roomName && name !== '私聊') {
+                    this.roomName = name;
+                    $('owRoomName').innerHTML = esc(name) + '<span class="ow-dm-badge">私聊</span>';
+                }
+                return;
+            }
+            // 先切状态：startPoll 的 alive() 依赖 !this.dm，赋值即让群聊长轮询自杀
+            this.dm = { peer: peer, kind: m[1], id: parseInt(m[2], 10) };
+            this.pollGen = (this.pollGen || 0) + 1;          // 作废在途的群聊轮询回调
+            this._roomPollRunning = false;                  // 群聊长轮询就此停摆
+            this.room = 0;
+            this.since = 0;
+            this.historyDone = false;
+            this.loadingHistory = false;
+            this.roomName = name || '私聊';
+            this.syncRoomOwner();
+            this.renderMe();
+            this.clearQuote();
+            $('owRoomName').innerHTML = esc(this.roomName) + '<span class="ow-dm-badge">私聊</span>';
+            $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
+            ChatList.activate('owRoomList', 'dm:' + peer);
+            $('owSidebar').className = $('owSidebar').className.replace(' open', '');
+            this.setDmUrl(peer);
+            this.scrollBottom();
+            // 历史：迟到响应需校验仍停留在同一私聊，否则丢弃（避免串到别的会话）
+            var myPeer = peer;
+            OwApi.post('dm_history', { peer: myPeer, before_id: 0 }, function (r) {
+                if (!self.dm || self.dm.peer !== myPeer) return;
+                if (!r.ok) { toast(r.msg); return; }
+                // 服务端一并回传对方资料：首次私聊时会话列表里还没有该项，
+                // 靠这里把标题从占位「私聊」换成真实昵称
+                if (r.peer && r.peer.name && r.peer.name !== self.roomName) {
+                    self.roomName = r.peer.name;
+                    $('owRoomName').innerHTML = esc(r.peer.name) + '<span class="ow-dm-badge">私聊</span>';
+                }
+                for (var i = 0; i < r.data.length; i++) self.addMessage(r.data[i], true);
+                if (r.data.length) self.since = r.data[r.data.length - 1].id;
+                self.scrollBottom();
+                if (r.data.length < 30) self.historyDone = true;
+                // 没有历史时移除「加载更早消息…」，避免空会话里悬空一个不可用入口
+                if (!r.data.length) {
+                    self.historyDone = true;
+                    var lm = $('owLoadMore');
+                    if (lm) lm.parentNode.removeChild(lm);
+                }
+            });
+            this.dmPollLoop();
+        },
+
+        /**
+         * 私聊增量轮询（与群聊 poll 同构，20s 长挂起）。
+         * 用 dmGen 世代号与「当前是否仍在私聊」双重判定，保证切回群聊后立刻停摆。
+         */
+        dmPollLoop: function () {
+            var self = this;
+            if (!this.dm) return;
+            if (this._dmPollTimer) { clearTimeout(this._dmPollTimer); this._dmPollTimer = 0; }
+            if (this._dmPollBusy) return;
+            var myGen = this.dmGen = (this.dmGen || 0) + 1;
+            var peer = this.dm.peer, since = this.since;
+            var alive = function () { return self.dm && self.dm.peer === peer && self.dmGen === myGen; };
+            this._dmPollBusy = true;
+            var t0 = new Date().getTime();
+            OwApi.post('dm_poll', { peer: peer, since_id: since }, function (r) {
+                if (!alive()) { self._dmPollBusy = false; return; }
+                self._dmPollBusy = false;
+                if (r && r.ok) {
+                    var hasNew = false;
+                    for (var i = 0; i < r.messages.length; i++) { self.addMessage(r.messages[i]); hasNew = true; }
+                    if (r.messages.length) self.since = r.messages[r.messages.length - 1].id;
+                    if (hasNew) {
+                        self.scrollBottom();
+                        if (self.sound) beep();
+                    }
+                    $('owLatency').innerHTML = '● ' + (new Date().getTime() - t0) + ' ms';
+                    $('owLatency').style.color = '#237804';
+                    // 有新消息即刷新会话列表（排序会因这条消息而变）
+                    if (hasNew) self.loadConversations();
+                }
+                if (alive()) self._dmPollTimer = setTimeout(function () { self.dmPollLoop(); }, 100);
+            });
+        },
+
+        /**
+         * 私聊地址路由：?dm=user:12（v1.1.0）。
+         * 与 setRoomUrl 对称：互斥清理对方参数（私聊页不保留 room=），并保留其余查询参数。
+         *
+         * ⚠️ 冒号不能被编码：peer 形如 'user:12'，若用 encodeURIComponent 会变成 'user%3A12'，
+         * 而 dmFromUrl 的正则按字面冒号匹配 → 应用自己写出的链接自己都解析不出来。
+         * ':' 是 RFC 3986 允许出现在 query 中的字符，直接拼接即可。
+         */
+        setDmUrl: function (peer, replace) {
+            try {
+                if (!w.history || !w.history.pushState) return;
+                var search = (w.location.search || '').replace(/^\?/, '')
+                    .replace(/(^|&)dm=[^&]*/g, '').replace(/(^|&)room=[^&]*/g, '')
+                    .replace(/^&+|&+$/g, '');
+                var q = search ? search + '&dm=' + peer : 'dm=' + peer;
+                var url = w.location.pathname + '?' + q;
+                if (replace) w.history.replaceState({ dm: peer }, '', url);
+                else w.history.pushState({ dm: peer }, '', url);
+            } catch (e) {}
         },
 
         /**
@@ -702,6 +939,14 @@
         roomFromUrl: function () {
             var mt = (w.location.search || '').match(/[?&]room=(\d+)/);
             return mt ? parseInt(mt[1], 10) || 0 : 0;
+        },
+
+        /** 私聊地址解析：?dm=user:12 / ?dm=guest:34（v1.1.0，兼容 %3A 编码形式） */
+        dmFromUrl: function () {
+            var mt = (w.location.search || '').match(/[?&]dm=([^&]+)/);
+            if (!mt) return '';
+            var v = decodeURIComponent(mt[1]);   // 外部链接可能带 %3A，需还原
+            return /^(\w+:\d{1,10})$/.test(v) ? v : '';
         },
 
         /** 同步当前群聊的 owner 用户 ID 到模块变量 CUR_OWNER（roleTag 群主标签用） */
@@ -731,9 +976,12 @@
         },
 
         switchRoom: function (id, name, el, fromPop) {
+            // v1.1.0：离开私聊态 —— 作废私聊轮询世代号，随后 startPoll 会接管长轮询
+            if (this.dm) { this.dmGen = (this.dmGen || 0) + 1; this.dm = null; }
             this.room = id; this.roomName = name; this.since = 0; this.historyDone = false;
             this.syncRoomOwner();
             this.renderMe();   // 资料区身份标签随群聊变化（群主/会员归属当前群）
+            this.clearQuote();
             $('owRoomName').innerHTML = esc(name);
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             var items = $('owRoomList').getElementsByTagName('li'), i;
@@ -748,11 +996,15 @@
             var self = this;
             var load = function () {
                 OwApi.post('history', { room_id: id, before: 0 }, function (r) {
+                    // 已切走（切到私聊或别的群）则丢弃迟到响应
+                    if (self.dm || self.room !== id) return;
                     if (r.ok) {
                         for (var i = 0; i < r.data.length; i++) self.addMessage(r.data[i], true);
                         if (r.data.length) self.since = r.data[r.data.length - 1].id;
                         self.scrollBottom();
                         if (r.data.length < 30) self.historyDone = true;
+                        // 从私聊切回群聊时群聊长轮询是停的，需在此重新拉起
+                        if (!self._roomPollRunning) { self._roomPollRunning = true; self.startPoll(); }
                     } else if (r.need_password) {
                         // 通行授权已过期 → 重新验证，验证成功后自动重试
                         self.passForget(id);
@@ -764,17 +1016,25 @@
             this._fireRoomSwitch();   // 插件钩子：切换群聊（公告等按群拉取）
         },
 
-        /* ---------- 长轮询（主通道）+ 断线降级短轮询 ---------- */
+        /* ---------- 长轮询（主通道）+ 断线降级短轮询 ----------
+           v1.1.0：引入 pollGen 世代号。群聊与私聊共用同一套消息区/输入栏，
+           两条长轮询必须互斥——切换视图时自增世代号，旧循环醒来即自杀，
+           避免两个 in-flight 请求同时刷新同一个 #owMessages、互相覆盖 since。 */
         startPoll: function () {
             var self = this;
+            var myGen = this.pollGen = (this.pollGen || 0) + 1;
+            var alive = function () { return self.pollGen === myGen && !self.dm; };
             function loop() {
+                if (!alive()) return;
+                var roomId = self.room, since = self.since;
                 var t0 = new Date().getTime();
-                OwApi.post('poll', { room_id: self.room, since: self.since }, function (r, status) {
+                OwApi.post('poll', { room_id: roomId, since: since }, function (r, status) {
+                    if (!alive()) return;
                     if (!r || !r.ok) {
                         // 密码房授权过期：停止轮询，重新验证后继续
                         if (r && r.need_password) {
-                            self.passForget(self.room);
-                            self.askRoomPassword(self.room, self.roomName || '', function () { self.startPoll(); });
+                            self.passForget(roomId);
+                            self.askRoomPassword(roomId, self.roomName || '', function () { self.startPoll(); });
                             return;
                         }
                         self.failCount++;
@@ -873,7 +1133,9 @@
             var timeHtml = '<span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span>';
             var mainPart = roleTag(m.role, m.title, m.uid)
                 + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
-                + (m.type === 'private' && m.to_nickname ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '');
+                // 「→ 昵称」只在群聊里的私信有意义（说明发给谁）；
+                // 私聊会话页双方已确定，再显示就成了噪音（v1.1.0）
+                + (m.type === 'private' && m.to_nickname && !this.dm ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '');
             var meta = isSys ? '' :
                 '<div class="ow-msg-meta">' + mainPart + timeHtml + '</div>';
 
@@ -966,7 +1228,7 @@
             OwApi.post('rooms', {}, function (r) {
                 if (!r.ok) return;
                 self.cfg.rooms = r.data;
-                self.renderRooms(r.data);
+                self.loadConversations();   // v1.1.0：列表为群聊+私聊聚合，须走 conversations
                 var found = null, i, j;
                 for (i = 0; i < r.data.length; i++) if (r.data[i].id === gotoId) found = r.data[i];
                 if (found) {
@@ -1031,15 +1293,23 @@
             box.scrollTop = box.scrollHeight;
         },
 
+        /**
+         * 加载更早消息（向上翻页）。v1.1.0：按当前视图分流——
+         * 群聊走 history(room_id)，私聊走 dm_history(peer)，两者都是「取 before 之前的 30 条」。
+         */
         loadHistory: function () {
             var self = this, box = $('owMessages');
             var first = box.querySelector('.ow-msg');
             if (!first) { this.historyDone = true; return; }
             var before = parseInt(first.id.replace('owMsg', ''), 10);
+            var isDm = !!this.dm, peer = isDm ? this.dm.peer : '';
+            var action = isDm ? 'dm_history' : 'history';
+            var payload = isDm ? { peer: peer, before_id: before } : { room_id: this.room, before: before };
             this.loadingHistory = true;
-            OwApi.post('history', { room_id: this.room, before: before }, function (r) {
+            OwApi.post(action, payload, function (r) {
                 self.loadingHistory = false;
-                if (!r.ok || !r.data.length) { self.historyDone = true; $('owLoadMore').innerHTML = '没有更早的消息了'; return; }
+                if (self.dm !== isDm || (isDm && (!self.dm || self.dm.peer !== peer))) return;  // 已切走
+                if (!r.ok || !r.data.length) { self.historyDone = true; if ($('owLoadMore')) $('owLoadMore').innerHTML = '没有更早的消息了'; return; }
                 var oldH = box.scrollHeight, i;
                 for (i = r.data.length - 1; i >= 0; i--) {
                     self.addMessageBefore(r.data[i], first);
@@ -1089,7 +1359,7 @@
             if (!m.recalled) {
                 items.push({ t: '@ ' + m.nickname, run: function () { self.mention(m.nickname); } });
                 if (!m.mine && this.cfg.actor.kind === 'user')
-                    items.push({ t: '私信', run: function () { self.pm(m.nickname, m.uid, m.gid); } });
+                    items.push({ t: '私信', run: function () { self.openDmWith(m); } });
                 // 收藏贴纸已移到内容菜单（showContentMenu）：它是对「图片」的操作，不是对「人」的操作
             }
             // 插件扩展（v1.0.54）：如禁言插件按「管理员 / 房主」身份追加菜单项；
@@ -1117,13 +1387,18 @@
         },
 
         /* ---------- 发送 ---------- */
+        /**
+         * 发送消息。v1.1.0：私聊视图下自动改写为「私聊消息」——
+         * room_id=0（虚拟私聊空间）+ type=private + 对方标识（user:<id> / guest:<id>）。
+         * 昵称仅作展示快照，不作身份；服务端以数字 ID 判定双方可见性。
+         */
         send: function (opt) {
             opt = opt || {};
             var input = $('owInput');
             var content = opt.content != null ? opt.content : input.value;
             if (!content || !content.replace(/^\s+|\s+$/g, '')) return;
             var self = this;
-            OwApi.post('send', {
+            var payload = {
                 room_id: this.room,
                 type: opt.type || 'text',
                 content: content,
@@ -1131,11 +1406,22 @@
                 to_nickname: opt.to_nickname || '',
                 // 引用快照：JSON 字符串，服务端会再次校验截断
                 quote: this.quote ? JSON.stringify(this.quote) : ''
-            }, function (r) {
+            };
+            // 私聊视图：未显式指定消息类型（文本/图片/文件等富类型）时，一律发往对方
+            if (this.dm && !opt.type) {
+                payload.room_id = 0;
+                payload.type = 'private';
+                payload.to_user_id = this.dm.kind === 'user' ? this.dm.id : '';
+                payload.to_guest_id = this.dm.kind === 'guest' ? this.dm.id : '';
+                payload.to_nickname = this.roomName;
+            }
+            var wasDm = !!this.dm;
+            OwApi.post('send', payload, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 if (!opt.type || opt.type === 'text') input.value = '';
                 self.clearQuote();   // 发送成功后清掉引用条
                 self.autoGrow();   // 发送后回到单行（若手动拉高过则保持用户高度）
+                if (wasDm && self.dm) self.loadConversations();   // 刷新会话排序（自己发的排最前）
             });
         },
 
@@ -1181,25 +1467,22 @@
             OwChat.autoGrow();
         },
 
+        /**
+         * 从一条消息进入与该作者的私聊（v1.1.0）。
+         * 私聊不再用「弹窗写一条」的一次性交互，而是进入完整会话页——
+         * 历史可翻、双方可继续对话，与群聊共用同一套消息区与输入栏。
+         * 对象标识用 user:<id> / guest:<id>（昵称允许重名，不能当身份用）。
+         */
+        openDmWith: function (m) {
+            var peer = m.uid ? ('user:' + m.uid) : (m.gid ? ('guest:' + m.gid) : '');
+            if (!peer) { toast('无法确定私聊对象'); return; }
+            this.openDm(peer, m.nickname);
+        },
+        /** 兼容旧调用点（插件可能仍调 pm）；v1.1.0 起统一进入私聊会话页 */
         pm: function (nick, uid, gid) {
-            // v1.0.112：原生 prompt 改自研弹窗（私信输入 + 发送）
-            var self = this;
-            this.openModal(
-                '<h3>私信 ' + esc(nick) + '</h3>'
-                + '<div class="ow-form-item"><textarea class="ow-input" id="owPmText" rows="3" maxlength="2000" placeholder="输入私信内容（仅对方可见）"></textarea></div>'
-                + '<div class="ow-modal-actions">'
-                + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
-                + '<button class="ow-btn ow-btn-primary" id="owPmSend">发送</button></div>'
-            );
-            var sendPm = function () {
-                var content = $('owPmText').value.replace(/^\s+|\s+$/g, '');
-                if (!content) { toast('私信内容不能为空'); return; }
-                self.send({ type: 'private', content: content, to_user_id: uid || '', to_guest_id: gid || '', to_nickname: nick });
-                self.closeModal();
-            };
-            $('owPmSend').onclick = sendPm;
-            $('owPmText').onkeydown = function (e) { e = e || window.event; if ((e.key === 'Enter' || e.keyCode === 13) && (e.ctrlKey || e.metaKey)) sendPm(); };
-            $('owPmText').focus();
+            if (uid) return this.openDm('user:' + uid, nick);
+            if (gid) return this.openDm('guest:' + gid, nick);
+            toast('无法确定私聊对象');
         },
 
         collect: function (url) {
@@ -1215,9 +1498,12 @@
         /* ---------- 用户资料卡 ---------- */
         userCard: function (uid, nick) {
             if (!uid) { this.pmHint(nick); return; }
+            var self = this;
             OwApi.post('user_card', { id: uid }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 var u = r.data;
+                // v1.1.0：资料卡加「发私信」入口，与头像右键菜单走同一条私聊路径
+                var canPm = self.cfg.actor.kind === 'user' && self.cfg.actor.id !== u.id;
                 OwChat.openModal(
                     '<h3>用户资料</h3>'
                     + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname, false, u.role)
@@ -1227,6 +1513,9 @@
                     + '<p style="font-size:13px;color:#5C5C5C">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
                     + '积分：' + esc(u.points || 0) + '<br>'
                     + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
+                    + (canPm ? '<div class="ow-modal-actions">'
+                        + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">关闭</button>'
+                        + '<button class="ow-btn ow-btn-primary" onclick="OwChat.closeModal();OwChat.openDm(\'user:' + (u.id) + '\',' + JSON.stringify(u.nickname).replace(/"/g, '&quot;') + ')">发私信</button></div>' : '')
                 );
             });
         },
@@ -1629,7 +1918,9 @@
             OwApi.post('rooms', {}, function (r) {
                 if (!r.ok) return;
                 self.cfg.rooms = r.data;
-                self.renderRooms(r.data);
+                // v1.1.0：列表已改为「群聊+私聊」聚合，走 conversations 重新拉取，
+                // 直接 renderRooms 会把私聊行冲掉。
+                self.loadConversations();
             });
         },
 

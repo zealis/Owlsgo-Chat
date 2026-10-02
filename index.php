@@ -321,6 +321,29 @@ if ($action !== '') {
         case 'rooms':
             Api::json(['ok' => true, 'data' => Chat::rooms($actor)]);
 
+        // ---------- 私聊会话（v1.1.0） ----------
+        case 'conversations':   // 会话列表：群聊 + 私聊聚合，按最后活跃时间倒序
+            Api::json(['ok' => true, 'data' => Chat::conversations($actor)]);
+
+        case 'dm_history':      // 私聊历史（仅双方可见）
+            $peer = Chat::dmPeerKey($actor, $p('peer'));
+            if (!$peer) Api::json(['ok' => false, 'msg' => '私聊对象不合法']);
+            // 一并回传对方资料：会话列表里可能还没有该项（如首次私聊），
+            // 前端需要它来显示私聊页标题，否则只能显示占位文案
+            $info = Chat::dmPeerInfo($peer[0], $peer[1]);
+            if (!$info) Api::json(['ok' => false, 'msg' => '私聊对象不存在']);
+            Api::json([
+                'ok' => true,
+                'peer' => ['kind' => $info['kind'], 'id' => $info['id'],
+                           'name' => $info['name'], 'avatar' => $info['avatar']],
+                'data' => Chat::dmHistory($actor, $peer, (int)$p('before_id', '0')),
+            ]);
+
+        case 'dm_poll':         // 私聊增量轮询（长挂起）
+            $peer = Chat::dmPeerKey($actor, $p('peer'));
+            if (!$peer) Api::json(['ok' => false, 'msg' => '私聊对象不合法']);
+            Api::json(['ok' => true] + Chat::dmPoll($actor, $peer, (int)$p('since_id', '0')));
+
         case 'room_join':
             $room = Chat::room((int)$p('room_id'));
             if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);

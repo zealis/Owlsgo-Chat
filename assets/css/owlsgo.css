@@ -267,6 +267,95 @@ button { font-family: inherit; cursor: pointer; }
     border: 1px dashed var(--ow-border-control); font-size: 12px; color: var(--ow-text-sub);
 }
 .ow-room-item .ow-room-lock { font-size: 12px; color: var(--ow-text-sub); }
+
+/* ---------- 通用会话列表（v1.1.0：群聊 + 私聊共用） ----------
+   与 .ow-room-item 同一套视觉，仅多出「摘要行 / 时间 / 标签」，
+   命名空间 .ow-cl-* 与 JS 侧 ChatList 轮子一一对应。 */
+.ow-cl-item {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--ow-text);
+}
+.ow-cl-item:hover { background: var(--ow-blue-light); }
+.ow-cl-item.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
+.ow-cl-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--ow-primary-strong);
+    color: #fff;
+    text-align: center;
+    line-height: 32px;
+    font-size: 14px;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    overflow: hidden;
+}
+.ow-cl-icon img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+/* 主体：上行标题（含标签）/ 下行最后一条摘要 */
+.ow-cl-main {
+    flex: 1; -webkit-flex: 1;
+    min-width: 0;                    /* 允许在 flex 中收缩，摘要才能正确省略 */
+    display: flex; display: -webkit-flex;
+    flex-direction: column; -webkit-flex-direction: column;
+    gap: 2px;
+}
+.ow-cl-title {
+    font-size: 14px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ow-cl-sub {
+    font-size: 12px;
+    color: var(--ow-text-sub);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ow-cl-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    font-size: 11px; line-height: 17px;
+    font-weight: 400;
+    color: var(--ow-text-sub);
+    border: 1px solid var(--ow-border);
+    border-radius: 3px;
+    vertical-align: 1px;
+}
+.ow-cl-time {
+    font-size: 11px;
+    color: var(--ow-text-sub);
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    align-self: flex-start; -webkit-align-self: flex-start;
+    margin-top: 2px;
+}
+.ow-cl-more {
+    margin-left: auto; -webkit-margin-left: auto;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    width: 22px; height: 22px; line-height: 20px; padding: 0;
+    background: transparent; border: none; cursor: pointer;
+    font-size: 14px; color: var(--ow-text-sub); border-radius: 4px;
+}
+.ow-cl-more:hover { background: var(--ow-bg-sub); color: var(--ow-text); }
+.ow-cl-empty {
+    padding: 16px 10px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ow-text-sub);
+    list-style: none;
+}
+/* 顶栏「私聊」徽标：标识当前视图为双人会话（与群聊区分） */
+.ow-dm-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 0 6px;
+    font-size: 11px; line-height: 18px;
+    font-weight: 400;
+    color: #fff;
+    background: var(--ow-primary-strong);
+    border-radius: 3px;
+    vertical-align: 2px;
+}
 .ow-me {
     display: flex; display: -webkit-flex;
     align-items: center; -webkit-align-items: center;

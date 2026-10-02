@@ -216,10 +216,19 @@ class DB
             self::dropColumn('users', 'username');
         }
 
+        // ---------- v1.1.0：私聊搬进虚拟空间（room_id=0） ----------
+        // 1.0.x 的私信是「在某群里发给某人」，room_id 指向那个群；v1.1.0 起私聊是独立会话，
+        // 统一落在 room_id=0。若不迁移，存量私信既不会出现在私聊会话列表里，
+        // 又会继续混在群聊历史中（对双方可见、对其他人不可见），语义割裂。
+        // 幂等：仅处理 room_id>0 的存量行，迁移后 WHERE 不再命中。
+        self::$pdo->exec("UPDATE messages SET room_id=0 WHERE type='private' AND room_id>0");
+
         // 索引（跨引擎兼容语法）
         $idx = [
             'CREATE INDEX IF NOT EXISTS idx_msg_room ON messages (room_id, id)',
             'CREATE INDEX IF NOT EXISTS idx_msg_private ON messages (to_user_id, to_guest_id)',
+            // v1.1.0 私聊：历史/增量轮询按「room_id=0 + 发送方 + id」过滤，补一条发送方索引
+            'CREATE INDEX IF NOT EXISTS idx_msg_dm_sender ON messages (user_id, guest_id, id)',
             'CREATE INDEX IF NOT EXISTS idx_online_seen ON online (last_seen)',
             'CREATE INDEX IF NOT EXISTS idx_email ON email_codes (email, type, created_at)',
             'CREATE INDEX IF NOT EXISTS idx_logs ON security_logs (created_at)',
