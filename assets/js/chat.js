@@ -499,8 +499,8 @@
             };
             $('owToggleOnline').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
-            // 游客/未登录：侧栏承载登录注册入口，默认展开；登录用户默认收起（v1.0.101）
-            setPanel(this.cfg.actor.kind === 'none' || this.cfg.actor.kind === 'guest');
+            // 所有成员面板默认一律不展开（v1.0.101，v1.0.119 恢复：游客入口已移到顶栏）
+            setPanel(false);
             $('owMask').onclick = function () { setSide(false); setPanel(false); };
             // 创建群聊：侧栏底部按钮（仅登录用户渲染）→ 弹窗
             if ($('owBtnCreateRoom')) $('owBtnCreateRoom').onclick = function () {

@@ -819,6 +819,10 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<h2 class="ow-room-name" id="owRoomName">' . Sec::e($first['name']) . '</h2>'
        . '<span class="ow-tag ow-tag-green" id="owSpeakTag">可发言</span>'
        . '<span class="ow-latency" id="owLatency"></span>'
+       // 游客入口（v1.0.119）：侧栏默认收起，登录/注册改到顶栏，保证始终可见
+       . ($user ? '' : '<span class="ow-topbar-guest">'
+            . '<a class="ow-btn ow-btn-ghost ow-btn-sm" href="?page=register">注册</a>'
+            . '<a class="ow-btn ow-btn-primary ow-btn-sm" href="?page=login">登录</a></span>')
        // 右侧「+」下拉菜单（创建群聊等）
        . '<button class="ow-icon-btn" id="owToggleOnline" aria-label="在线成员">' . ow_icon('users') . '</button>'
        . '</header>'
