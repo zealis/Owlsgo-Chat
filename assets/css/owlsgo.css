@@ -13,13 +13,14 @@
     --ow-primary-dark: #00558F;     /* 悬停、选中态（白 7.79:1、浅蓝底 7.09:1） */
     --ow-bg: #FFFFFF;
     --ow-bg-sub: #F5F7FA;
-    /* 聊天区底色（v1.1.4 抽成变量）：原先顶栏 / 消息区 / 公告条三处各写死一份，
-       两侧边栏却用 --ow-bg-sub(#F5F7FA) → 与聊天区差 (7,6,5)，视觉上像两个区域。
-       现统一引用本变量，任何「与聊天区一致」的诉求都改这一处。 */
-    --ow-bg-chat: #EEF1F5;
-    --ow-bg-chat-top: #E6E9F0;         /* 聊天区渐变的上端色（自下而上：top → --ow-bg-chat） */
-    --ow-bg-chat-grad: linear-gradient(to top, #E6E9F0 0%, #EEF1F5 100%);
-    --ow-bg-chat-hover: linear-gradient(to top, #DFE4EC 0%, #E8ECF2 100%);
+    /* 聊天区底色（v1.1.4 抽成变量，v1.1.5 改为纯色 #F5F5F5）：
+       原先顶栏 / 消息区 / 公告条 / 输入栏 / 输入框五处各写死一份，右侧栏却用
+       --ow-bg-sub(#F5F7FA) → 与聊天区差 (7,6,5)，移动端浮层更是写死了 #EBF2ED 草绿。
+       现整个聊天界面（两侧栏 + 中间聊天 + 顶栏 + 输入区）统一引用本变量，
+       任何「与聊天区一致」的诉求都只改这一处。 */
+    --ow-bg-chat: #F5F5F5;
+    --ow-bg-chat-grad: none;             /* 纯色，不需要渐变 */
+    --ow-bg-chat-hover: #EBEBEB;         /* hover 反馈：略深一档的同色系灰 */
     --ow-border: #E0E4E8;            /* 装饰性分隔线（卡片/表格），非交互组件 */
     --ow-border-control: #8C8C8C;    /* 输入控件边框：对白底 3.36:1，满足 UI 组件 3:1 */
     --ow-text: #333333;
@@ -103,6 +104,62 @@ button { font-family: inherit; cursor: pointer; }
 .ow-captcha-row { display: flex; display: -webkit-flex; gap: 8px; }
 .ow-captcha-row .ow-input { flex: 1; -webkit-flex: 1; }
 .ow-captcha-row img { height: 38px; border: 1px solid var(--ow-border); border-radius: 6px; cursor: pointer; }
+
+/* ---------- 开关（State 按钮，v1.1.5 通用样式轮子） ----------
+   结构：.ow-switch-row（行） > label.ow-switch-label（左侧文字）
+        + .ow-switch（右侧 iOS 风格开关） + p.ow-switch-hint（下方提示）
+   用法见 assets/js/chat.js 的 OwChat.switchHtml()，前后台与插件共用同一套。 */
+.ow-switch-row {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    min-height: 30px;      /* 与 .ow-input 的 9px*2+1px*2+14 ≈ 35px 视觉对齐 */
+    cursor: pointer;
+    user-select: none; -webkit-user-select: none;
+}
+.ow-switch-row.is-disabled { cursor: not-allowed; opacity: .5; }
+.ow-switch-label {
+    flex: 1; -webkit-flex: 1;
+    min-width: 0; -webkit-min-width: 0;
+    font-size: 13px;
+    color: var(--ow-text);
+    margin-bottom: 0;      /* 覆盖 .ow-form-item label 的 display:block + margin */
+}
+.ow-switch {
+    /* 尺寸参照 iOS 风格开关：轨道 44×26，滑块 22，位移 18 */
+    position: relative;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    width: 44px; height: 26px;
+    border-radius: 13px;
+    background: #B8BCC2;                 /* 关：中性灰 */
+    transition: background .2s; -webkit-transition: background .2s;
+    box-sizing: border-box;
+}
+.ow-switch::after {
+    content: '';
+    position: absolute; top: 2px; left: 2px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+    transition: transform .2s; -webkit-transition: transform .2s;
+}
+.ow-switch.is-on { background: var(--ow-primary-strong); }
+.ow-switch.is-on::after { transform: translateX(18px); -webkit-transform: translateX(18px); }
+.ow-switch-hint {
+    flex-basis: 100%; -webkit-flex-basis: 100%;
+    margin: -6px 0 0;                     /* 紧贴开关行，不额外撑高 */
+    font-size: 12px;
+    color: var(--ow-text-sub);
+    line-height: 1.5;
+}
+/* 提示要换行到下一行：把行改成可换行容器，标签与开关保持一行 */
+.ow-switch-row { flex-wrap: wrap; -webkit-flex-wrap: wrap; }
+.ow-switch-row > .ow-switch { margin-left: auto; -webkit-margin-left: auto; }
+/* 无障碍：键盘可达。原生 checkbox 视觉隐藏但保留在 DOM 与 tab 序列里 */
+.ow-switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
+.ow-switch-input:focus-visible + .ow-switch { outline: 2px solid var(--ow-primary-strong); outline-offset: 2px; }
 
 .ow-alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; }
 .ow-alert-error { background: #fff1f0; color: var(--ow-red); border: 1px solid #ffa39e; }

@@ -94,6 +94,57 @@
 
     /* ---------- 通用工具 ---------- */
     function $(id) { return document.getElementById(id); }
+
+    /**
+     * 开关（State 按钮）HTML 生成器 —— 通用样式轮子（v1.1.5）。
+     *
+     * 前后台与插件共用同一套结构与样式，勿各处手写：
+     *   <label class="ow-switch-row">
+     *     <input type="checkbox" class="ow-switch-input" id="...">   ← 真实状态载体，可被表单直接读取
+     *     <span class="ow-switch-label">标签文字</span>
+     *     <span class="ow-switch is-on"></span>                        ← 视觉轨道
+     *     <p class="ow-switch-hint">提示文字（可省略）</p>
+     *   </label>
+     *
+     * 用原生 checkbox 承载状态：可被 FormData 收集、可 Tab 聚焦、点击整行都能切换，
+     * 视觉完全交给 .ow-switch，不需要额外同步逻辑。
+     *
+     * @param {string} id      input 的 id，绑定与读取都用它
+     * @param {string} label   左侧标签文字
+     * @param {boolean} on     初始状态
+     * @param {string} [hint]  下方灰色提示文字，可省略
+     * @param {boolean} [disabled] 是否禁用
+     */
+    function switchHtml(id, label, on, hint, disabled) {
+        return '<label class="ow-switch-row' + (disabled ? ' is-disabled' : '') + '" for="' + esc(id) + '">'
+            + '<input type="checkbox" class="ow-switch-input" id="' + esc(id) + '"' + (on ? ' checked' : '') + (disabled ? ' disabled' : '') + '>'
+            + '<span class="ow-switch-label">' + esc(label) + '</span>'
+            + '<span class="ow-switch' + (on ? ' is-on' : '') + '"></span>'
+            + (hint ? '<p class="ow-switch-hint">' + esc(hint) + '</p>' : '')
+            + '</label>';
+    }
+
+    /**
+     * 绑定开关的视觉同步：监听 change，把 .ow-switch 的 is-on 跟上 checkbox。
+     * 必须在元素插入 DOM 后调用（可传事件委托的容器，或单个 input）。
+     * @param {Element|NodeList} scope 容器（含 checkbox）或 checkbox 本身
+     */
+    function bindSwitches(scope) {
+        var list = [];
+        if (!scope) return;
+        if (scope.nodeType === 1 && scope.className && (' ' + scope.className + ' ').indexOf(' ow-switch-input ') >= 0) list.push(scope);
+        else list = [].slice.call(scope.querySelectorAll ? scope.querySelectorAll('.ow-switch-input') : []);
+        for (var i = 0; i < list.length; i++) {
+            (function (cb) {
+                var sw = cb.parentNode.querySelector('.ow-switch');
+                if (!sw) return;
+                var sync = function () { sw.className = 'ow-switch' + (cb.checked ? ' is-on' : ''); };
+                cb.addEventListener ? cb.addEventListener('change', sync, false) : cb.attachEvent('onchange', sync);
+                sync();
+            })(list[i]);
+        }
+    }
+
     function esc(s) {
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
@@ -2843,4 +2894,6 @@ logs: function (main) {
     w.OwApi = OwApi;   // 暴露给插件脚本（如用户管理插件 OwUM）使用
     // 通用助手同样暴露：插件脚本与主程序共用渲染与提示
     w.esc = esc; w.toast = toast; w.fmtUid = fmtUid; w.opts = opts; w.ROLE_CN = ROLE_CN;
+    // 开关（State 按钮）通用轮子：前后台与插件共用同一套 HTML 与绑定逻辑
+    w.switchHtml = switchHtml; w.bindSwitches = bindSwitches;
 })(window);
