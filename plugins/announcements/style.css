@@ -7,11 +7,12 @@
     gap: 10px;
     min-height: 56px;
     padding: 10px 16px;
-    background: #fffbe6;
-    border-bottom: 1px solid #ffe58f;
+    /* 冷灰渐变（v1.0.117）：自下而上由 #cfd9df 过渡到 #e2ebf0 */
+    background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
+    border-bottom: 1px solid #c8d4dc;
     cursor: pointer;
 }
-.oa-bar:hover { background: #fff9db; }
+.oa-bar:hover { background-image: linear-gradient(to top, #c6d2d9 0%, #dae4ea 100%); }
 .oa-bar-pin {
     flex-shrink: 0; -webkit-flex-shrink: 0;
     font-size: 11px;
@@ -26,7 +27,7 @@
     flex: 1; -webkit-flex: 1;
     min-width: 0; -webkit-min-width: 0;   /* flex 子项防溢出错乱 */
     font-size: 13px;
-    color: #43311a;
+    color: #2f3a42;   /* 冷灰渐变底上的深色文字（对比度充足） */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
