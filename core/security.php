@@ -216,6 +216,50 @@ class Sec
             'secure'   => self::isHttps(),   // https 部署时强制仅加密通道传输（v1.0.94）
             'samesite' => 'Lax',
         ]);
+        // 会话审计（v1.0.113 诊断）：自定义 save handler，记录每次读/写/销毁的
+        // 调用方 URI 与会话键清单——定位「退出登录」时到底是哪个请求覆盖了会话。
+        if (!defined('OA_SESS_HANDLER_ON')) {
+            define('OA_SESS_HANDLER_ON', true);
+            $trace = dirname(__DIR__) . '/data/session_trace.log';
+            $handler = new class($trace) implements SessionHandlerInterface {
+                private string $path;
+                private string $trace;
+                public function __construct(string $trace)
+                {
+                    $this->path = ini_get('session.save_path') ?: sys_get_temp_dir();
+                    $this->trace = $trace;
+                }
+                private function tag(): string
+                {
+                    $uri = (string)($_SERVER['REQUEST_URI'] ?? 'cli');
+                    return date('m-d H:i:s') . ' ' . substr(session_id() ?: '-', 0, 10) . ' ' . $uri;
+                }
+                public function open($path, $name): bool { return true; }
+                public function close(): bool { return true; }
+                public function read($id): string
+                {
+                    $f = $this->path . '/sess_' . $id;
+                    $data = is_file($f) ? (string)file_get_contents($f) : '';
+                    @file_put_contents($this->trace, $this->tag() . " READ keys=" . (implode(',', array_keys($_SESSION)) ?: '(empty)') . " datakeys=" . (preg_match_all('/(\w+)\|/', $data, $m) ? implode(',', $m[1]) : '(new)') . "\n", FILE_APPEND | LOCK_EX);
+                    return $data;
+                }
+                public function write($id, $data): bool
+                {
+                    preg_match_all('/(\w+)\|/', $data, $m);
+                    @file_put_contents($this->trace, $this->tag() . " WRITE keys=" . implode(',', $m[1] ?? []) . "\n", FILE_APPEND | LOCK_EX);
+                    return file_put_contents($this->path . '/sess_' . $id, $data) !== false;
+                }
+                public function destroy($id): bool
+                {
+                    @file_put_contents($this->trace, $this->tag() . " !!DESTROY\n", FILE_APPEND | LOCK_EX);
+                    $f = $this->path . '/sess_' . $id;
+                    return is_file($f) ? @unlink($f) : true;
+                }
+                public function gc($max): int { return 0; }   // 关闭 PHP 自带 GC（gc_maxlifetime 已拉长，避免误清活跃会话）
+                public function create_sid(): string { return session_create_id() ?: bin2hex(random_bytes(16)); }
+            };
+            session_set_save_handler($handler, true);
+        }
         if (session_status() !== PHP_SESSION_ACTIVE) session_start();
         // 会话指纹（v1.0.94）：会话创建时记录客户端特征，后续请求比对；
         // 登录 Cookie 被跨站窃取 / 本地读取后，换浏览器或换网络重放将无法通过校验。
