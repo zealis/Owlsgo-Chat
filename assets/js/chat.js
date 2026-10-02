@@ -283,7 +283,7 @@
         if (role === 'guest') {
             return '<span class="' + cls + '" style="background:#E5D5A0;color:#5C4500">' + ch + '</span>';
         }
-        var colors = ['#006AB8', '#00558F', '#A05000', '#237804', '#5B21B6'];
+        var colors = ['#0099FF', '#00558F', '#A05000', '#237804', '#5B21B6'];
         var ci = (name || '').length % colors.length;
         return '<span class="' + cls + '" style="background:' + colors[ci] + '">' + ch + '</span>';
     }
