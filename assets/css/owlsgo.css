@@ -432,7 +432,13 @@ button { font-family: inherit; cursor: pointer; }
 .ow-inputbar { border-top: 1px solid var(--ow-border); background: var(--ow-bg); padding: 8px 12px 12px; flex-shrink: 0; -webkit-flex-shrink: 0; }
 .ow-toolbar { display: flex; display: -webkit-flex; gap: 4px; margin-bottom: 6px; }
 .ow-input-row { display: flex; display: -webkit-flex; gap: 10px; align-items: flex-end; -webkit-align-items: flex-end; }
-.ow-input-row .ow-input { resize: none; max-height: 320px; background: var(--ow-bg-sub); }
+/* 输入框底色与群聊界面一致（v1.0.118）：沿用消息区同款浅灰渐变，仅靠边框区分输入区域 */
+.ow-input-row .ow-input {
+    resize: none;
+    max-height: 320px;
+    background-color: #eef1f5;
+    background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);
+}
 .ow-input-row { position: relative; }
 /* 输入框拖拽手柄（右下角，避开发送按钮） */
 /* 引用条：嵌入输入框内部第一行（绝对定位固定在顶部，不随内容滚动/输入量变化） */
