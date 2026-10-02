@@ -162,7 +162,10 @@ class DB
                 title $str, avatar $text,
                 type $str NOT NULL DEFAULT 'text', content $text,
                 to_user_id $int, to_guest_id $int, to_nickname $str,
-                recalled $int NOT NULL DEFAULT 0, ip $str, created_at $ts NOT NULL)",
+                recalled $int NOT NULL DEFAULT 0,
+                deleted $int NOT NULL DEFAULT 0, deleted_at $int NOT NULL DEFAULT 0,
+                deleted_by $str,
+                ip $str, created_at $ts NOT NULL)",
             "CREATE TABLE IF NOT EXISTS bans (
                 id $id, type $str NOT NULL, target $str NOT NULL,
                 room_id $int NOT NULL DEFAULT 0, reason $text,
@@ -204,6 +207,12 @@ class DB
         self::addColumn('rooms', 'avatar', 'text', "''");     // 群聊头像（v1.0.76，uploads/avatar/ 下的相对路径）
         self::addColumn('users', 'points', 'int', '0');   // 用户积分
         self::addColumn('users', 'birthdate', 'varchar(10)', "''");   // 出生日期（年龄限制注册用）
+        // v1.1.0 软删除：deleted=1 表示「已删除」。行保留（昵称/时间/IP 可审计），
+        // content 同步清空（原内容不可恢复），到期由 Chat::purgeDeleted() 物理删除。
+        // 与 recalled（撤回）区分：撤回是用户自己的动作且不涉及合规留痕。
+        self::addColumn('messages', 'deleted', 'int', '0');
+        self::addColumn('messages', 'deleted_at', 'int', '0');
+        self::addColumn('messages', 'deleted_by', 'varchar(64)', "''");
         // 已废弃字段：rooms.min_age（进入该房间的最低年龄）随 1.0.31 下线，应用层已不再读写。
         // 保留此行仅为兼容历史数据库（列仍存在且幂等），勿在业务代码中重新启用。
         self::addColumn('rooms', 'min_age', 'int', '0');
@@ -365,10 +374,16 @@ class DB
             'reg_email_verify' => '1',
             'guest_browse'     => '1',
             'guest_chat'       => '1',
-            'guest_daily_limit'=> '50',
+            // v1.1.0 起游客发言限制改为「两条消息之间的最小间隔（秒）」，
+            // 取代原先的「每日发言条数上限」——限额在天级粒度过粗，
+            // 30 秒间隔既能防洪，又不会让正常聊天被卡死。0 = 不限制。
+            'guest_msg_interval' => '30',
             'msg_rate_limit'   => '5',   // 每条消息最小间隔(秒)内的最大条数窗口
             'msg_rate_window'  => '10',  // 频率窗口(秒)
             'msg_rate_max'     => '8',   // 窗口内最大消息数
+            // v1.1.0 软删除保留期（天）：超期后由 Chat::purgeDeleted() 物理清除。
+            // 0 = 永久保留（不物理删除，行一直留着）
+            'msg_deleted_retain_days' => '30',
             'mail_rate_limit'  => '60',  // 邮件发送最小间隔(秒)
             'sound_default'    => '1',
             'room_pass_ttl'    => '1800', // 密码房通行缓存(秒)，0=每次进入都要输入密码

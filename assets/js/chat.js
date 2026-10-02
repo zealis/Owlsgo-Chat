@@ -621,9 +621,43 @@
             $('owMessages').onscroll = function () {
                 if (this.scrollTop < 40 && !self.historyDone && !self.loadingHistory) self.loadHistory();
             };
-            // 「加载更早消息…」每次切换会话都会被 innerHTML 重建，元素换了，
-            // 直接 onclick 绑定会失效（v1.1.0 私聊复用同一消息区后暴露）。改用父容器委托。
-            // 注意：引用跳转仍走 buildMessage 里的内联 onclick（ow-quote-link），不归这里管。
+            /* 消息时间：悬停「消息气泡」满 2 秒才显示，移开立即隐藏（v1.1.0）
+               为什么不用 CSS :hover —— CSS 无法表达「持续满 N 秒」，
+               一 hover 就出现会与快速扫读打架，也会让昵称行一直跳。
+               用父容器委托而非逐条绑定：消息频繁重渲染（innerHTML 重建），
+               逐条绑定会随重建丢失。
+               计时器挂在 OwChat 上，切换会话时统一清理，避免残留。 */
+            $('owMessages').onmouseover = function (e) {
+                e = e || w.event;
+                var t = e.target || e.srcElement, node = t;
+                while (node && node !== this) {
+                    if (node.className && (' ' + node.className + ' ').indexOf(' ow-msg ') >= 0) break;
+                    node = node.parentNode;
+                }
+                if (!node || node === this) { self.hideMsgTime(); return; }
+                if (self._timeMsg === node) return;          // 已在同一条计时中
+                self.hideMsgTime();
+                self._timeMsg = node;
+                self._timeTimer = setTimeout(function () {
+                    self._timeTimer = null;
+                    if (self._timeMsg === node) node.className += ' ow-time-show';
+                }, 2000);
+            };
+            $('owMessages').onmouseout = function (e) {
+                e = e || w.event;
+                var t = e.target || e.srcElement, node = t, to = e.relatedTarget || e.toElement;
+                while (node && node !== this) {
+                    if (node.className && (' ' + node.className + ' ').indexOf(' ow-msg ') >= 0) break;
+                    node = node.parentNode;
+                }
+                if (!node || node === this) return;
+                // 鼠标只是从消息内部移到了它自己的子元素上（不算真正离开）
+                if (to && node.contains && node.contains(to)) return;
+                self.hideMsgTime();
+            };
+            /* 「加载更早消息…」每次切换会话都会被 innerHTML 重建，元素换了，
+               直接 onclick 绑定会失效（v1.1.0 私聊复用同一消息区后暴露）。改用父容器委托。
+               注意：引用跳转仍走 buildMessage 里的内联 onclick（ow-quote-link），不归这里管。 */
             $('owMessages').onclick = function (e) {
                 e = e || w.event;
                 var t = e.target || e.srcElement;
@@ -639,7 +673,7 @@
                 }
                 if (!node || node === this || !node.id) { self.hideCtxMenu(); return; }
                 var m = self.msgCache[parseInt(node.id.replace('owMsg', ''), 10)];
-                if (!m || m.type === 'system' || m.recalled) { self.hideCtxMenu(); return; }
+                if (!m || m.type === 'system' || m.recalled || m.deleted) { self.hideCtxMenu(); return; }
                 if (e.preventDefault) e.preventDefault(); else e.returnValue = false;
                 // 右键落点分流（v1.0.69）：点在头像上 → 对该「人」的操作菜单；
                 // 点在消息内容 / 其它区域 → 对该「消息」的操作菜单（复制 / 引用 / 删除）
@@ -865,6 +899,7 @@
             this.renderMe();
             this.clearQuote();
             $('owRoomName').innerHTML = esc(this.roomName);
+            this.hideMsgTime();   // v1.1.0：消息区重渲染前清掉悬停计时（引用的元素已不存在）
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             ChatList.activate('owRoomList', 'dm:' + peer);
             $('owSidebar').className = $('owSidebar').className.replace(' open', '');
@@ -1047,6 +1082,7 @@
             this.renderMe();   // 资料区身份标签随群聊变化（群主/会员归属当前群）
             this.clearQuote();
             $('owRoomName').innerHTML = esc(name);
+            this.hideMsgTime();   // v1.1.0：消息区重渲染前清掉悬停计时（引用的元素已不存在）
             $('owMessages').innerHTML = '<div class="ow-load-more" id="owLoadMore">加载更早消息…</div>';
             var items = $('owRoomList').getElementsByTagName('li'), i;
             for (i = 0; i < items.length; i++) {
@@ -1174,7 +1210,7 @@
         msgCache: {},
 
         // 统一构建消息 DOM：头像一侧依次是「用户组标签、昵称」；
-        // 时间不直接显示，悬停气泡时显示在气泡下方；操作（@/私信/收藏/撤回等）改为右键菜单
+        // 时间不直接显示，悬停气泡满 2 秒才显示；操作（@/私信/收藏/撤回等）改为右键菜单
         buildMessage: function (m) {
             var cls = 'ow-msg';
             if (m.mine) cls += ' mine';
@@ -1182,9 +1218,12 @@
             if (m.type === 'private') cls += ' private';
             if (m.type === 'system') cls += ' system';
             if (m.recalled) cls += ' recalled';
+            // v1.1.0 软删除：服务端已清空 content，前台只显示占位文案
+            if (m.deleted) cls += ' deleted';
 
             var content;
-            if (m.recalled) content = '<span class="ow-msg-content">此消息已撤回</span>';
+            if (m.deleted) content = '<span class="ow-msg-content">该消息已删除</span>';
+            else if (m.recalled) content = '<span class="ow-msg-content">此消息已撤回</span>';
             else if (m.type === 'file') content = '<span class="ow-msg-content" style="padding:4px">' + fileCardHtml(m) + '</span>';
             else if (m.type === 'image') content = '<span class="ow-msg-content" style="padding:4px"><img class="ow-msg-img" src="' + esc(m.content) + '" onclick="OwChat.viewImg(this.src)" alt="图片"></span>';
             else content = '<span class="ow-msg-content">' + (m.quote && (m.quote.nick || m.quote.text)
@@ -1196,13 +1235,12 @@
 
             var isSys = m.type === 'system';
             // meta 行：头像一侧依次是「用户组标签、昵称」；时间不直接显示，
-            // 悬停时出现在该行远离头像的一端（自己的消息镜像后标签仍贴头像）
+            // 悬停满 2 秒才显示（见 ow-time-show 类与 hideMsgTime）
             var timeHtml = '<span class="ow-msg-time">' + esc(m.date + ' ' + m.time) + '</span>';
             var mainPart = roleTag(m.role, m.title, m.uid)
-                + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>'
-                // 「→ 昵称」只在群聊里的私信有意义（说明发给谁）；
-                // 私聊会话页双方已确定，再显示就成了噪音（v1.1.0）
-                + (m.type === 'private' && m.to_nickname && !this.dm ? ' <span style="color:#722ed1">→ ' + esc(m.to_nickname) + '</span>' : '');
+                + ' <span class="ow-msg-nick" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">' + esc(m.nickname) + '</span>';
+            // v1.1.0：去掉昵称后的「→ 昵称」私信文字标签。
+            // 私聊会话页双方已确定；群聊内的 @提及 足以定位发给人，额外标注纯噪音。
             var meta = isSys ? '' :
                 '<div class="ow-msg-meta">' + mainPart + timeHtml + '</div>';
 
@@ -1416,6 +1454,19 @@
             var menu = $('owCtxMenu');
             if (menu) { menu.style.display = 'none'; menu._from = ''; }
         },
+        /* ---------- 消息时间显隐（v1.1.0）----------
+           悬停消息气泡满 2 秒才显示时间，移开立即隐藏。
+           计时状态集中在这里，切换会话 / 消息区重渲染前统一 hideMsgTime()，
+           避免「已经移开鼠标但定时器还在跑」导致时间凭空出现。 */
+        _timeMsg: null,
+        _timeTimer: null,
+        hideMsgTime: function () {
+            if (this._timeTimer) { clearTimeout(this._timeTimer); this._timeTimer = null; }
+            if (this._timeMsg && this._timeMsg.className) {
+                this._timeMsg.className = this._timeMsg.className.replace(' ow-time-show', '');
+            }
+            this._timeMsg = null;
+        },
         /**
          * 右键「头像」的用户菜单：对该发言人的操作（@ / 私信 / 收藏 / 撤回 / 禁言…）。
          * 插件通过 OwChat.onMsgCtx 追加的项也进这里（都是针对「人」的能力）。
@@ -1423,7 +1474,7 @@
          */
         showUserMenu: function (x, y, m) {
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
-            if (!m.recalled) {
+            if (!m.recalled && !m.deleted) {
                 items.push({ t: '@ ' + m.nickname, run: function () { self.mention(m.nickname); } });
                 if (!m.mine && this.cfg.actor.kind === 'user')
                     items.push({ t: '私信', run: function () { self.openDmWith(m); } });
@@ -1829,7 +1880,7 @@
          */
         showContentMenu: function (x, y, m) {
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
-            if (!m.recalled) {
+            if (!m.recalled && !m.deleted) {
                 items.push({ t: '复制', run: function () { self.copyMsg(m); } });
                 if (m.type === 'image' && this.cfg.actor.kind === 'user')
                     items.push({ t: '收藏为贴纸', run: function () { self.collect(m.content); } });
@@ -2474,7 +2525,7 @@ logs: function (main) {
                         + '<div class="ow-form-item"><label>游客可浏览</label>' + sel('guest_browse', { '1': '允许', '0': '禁止' }) + '</div>'
                         + '<div class="ow-form-item"><label>游客可发言</label>' + sel('guest_chat', { '1': '允许', '0': '禁止' }) + '</div>'
                         + '</div><div class="ow-form-row">'
-                        + '<div class="ow-form-item"><label>游客每日发言限额</label><input class="ow-input" id="owS_guest_daily_limit" value="' + esc(d.guest_daily_limit || '50') + '"></div>'
+                        + '<div class="ow-form-item"><label>游客发言间隔(秒)</label><input class="ow-input" id="owS_guest_msg_interval" value="' + esc(d.guest_msg_interval || '30') + '"></div>'
                         + '<div class="ow-form-item"><label>发言频率窗口(秒)</label><input class="ow-input" id="owS_msg_rate_window" value="' + esc(d.msg_rate_window || '10') + '"></div>'
                         + '<div class="ow-form-item"><label>窗口内最大条数</label><input class="ow-input" id="owS_msg_rate_max" value="' + esc(d.msg_rate_max || '8') + '"></div>'
                         + '<div class="ow-form-item"><label>邮件发送间隔(秒)</label><input class="ow-input" id="owS_mail_rate_limit" value="' + esc(d.mail_rate_limit || '60') + '"></div>'
@@ -2501,6 +2552,10 @@ logs: function (main) {
                         + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
                         + '</div>'
                         + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在群聊管理中调整。</p>'
+                        // v1.1.0 软删除：删除消息只清空正文并留行（供审计），到期才物理清除
+                        + '<div class="ow-form-item"><label>已删除消息保留期(天)</label><input class="ow-input" id="owS_msg_deleted_retain_days" value="' + esc(d.msg_deleted_retain_days || '30') + '"></div>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin:4px 0 12px">删除消息时正文立即清空（原文不可恢复），但记录行会保留到本期限满后物理清除，'
+                        + '期间仍可用于审计（谁在何时删了谁的消息）。填 0 表示永久保留、永不物理删除。</p>'
                         + '<div class="ow-form-item"><label>新消息提示音默认</label>' + sel('sound_default', { '1': '开', '0': '关' }) + '</div>'
                         + '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.settingsSave()">保存设置</button></div>';
                 });
@@ -2697,7 +2752,8 @@ logs: function (main) {
                 reg_email_verify: $('owS_reg_email_verify').value,
                 guest_browse: $('owS_guest_browse').value,
                 guest_chat: $('owS_guest_chat').value,
-                guest_daily_limit: $('owS_guest_daily_limit').value,
+                guest_msg_interval: $('owS_guest_msg_interval') ? $('owS_guest_msg_interval').value : '',
+                msg_deleted_retain_days: $('owS_msg_deleted_retain_days') ? $('owS_msg_deleted_retain_days').value : '',
                 msg_rate_window: $('owS_msg_rate_window').value,
                 msg_rate_max: $('owS_msg_rate_max').value,
                 mail_rate_limit: $('owS_mail_rate_limit').value,

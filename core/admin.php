@@ -241,13 +241,25 @@ class Admin
                     }
                 }
                 $allow = ['site_name', 'site_url', 'allow_register', 'reg_email_verify', 'guest_browse', 'guest_chat',
-                          'guest_daily_limit', 'msg_rate_window', 'msg_rate_max', 'mail_rate_limit',
+                          // v1.1.0：guest_daily_limit 已下线，改为发言间隔（秒）
+                          'guest_msg_interval',
+                          // v1.1.0 软删除保留期（天），0 = 永久保留
+                          'msg_deleted_retain_days',
+                          'msg_rate_window', 'msg_rate_max', 'mail_rate_limit',
                           'sound_default', 'room_pass_ttl',
                           'login_fail_captcha', 'login_fail_lock', 'login_lock_minutes', 'min_register_age',
                           'file_upload', 'file_exts', 'file_max_size',
                           'room_create_allow', 'room_create_cost'];
+                // 数值型设置统一收敛为非负整数：负数会让间隔/保留期这类
+                // 「窗口秒数」「天数」直接失效或行为诡异，前端输入框挡不住。
+                $intKeys = ['guest_msg_interval', 'msg_deleted_retain_days'];
                 foreach ($allow as $k) {
-                    if (isset($_POST[$k])) DB::setSetting($k, $p($k));
+                    if (!isset($_POST[$k])) continue;
+                    if (in_array($k, $intKeys, true)) {
+                        DB::setSetting($k, (string)max(0, (int)$p($k)));
+                    } else {
+                        DB::setSetting($k, $p($k));
+                    }
                 }
                 Sec::log('admin_settings', $actor['nickname']);
                 Api::json(['ok' => true, 'msg' => '设置已保存']);

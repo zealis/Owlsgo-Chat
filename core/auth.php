@@ -43,7 +43,6 @@ class Auth
         $id = DB::insert('guests', [
             'token' => $token, 'nickname' => $nickname,
             'client_key' => Sec::clientKey(), 'ip' => Sec::ip(),
-            'daily_count' => 0, 'daily_date' => date('Y-m-d'),
             'created_at' => time(),
         ]);
         setcookie('owl_guest', $token, [

@@ -427,12 +427,17 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg-meta { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 2px; }
 .ow-msg-meta .ow-msg-nick { color: var(--ow-text); font-weight: 600; cursor: pointer; margin-right: 4px; }
 .ow-msg-meta .ow-msg-nick:hover { color: var(--ow-primary-dark); }
-/* meta 行 flex：悬停时时间出现在该行远离头像的一端（自己的消息镜像后标签仍贴头像） */
+/* meta 行 flex：时间紧跟昵称之后（v1.1.0：不再推到远离头像的一端）。
+   显隐由 JS 控制——悬停消息气泡满 2 秒才加 .ow-time-show，
+   CSS :hover 无法表达「持续满 N 秒」，一 hover 就出现会与快速扫读打架。
+   自己的消息整行镜像（row-reverse），但时间仍需跟在昵称**右侧**，
+   故把时间 order 提到最前：头像在右时，昵称与时间一起贴向昵称的延伸方向。 */
 .ow-msg-meta { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 6px; flex-wrap: wrap; }
-.ow-msg-meta .ow-msg-time { display: none; font-size: 12px; color: var(--ow-text-sub); margin-left: auto; }
+.ow-msg-meta .ow-msg-time { display: none; font-size: 12px; color: var(--ow-text-sub); }
 .ow-msg.mine .ow-msg-meta { flex-direction: row-reverse; -webkit-flex-direction: row-reverse; }
-.ow-msg.mine .ow-msg-meta .ow-msg-time { margin-left: auto; margin-right: 0; }
-.ow-msg:hover .ow-msg-meta .ow-msg-time { display: inline; }
+.ow-msg.ow-time-show .ow-msg-meta .ow-msg-time { display: inline; }
+/* row-reverse 下默认会把时间排到昵称前面，用 order 拉回昵称之后 */
+.ow-msg.mine .ow-msg-meta .ow-msg-time { order: -1; -webkit-order: -1; }
 .ow-msg-content {
     display: inline-block;
     padding: 8px 12px;
@@ -450,11 +455,16 @@ button { font-family: inherit; cursor: pointer; }
 .ow-msg.mine .ow-msg-body { text-align: right; }
 .ow-msg.mine .ow-msg-content { background: var(--ow-blue-light); border-color: #91d5ff; text-align: left; }
 .ow-msg.mention .ow-msg-content { background: #fffbe6; border-color: #ffe58f; }
-.ow-msg.private .ow-msg-content { background: #f9f0ff; border-color: #d3adf7; }
-.ow-msg.private .ow-msg-meta::after { content: "[私信]"; color: #722ed1; margin-left: 6px; font-size: 10px; }
+/* v1.1.0：私聊消息使用与群聊完全一致的气泡配色与昵称行。
+   此前私聊用紫色气泡 + ::after 追加「[私信]」标签，与群聊视觉割裂，
+   且在私聊会话页里「这是私信」本就是废话（页面本身就是私聊）。 */
 .ow-msg.system { justify-content: center; -webkit-justify-content: center; }
 .ow-msg.system .ow-msg-content { background: transparent; border: none; color: var(--ow-text-sub); font-size: 12px; padding: 2px 8px; }
 .ow-msg.recalled .ow-msg-content { background: transparent; border: 1px dashed var(--ow-border); color: var(--ow-text-sub); font-size: 12px; }
+/* v1.1.0 软删除：正文已由服务端清空，前台只留占位气泡。
+   与「撤回」同款虚线弱化样式——两者都表示「这里原本有内容但现在不可见」，
+   文案不同（该消息已删除 / 此消息已撤回）以区分是管理删除还是用户撤回。 */
+.ow-msg.deleted .ow-msg-content { background: transparent; border: 1px dashed var(--ow-border); color: var(--ow-text-sub); font-size: 12px; }
 .ow-msg-img { max-width: 240px; max-height: 240px; border-radius: 6px; cursor: zoom-in; display: block; }
 .ow-msg-sticker { max-width: 120px; max-height: 120px; border-radius: 6px; cursor: zoom-in; }
 .ow-birth-row { display: flex; display: -webkit-flex; gap: 8px; }
