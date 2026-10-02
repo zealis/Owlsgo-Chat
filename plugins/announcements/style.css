@@ -1,12 +1,15 @@
 /* 群公告插件样式 */
 
-/* ---------- 聊天室上方公告条（加高，单条） ---------- */
+/* ---------- 聊天室上方公告条（单行紧凑） ---------- */
 .oa-bar {
     display: flex; display: -webkit-flex;
     align-items: center; -webkit-align-items: center;
     gap: 10px;
-    min-height: 56px;
-    padding: 10px 16px;
+    /* v1.1.3：去掉 min-height:56px。
+       那是 v0.x「加高」时期的遗留，内容实际只占 40.5px（文字 19.5 + padding 20 + border 1），
+       硬撑到 56px 会白吃聊天区高度的 6%，且公告条只是提示性信息、不该抢主内容的空间。
+       现在高度完全由内容决定：单行 ≈ 34px，两行（长公告触发 -webkit-line-clamp:2）≈ 52px。 */
+    padding: 6px 14px;
     /* 与群聊界面同款底色（v1.0.121）：自下而上由 #e6e9f0 过渡到 #eef1f5 */
     background-color: #eef1f5;
     background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);
@@ -17,7 +20,7 @@
 .oa-bar-pin {
     flex-shrink: 0; -webkit-flex-shrink: 0;
     font-size: 11px;
-    padding: 2px 8px;
+    padding: 1px 7px;          /* v1.1.3：2px → 1px，配合外层 padding 收紧整体高度 */
     border-radius: 3px;
     background: #e6f4ff;
     color: #0958d9;
@@ -38,7 +41,9 @@
 }
 .oa-bar-more {
     flex-shrink: 0; -webkit-flex-shrink: 0;
-    font-size: 22px;
+    /* v1.1.3：22px → 16px。原字号比正文（13px/行高19.5px）还高，会成为整条公告条的
+       实际撑高元素；16px 与「›」这个箭头的视觉重量相称，交给 line-height 居中即可。 */
+    font-size: 16px;
     line-height: 1;
     color: #0958d9;
     padding: 0 2px;
