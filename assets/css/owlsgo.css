@@ -31,6 +31,11 @@
     --ow-red: #C41D1F;              /* 危险 / 管理员标签：白底 5.93、浅红底 5.39，白字 5.93 */
     --ow-orange: #A05000;           /* VIP 标签：浅橙底 5.41、白底 5.77 */
     --ow-blue-light: #E6F7FF;
+    /* v1.1.22：悬浮底色独立成变量。原先 hover 直接复用 --ow-blue-light(#E6F7FF)，
+       导致「改悬浮色」会连带动到 3 处非悬浮：.ow-room-item/.ow-cl-item/.ow-admin-menu
+       的 .active 选中态，以及 .ow-msg.mine 自己消息气泡底色。
+       用户只要求改悬浮，故这里另开一个变量，两类语义彻底分开。 */
+    --ow-hover-bg: #E4E4E4;
     --ow-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     --ow-mono: Consolas, Monaco, "Courier New", monospace;
     /* v1.1.17：顶栏高度带。实测 = padding 10+10 + 图标钮 36 + 下边框 1 = 57px。
@@ -71,7 +76,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-btn-primary:hover { background: var(--ow-primary-dark); color: #fff; }   /* 显式锁白，防 a:hover 级联吞字 */
 .ow-btn-primary:active { background: #005a9e; }
 .ow-btn-ghost { background: transparent; border-color: var(--ow-border-control); }
-.ow-btn-ghost:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
+.ow-btn-ghost:hover { background: var(--ow-hover-bg); color: var(--ow-primary-dark); }
 .ow-btn-block { display: block; width: 100%; text-align: center; }
 /* 小号按钮（列表行内操作，如「移出」）：与正文同色系但更紧凑 */
 .ow-btn-mini { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
@@ -410,7 +415,7 @@ button { font-family: inherit; cursor: pointer; }
     cursor: pointer;
     color: var(--ow-text);
 }
-.ow-room-item:hover { background: var(--ow-blue-light); }
+.ow-room-item:hover { background: var(--ow-hover-bg); }
 .ow-room-item.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
 .ow-room-icon {
     width: 32px; height: 32px;
@@ -446,6 +451,11 @@ button { font-family: inherit; cursor: pointer; }
 /* ---------- 通用会话列表（v1.1.0：群聊 + 私聊共用） ----------
    与 .ow-room-item 同一套视觉，仅多出「摘要行 / 时间 / 标签」，
    命名空间 .ow-cl-* 与 JS 侧 ChatList 轮子一一对应。 */
+/* v1.1.22：容器 48px → **40px**（用户反馈「头像现在又太大了，小一点」）。
+   尺寸轨迹：32（偏小）→ 40（偏小）→ 48（偏大）→ **40（当前）**。
+   取 40px 的依据：行内 padding 16 + 文字块 41 = 57，
+   40px 占行高 71%；44px 73%；48px 75%。40px 与两行文字视觉重量匹配。
+   ⚠️ 同宽的 .ow-avatar-sm 仍是 28px（成员列表等场景），**只改会话列表这一处**。 */
 .ow-cl-item {
     display: flex; display: -webkit-flex;
     /* v1.1.21：align-items 从 center 改为 **flex-start**。
@@ -460,30 +470,26 @@ button { font-family: inherit; cursor: pointer; }
     cursor: pointer;
     color: var(--ow-text);
 }
-.ow-cl-item:hover { background: var(--ow-blue-light); }
+.ow-cl-item:hover { background: var(--ow-hover-bg); }
 /* v1.1.6：选中态去掉 color 与 font-weight —— 文字选中前后完全一致。
    原先 `.active` 设在父容器上，color 被 .ow-cl-title 继承（变深蓝 #00558F）、
    font-weight:600 还被没有显式字重的子元素连坐 —— .ow-cl-sub 摘要与 .ow-cl-time
    时间都跟着变粗。实测：active 标题 rgb(0,85,143)/600 vs 未选中 rgb(51,51,51)/400。
    v1.1.7：曾加过左侧 3px 主色竖条做选中指示，现按要求移除，只保留底色。 */
 .ow-cl-item.active { background: var(--ow-blue-light); }
-/* v1.1.21：容器 40px → 48px（用户二次反馈「还是小」）。
-   取值依据（实测推导，非拍脑袋）：
-     行内 padding 8×2 = 16，文字块（标题 20 + 摘要 20）= 40
-     40px → 占行高 71%；44px → 73%；48px → **75%**；52px → 76%（收益递减）
-     选 48px：占比 75% 已接近上限，再大只是撑高行、挤压下方列表密度。
-   文字区宽度（实测）：列表 239px、行 223px，扣 padding 20 + gap 10 + 头像 48
-   → 文字区 **110.9px**。足够显示「群名 + 标签」与摘要；长摘要按 ellipsis 省略。 */
+/* 容器尺寸历史：32 → 40 → 48 → **40**（v1.1.22，用户反馈「又太大了」）。
+   文字区宽度（实测）：列表 239px、行 223px，扣 padding 20 + gap 10 + 头像 40
+   → 文字区 **118.9px**。足够显示「群名 + 标签」与摘要；长摘要按 ellipsis 省略。 */
 .ow-cl-icon {
-    width: 48px; height: 48px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     background: var(--ow-primary-strong);
     color: #fff;
     text-align: center;
-    line-height: 48px;
-    /* v1.1.20：14px → 17px，容器 48px 后再提到 20px（约占直径 42%，
-       与图形版双人的视觉重量匹配；首字太多时 3 字会挤，故只放大不换行策略）。 */
-    font-size: 20px;
+    line-height: 40px;
+    /* v1.1.22：容器 48 → 40px（用户反馈「又太大了」），首字同步 20 → 17px。
+       40px 占行高 71%（48px 是 75%），与两行文字的视觉重量更匹配。 */
+    font-size: 17px;
     flex-shrink: 0; -webkit-flex-shrink: 0;
     overflow: hidden;
 }
@@ -751,7 +757,7 @@ button { font-family: inherit; cursor: pointer; }
     min-width: 136px;
 }
 .ow-ctx-menu a { display: block; padding: 6px 14px; font-size: 13px; color: var(--ow-text); white-space: nowrap; }
-.ow-ctx-menu a:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
+.ow-ctx-menu a:hover { background: var(--ow-hover-bg); color: var(--ow-primary-dark); }
 
 /* ---------- v1.1.15 品牌区（站点名右侧竖三点）菜单 ----------
    与右键菜单共用 .ow-ctx-menu 外壳，因此下面三条只覆盖差异部分。 */
@@ -877,7 +883,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-emoji-tab.active { background: var(--ow-bg); color: var(--ow-primary-dark); font-weight: 600; }
 .ow-emoji-grid { display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; padding: 8px; max-height: 240px; overflow-y: auto; }
 .ow-emoji-item { width: 34px; height: 34px; line-height: 34px; text-align: center; font-size: 20px; cursor: pointer; border-radius: 4px; }
-.ow-emoji-item:hover { background: var(--ow-blue-light); }
+.ow-emoji-item:hover { background: var(--ow-hover-bg); }
 .ow-sticker-item { width: 64px; height: 64px; margin: 4px; cursor: pointer; border-radius: 6px; border: 1px solid var(--ow-border); object-fit: cover; }
 .ow-sticker-item:hover { border-color: var(--ow-primary); }
 
@@ -1135,7 +1141,7 @@ button { font-family: inherit; cursor: pointer; }
 .ow-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--ow-bg); }
 .ow-table th, .ow-table td { padding: 8px 10px; border-bottom: 1px solid var(--ow-border); text-align: left; }
 .ow-table th { color: var(--ow-text-sub); font-weight: 400; font-size: 12px; background: var(--ow-bg-sub); }
-.ow-table tr:hover td { background: var(--ow-blue-light); }
+.ow-table tr:hover td { background: var(--ow-hover-bg); }
 .ow-table .ow-input { padding: 4px 8px; font-size: 13px; }
 .ow-form-row { display: flex; display: -webkit-flex; gap: 10px; flex-wrap: wrap; -webkit-flex-wrap: wrap; align-items: flex-end; -webkit-align-items: flex-end; }
 .ow-form-row .ow-form-item { margin-bottom: 10px; min-width: 140px; }
