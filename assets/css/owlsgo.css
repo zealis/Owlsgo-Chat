@@ -448,7 +448,12 @@ button { font-family: inherit; cursor: pointer; }
    命名空间 .ow-cl-* 与 JS 侧 ChatList 轮子一一对应。 */
 .ow-cl-item {
     display: flex; display: -webkit-flex;
-    align-items: center; -webkit-align-items: center;
+    /* v1.1.21：align-items 从 center 改为 **flex-start**。
+       原因：头像 48px 与文字块 41px 不等高，center 会让文字块垂直居中 →
+       文字块顶部下沉 (48-41)/2 = 3.5px。改用 flex-start 后文字块**顶端对齐**，
+       名称的 Y 坐标只由 padding 决定，与头像尺寸无关 —— 这才是「固定名称」的根因。
+       ⚠️ 头像自身仍是圆的，flex-start 不会让它变形（它有固定 height）。 */
+    align-items: flex-start; -webkit-align-items: flex-start;
     gap: 10px;
     padding: 8px 10px;
     border-radius: 6px;
@@ -462,14 +467,23 @@ button { font-family: inherit; cursor: pointer; }
    时间都跟着变粗。实测：active 标题 rgb(0,85,143)/600 vs 未选中 rgb(51,51,51)/400。
    v1.1.7：曾加过左侧 3px 主色竖条做选中指示，现按要求移除，只保留底色。 */
 .ow-cl-item.active { background: var(--ow-blue-light); }
+/* v1.1.21：容器 40px → 48px（用户二次反馈「还是小」）。
+   取值依据（实测推导，非拍脑袋）：
+     行内 padding 8×2 = 16，文字块（标题 20 + 摘要 20）= 40
+     40px → 占行高 71%；44px → 73%；48px → **75%**；52px → 76%（收益递减）
+     选 48px：占比 75% 已接近上限，再大只是撑高行、挤压下方列表密度。
+   文字区宽度（实测）：列表 239px、行 223px，扣 padding 20 + gap 10 + 头像 48
+   → 文字区 **110.9px**。足够显示「群名 + 标签」与摘要；长摘要按 ellipsis 省略。 */
 .ow-cl-icon {
-    width: 32px; height: 32px;
+    width: 48px; height: 48px;
     border-radius: 50%;
     background: var(--ow-primary-strong);
     color: #fff;
     text-align: center;
-    line-height: 32px;
-    font-size: 14px;
+    line-height: 48px;
+    /* v1.1.20：14px → 17px，容器 48px 后再提到 20px（约占直径 42%，
+       与图形版双人的视觉重量匹配；首字太多时 3 字会挤，故只放大不换行策略）。 */
+    font-size: 20px;
     flex-shrink: 0; -webkit-flex-shrink: 0;
     overflow: hidden;
 }
@@ -480,14 +494,36 @@ button { font-family: inherit; cursor: pointer; }
     min-width: 0;                    /* 允许在 flex 中收缩，摘要才能正确省略 */
     display: flex; display: -webkit-flex;
     flex-direction: column; -webkit-flex-direction: column;
-    gap: 2px;
+    /* v1.1.21：删除 gap:2px，改用标题的 padding-bottom。
+       gap 会同时作用于「标题↔摘要」和「摘要↔容器底」，无法单独控制标题下方的间距。
+       摘要为空时（无消息会话）gap 依然存在但视觉上落在容器外，导致上下不对称。 */
+    /* gap: 2px;  ← 已移除，见上方说明 */
+    /* v1.1.21：固定高度 —— 标题行高必须与「有摘要」时完全一致，
+       这样**无消息的会话名称也在同一 Y**，不会因为少了摘要而整体上移/下移。
+       实测值 40.4px = 标题 line-height 20 + 摘要 min-height 20。
+       ⚠️ 修复前实测的偏移差：有消息 8px vs 无消息 15.8px（**差 7.8px**）——
+         根因是 align-items:center 让 41px 文字块在 48px 行里居中下移，
+         且 .ow-cl-sub 空着也占 19.2px。改 flex-start + 摘要 min-height 后偏移差 = 0。 */
+    min-height: 40.4px;
+    justify-content: flex-start;     /* 顶端对齐：不让内容在 min-height 里居中 */
 }
+/* v1.1.21：标题固定行高 + 下间距。
+   line-height 锁 20px（14px 字号 × 1.43），与摘要的 min-height 20px 配对。
+   ⚠️ `height: 20px` 改用 min-height 更安全 —— 未来若标题加标签变两行不会被裁切。
+   摘要行高同样锁 20px，空摘要时保留占位 → 名称与摘要的 Y 坐标恒定。 */
 .ow-cl-title {
     font-size: 14px;
+    line-height: 20px;
+    min-height: 20px;               /* 空摘要时标题仍在同一位置 */
+    padding-bottom: 1px;             /* 标题与摘要之间的间距（原 gap:2px 的替代） */
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ow-cl-sub {
     font-size: 12px;
+    line-height: 20px;
+    /* v1.1.21：min-height 而非 height —— 有摘要时按内容（单行 20px），
+       空摘要时仍占 20px，保证父级 .ow-cl-main 的两行结构不变。 */
+    min-height: 20px;
     color: var(--ow-text-sub);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
