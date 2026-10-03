@@ -303,11 +303,46 @@ class Sec
      * 会话指纹守卫（v1.0.94）：每个请求在认证前调用。
      * 会话中已有指纹且与当前客户端不符 → 判定为 Cookie 被窃取后在其它环境重放，
      * 立即销毁会话（登录态 / 游客身份一并失效），需重新登录或重新生成游客身份。
+     *
+     * ⚠️ v1.1.12 诊断开关：定位「莫名掉登录」时用，默认关闭（0 = 正常启用守卫）。
+     *   设 DB setting `sec_fp_guard` 为 `0` 可临时关闭守卫（复现问题用，**别长期关**）。
+     *   设 `sec_fp_trace` 为 `1` 可把每次比对的输入落盘到 data/fp_trace.log，
+     *   含 URI / UA / IP / 会话指纹 / 本次指纹，用来确认「究竟哪个请求 UA 变了」。
+     *   两者都走 DB::setting，改设置后即时生效（守卫每请求都读）。
      */
     public static function fingerprintGuard(): void
     {
+        if (DB::setting('sec_fp_guard', '1') === '0') return;   // v1.1.12 诊断开关
         if (!isset($_SESSION['sec_fp'])) return;   // 新会话（sessionStart 已写入）
-        if (hash_equals((string)$_SESSION['sec_fp'], self::fingerprint())) return;
+
+        $now = self::fingerprint();
+        $ok  = hash_equals((string)$_SESSION['sec_fp'], $now);
+
+        // 诊断留痕：无论匹配与否都记一条，否则「匹配的那次」无从对照，
+        // 只能看到 mismatch 快照，看不出它跟哪一次正常请求不同。
+        if (DB::setting('sec_fp_trace', '0') === '1') {
+            @file_put_contents(
+                self::dataDir() . '/fp_trace.log',
+                self::fingerprintTraceLine($ok, $now),
+                FILE_APPEND | LOCK_EX
+            );
+        }
+        if ($ok) return;
+
+        // 通知插件：会话被销毁，可能是有意登出也可能是被盗用，
+        // 由插件决定要不要发提醒。⚠️ 必须在 session_destroy() **之前**触发——
+        // 之后 $_SESSION 已清空，拿不到 uid 与原 sec_fp。插件内必须自行防御性判空。
+        if (class_exists('Plugin')) {
+            Plugin::fire('session.destroyed', [[
+                'reason'   => 'fingerprint_mismatch',
+                'uid'      => (int)($_SESSION['uid'] ?? 0),
+                'had_uid'  => isset($_SESSION['uid']),
+                'fp_saved' => (string)$_SESSION['sec_fp'],
+                'fp_now'   => $now,
+                'ip'       => self::ip(),
+            ]]);
+        }
+
         self::log('session_fingerprint_mismatch', (string)($_SESSION['uid'] ?? ($_SESSION['gid'] ?? '')), ['ip' => self::ip()]);
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
@@ -317,5 +352,26 @@ class Sec
             ]);
         }
         session_destroy();
+    }
+
+    /** data 目录（指纹诊断日志落盘用） */
+    private static function dataDir(): string
+    {
+        return dirname(__DIR__) . '/data';
+    }
+
+    /** 拼一行指纹诊断记录：谁、请求什么、用什么 UA/IP 算出了什么值 */
+    private static function fingerprintTraceLine(bool $ok, string $now): string
+    {
+        $fpSess = (string)($_SESSION['sec_fp'] ?? '');
+        return date('m-d H:i:s') . ' ' . substr(session_id() ?: '-', 0, 10) . ' '
+            . ($ok ? 'MATCH  ' : 'MISMATCH')
+            . ' sess=' . substr($fpSess, 0, 10)
+            . ' now=' . substr($now, 0, 10)
+            . ' ' . (isset($_SESSION['uid']) ? 'uid=' . (int)$_SESSION['uid'] : 'guest')
+            . "\n"
+            . '    uri = ' . ($_SERVER['REQUEST_URI'] ?? '-') . "\n"
+            . '    ua  = ' . ($_SERVER['HTTP_USER_AGENT'] ?? '(无)') . "\n"
+            . '    ip  = ' . self::ip() . "\n";
     }
 }

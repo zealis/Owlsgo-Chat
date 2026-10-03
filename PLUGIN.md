@@ -21,6 +21,8 @@
 - `main.php` 开头必须包含 `if (!defined('OWLSGO_VERSION')) exit;`，禁止直接 HTTP 访问。
 - `plugin.json` 声明 `name`（显示名）、`version`、`description`（面向用户的简短说明）、`author`。
 - 插件数据库操作一律使用核心 `DB` 类（`DB::run/one/all/val/insert/upsert`），禁止自行 new PDO；表名建议带 `plugin_<id>_` 前缀。建表/改表如需跨驱动兼容，参考 `core/db.php` 既有实现，不要照搬单驱动 SQL。
+- **加列只能用公开的 `DB::ensureColumn($table, $col, $type, $default)`**（`$default` 传**带引号的字面量**，如 `"'1'"` / `"''"`）。`DB::addColumn()` / `hasColumn()` / `dropColumn()` 都是 **private**，插件调用会抛 `Error`。⚠️ 这个坑后果特别隐蔽：`Plugin::loadPlugin()` 用 `try/catch` 吞掉插件异常只记一条 `plugin_error`，于是**该行之后的所有 `Plugin::on()` 都没注册，但缓存清单里仍写着旧的 hooks 列表** —— 表现为「插件静默半个身位」，极像「钩子没触发」，排查方向会被带偏。
+- 插件 `main.php` 顶层**只做 `Plugin::*` 注册与建表/迁移**，不要输出、不要再 `require` 其他文件、也不要有 `exit` 以外的副作用。
 
 ## 目录结构与最小插件
 
@@ -173,6 +175,13 @@ ow_abs_url('uploads/a.jpg');    // 拼接绝对地址；第二个参数默认 tr
 | `room.restored` | 群聊从审核回收站撤销「删除」后 | `[$roomId, $row, $actor]` —— `$row` 为恢复的整行数据 |
 
 | `login.after_verify` | 登录验证完成（`Auth::login` 内，密码校验通过且会话已建立） | `[$user, $method, $ctx]` —— 通知型，`$method` 为本通过验证的方式（核心仅 `password`；插件实现两步验证时可自行触发本钩子并传 `totp` / `recovery`）；`$ctx` 含 `ip`。**仅在成功登录时触发，验证失败不触发** |
+| `login.failed` | 登录失败（`Auth::login` 内，**每次失败都触发**，v1.1.12 起） | `[$info]` —— 键：`identity`（用户提交的登录标识，原样）、`reason`（`fail` 密码或账号错 / `locked` 临时锁定 / `disabled` 账号被禁用）、`msg`（用户看到的文案）、`left`（剩余尝试次数，`-1` 表示不适用）、`user`（命中的 `users` 行）、`ip`。⚠️ **密码错误时 `user` 为 `null`**（确认「账号存在」本身就是信息，核心不给出以防账号枚举侧信道），回调内**必须判空**。与 `login.after_verify` 严格成对：一个只在成功时触发、一个只在失败时触发，插件不必自己判断方向 |
+| `logout.before_destroy` | 用户主动登出（`Auth::logout` 内，**`session_destroy()` 之前**，v1.1.12 起） | `[$info]` —— 键：`uid`、`nickname`、`had_uid`（是否带登录态）、`ip`、`reason`（恒为 `manual`）。⚠️ 核心保证在销毁前 fire，所以 uid / 昵称一定拿得到；**游客会话 `had_uid` 为 false，判空后跳过可免得刷出一堆噪声** |
+| `session.destroyed` | 会话被服务端销毁（`Sec::fingerprintGuard` 内，指纹不符时，**`session_destroy()` 之前**，v1.1.12 起） | `[$info]` —— 键：`reason`（当前唯一值 `fingerprint_mismatch`）、`uid`、`had_uid`、`fp_saved`（会话内原指纹）、`fp_now`（本次算出的指纹）、`ip`。⚠️ **这不是用户主动登出**，插件应与 `logout.before_destroy` 区别对待（如记成「疑似会话被盗」而非「主动退出」） |
+
+> **涉及会话的钩子必须在 `session_destroy()` 之前 fire**（上表后两个已由核心保证）。销毁之后 `$_SESSION` 已清空，回调拿不到 uid / 指纹，只能记一条匿名日志。
+>
+> 在 `core/auth.php` 里 fire 插件钩子必须写 `class_exists('Plugin')` 防御 —— `index.php` 的 require 顺序是 `auth.php` **先于** `plugin.php`，而 CLI 诊断脚本可能只 require 部分 core 文件。
 
 计划任务由长轮询驱动（`Plugin::cronTick()`），也可用系统计划任务调 `?action=cron` 强制触发；回调内自行判断是否到达执行周期，保证可重复运行。
 

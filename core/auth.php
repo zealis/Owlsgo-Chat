@@ -184,11 +184,31 @@ class Auth
     /**
      * 登录：$identity 可为注册邮箱或数字用户 ID（取消用户名后的两种入口）。
      * ID 优先于邮箱匹配，保证纯数字身份不会被同名邮箱干扰；均为一次索引命中。
+     *
+     * v1.1.12 起每次失败都会 fire('login.failed', ...)，插件可据此做失败提醒、
+     * 撞库统计、异地异常登录告警等。**与 login.after_verify 严格成对**：
+     * 一个只在成功时触发、一个只在失败时触发，插件不必再自己判断方向。
      */
     public static function login(string $identity, string $password): array
     {
         $key = strtolower($identity) . '|' . Sec::ip();
-        if (Sec::loginLocked($key)) return [false, '失败次数过多，账号已临时锁定 15 分钟', 'locked'];
+        // 闭包统一收口：把「失败原因 / 剩余次数 / 命中的用户」补全后交给插件，
+        // 保证各失败分支的钩子载荷形状一致，插件侧无需按 reason 做字段兼容。
+        $fail = function (string $reason, string $msg, array $user = null, int $left = -1) use ($identity): array {
+            if (class_exists('Plugin')) {
+                Plugin::fire('login.failed', [[
+                    'identity' => $identity,        // 用户提交的登录标识（原样，邮箱或用户 ID）
+                    'reason'   => $reason,          // fail / locked / disabled
+                    'msg'      => $msg,             // 用户看到的文案
+                    'left'     => $left,            // 剩余尝试次数，-1 表示不适用
+                    'user'     => $user,            // 命中的 users 行（密码错时为 null，防枚举）
+                    'ip'       => Sec::ip(),
+                ]]);
+            }
+            return [false, $msg, $reason];
+        };
+
+        if (Sec::loginLocked($key)) return $fail('locked', '失败次数过多，账号已临时锁定 15 分钟');
         $user = null;
         if (preg_match('/^\d{1,19}$/', $identity)) {
             $user = DB::one('SELECT * FROM users WHERE id=?', [(int)$identity]);
@@ -198,9 +218,11 @@ class Auth
             Sec::loginFail($key);
             Sec::log('login_fail', $identity);
             $left = 10 - Sec::loginFails($key);
-            return [false, '邮箱或用户 ID 不正确，或密码错误' . ($left <= 3 ? "，剩余 $left 次尝试机会" : ''), 'fail'];
+            // ⚠️ 密码错时 $user 传 null：确认「账号存在」本身就是信息，
+            // 交给插件就能变成账号枚举的侧信道，宁可少给一个字段。
+            return $fail('fail', '邮箱或用户 ID 不正确，或密码错误' . ($left <= 3 ? "，剩余 $left 次尝试机会" : ''), null, $left);
         }
-        if ((int)$user['status'] !== 1) return [false, '账号已被禁用'];
+        if ((int)$user['status'] !== 1) return $fail('disabled', '账号已被禁用', $user);
         Sec::loginOk($key);
         session_regenerate_id(true);
         $_SESSION['uid'] = $user['id'];
@@ -213,9 +235,30 @@ class Auth
         return [true, '登录成功', $user];
     }
 
+    /**
+     * 登出。v1.1.12 起 fire('logout.before_destroy')：
+     * **必须在 session_destroy() 之前触发**，否则 $_SESSION 已清空，
+     * 插件拿不到 uid / 昵称 / 本次登录方式，只能记一条匿名日志。
+     * 载荷为登录快照：$reason=manual（用户主动登出）| fingerprint（守卫踢出，见 session.destroyed）。
+     */
     public static function logout(): void
     {
-        Sec::log('logout', $_SESSION['uname'] ?? '');
+        $uid = (int)($_SESSION['uid'] ?? 0);
+        $nick = (string)($_SESSION['uname'] ?? '');
+        if (!$nick && $uid > 0) {
+            // 项目已无 username（v1.0.33 起），此处只取昵称，**不得**反查邮箱
+            $nick = (string)(DB::val('SELECT nickname FROM users WHERE id=?', [$uid]) ?: '');
+        }
+        if (class_exists('Plugin')) {
+            Plugin::fire('logout.before_destroy', [[
+                'uid'      => $uid,
+                'nickname' => $nick,
+                'had_uid'  => isset($_SESSION['uid']),
+                'ip'       => Sec::ip(),
+                'reason'   => 'manual',
+            ]]);
+        }
+        Sec::log('logout', $nick);
         $_SESSION = [];
         session_destroy();
     }

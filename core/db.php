@@ -302,6 +302,28 @@ class DB
         }
     }
 
+    /**
+     * 幂等加列的**公开入口**，供插件建表 / 升级时使用（v1.1.12）。
+     *
+     * 为什么不直接把 addColumn 改成 public：核心内部（含 migrate()）一律走
+     * private addColumn，这里另开一个语义明确的薄封装，插件侧读代码时
+     * 一眼就知道「这是给插件用的公开 API」，而不是误以为可以随便传表名。
+     *
+     * ⚠️ 插件踩过的坑（v1.1.12 亲历）：直接 DB::addColumn() 会抛
+     * 「Call to private method DB::addColumn() from global scope」，
+     * 而 Plugin::loadPlugin() 用 try/catch 吞掉插件异常只记 plugin_error，
+     * **表现为插件「静默半个身位」—— 后续所有 Plugin::on 都没注册，
+     * 但缓存清单仍写着旧的 hooks 列表**，排查时极易误判成「钩子没触发」。
+     * 插件顶层做 schema 迁移前，务必确认调用的方法是 public。
+     *
+     * @param string $type    类型，如 'int' / 'varchar(16)'
+     * @param string $default 带引号的默认值字面量，如 "'1'" / "''"（不是裸值）
+     */
+    public static function ensureColumn(string $table, string $col, string $type, string $default): void
+    {
+        self::addColumn($table, $col, $type, $default);
+    }
+
     /** 幂等加列：已存在则跳过 */
     private static function addColumn(string $table, string $col, string $type, string $default): void
     {
