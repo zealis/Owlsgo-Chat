@@ -1410,9 +1410,13 @@
                 // 同样的理由（读着绕 + 「游客可发言」并非恒成立）。
                 // 「谁能看到这个群」由下方 owRCPubNote 随开关实时说明，不重复写死。
                 + '<div class="ow-form-item ow-form-item-switch">'
-                + switchHtml('owRCPublic', '普通群聊', true,
+                // v1.1.18 修正：公开性开关的标签改回「公开群聊」。
+                // v1.1.16 曾把 is_public 也译成「普通」，与同弹窗里 type=public 的
+                // 「普通」撞词 → 两个「普通」并排，用户以为公开性开关消失了。
+                // 定案：**类型**= 普通/密码群/角色限定，**公开性**= 公开/仅邀请。
+                + switchHtml('owRCPublic', '公开群聊', true,
                     canPrivate ? ''
-                               : '站点已关闭「创建仅邀请群聊」，新群只能普通（管理员不受此限制）。',
+                               : '站点已关闭「创建仅邀请群聊」，新群只能公开（管理员不受此限制）。',
                     !canPrivate)
                 + '</div>'
                 + '<div class="ow-form-msg ow-rc-note" id="owRCPubNote"></div>'
@@ -1426,10 +1430,10 @@
             var typeSel = $('owRCType'), tip = $('owRCTip'), msg = $('owRCMsg');
             var pubBox = $('owRCPublic'), pubNote = $('owRCPubNote');
             // 公开性提示随开关变化：把「谁能进这个群」讲清楚，避免建完才发现进不去。
-            // v1.1.16：措辞与标签统一（普通 / 仅邀请），不再说「公开列表」。
+            // v1.1.18：措辞改回「公开 / 仅邀请」。v1.1.16 误用「普通」，与类型撞词。
             var refreshPub = function () {
                 if (!canPrivate) {
-                    pubNote.innerHTML = '<span style="color:#C41D1F">站点已关闭「创建仅邀请群聊」，新群只能普通。</span>';
+                    pubNote.innerHTML = '<span style="color:#C41D1F">站点已关闭「创建仅邀请群聊」，新群只能公开。</span>';
                     return;
                 }
                 pubNote.innerHTML = pubBox.checked
@@ -1965,9 +1969,9 @@
                 + '<div class="ow-card-id">'
                 + '<div class="ow-card-name">' + esc(r.name) + '</div>'
                 + '<div class="ow-card-badges"><span class="ow-tag ow-tag-green">' + typeName + '</span>'
-                // v1.1.16：标签文案与后台/插件口径统一 —— 公开性叫「仅邀请」，
-                // 不再用「不公开」（那词描述的是「隐藏」这个动作，不是个群的状态）。
-                + '<span class="ow-tag ow-tag-member">' + (isPublic ? '普通' : '仅邀请') + '</span></div>'
+                // v1.1.18：公开性徽章改回「公开」。v1.1.16 写成「普通」会与左边
+                // type=public 的「普通」并排出现两个同词标签，等于把公开性信息抹掉了。
+                + '<span class="ow-tag ow-tag-member">' + (isPublic ? '公开' : '仅邀请') + '</span></div>'
                 + '</div></div>'
                 + (canEdit
                     ? '<div class="ow-card-meta">'
@@ -1978,10 +1982,12 @@
                       // v1.1.16：删掉「开启：显示在群聊列表，游客可进入并发言。关闭：只有群主
                       // 与成员能进，需邀请加入。」这段说明 —— 一行讲两种状态读着绕，
                       // 且「游客可进入并发言」并非所有群都成立（受类型与角色门槛影响）。
+                      // v1.1.18：公开性开关标签改回「公开群聊」（v1.1.16 误写「普通群聊」，
+                      // 与上方类型徽章「普通」撞词，看起来像开关消失了）。
                       + '<div class="ow-form-item ow-form-item-switch">'
-                      + switchHtml('owRoomPublic', '普通群聊', isPublic,
+                      + switchHtml('owRoomPublic', '公开群聊', isPublic,
                           canTogglePublic ? ''
-                                          : '站点已关闭「创建仅邀请群聊」，本群只能保持普通。',
+                                          : '站点已关闭「创建仅邀请群聊」，本群只能保持公开。',
                           !canTogglePublic)
                       + '</div>'
                       + '</div>'
@@ -1996,7 +2002,7 @@
                           ? '<div class="ow-card-meta-row"><span class="ow-card-meta-k">简介</span><span class="ow-card-meta-v">' + esc(r.description) + '</span></div>'
                           : '<div class="ow-card-meta-row"><span class="ow-card-meta-v ow-panel-empty">群主还没有写简介</span></div>')
                       + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">群主</span><span class="ow-card-meta-v">' + esc(fmtUid(r.owner_id)) + '</span></div>'
-                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">可见性</span><span class="ow-card-meta-v">' + (isPublic ? '普通（所有人可见）' : '仅邀请（仅群主与成员）') + '</span></div>'
+                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">可见性</span><span class="ow-card-meta-v">' + (isPublic ? '公开（所有人可见）' : '仅邀请（仅群主与成员）') + '</span></div>'
                       + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">修改</span><span class="ow-card-meta-v">仅群主与超级管理员可修改</span></div>'
                       + '</div>'
                       + '<div class="ow-modal-actions ow-modal-actions-split">'
@@ -3140,14 +3146,16 @@ logs: function (main) {
                         + '<div class="ow-form-item"><label>允许用户创建群聊</label>' + sel('room_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
                         + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
                         + '</div>'
-                        // v1.1.14 不公开群总闸：与「允许用户创建群聊」正交 ——
+                        // v1.1.14 仅邀请群总闸：与「允许用户创建群聊」正交 ——
                         // 那个管能不能建群，这个管建出来的群能不能藏起来。
-                        // v1.1.16：标签与前台统一 —— 「仅邀请群聊」取代「不公开群聊」。
                         + '<div class="ow-form-item"><label>允许用户创建仅邀请群聊</label>'
                         + sel('room_private_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
                         + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在群聊管理中调整。<br>'
-                        + '仅邀请群聊只靠邀请链接传播，不出现在任何列表里。关闭后普通用户只能创建普通群聊，'
-                        + '已存在的仅邀请群仍可正常改名、改简介（仅禁止把普通群改成仅邀请）；管理员始终不受此限制。</p>'
+                        // v1.1.18：这里原本写「只能创建普通群聊」，指的是**公开性**
+                        // （is_public），不是房间类型，已改为「公开群聊」。
+                        // 教训：公开性的中文不能叫「普通」，会与 type=public 的「普通」撞词。
+                        + '仅邀请群聊只靠邀请链接传播，不出现在任何列表里。关闭后普通用户只能创建公开群聊，'
+                        + '已存在的仅邀请群仍可正常改名、改简介（仅禁止把公开群改成仅邀请）；管理员始终不受此限制。</p>'
                         // v1.1.0 软删除：删除消息只清空正文并留行（供审计），到期才物理清除
                         + '<div class="ow-form-item"><label>已删除消息保留期(天)</label><input class="ow-input" id="owS_msg_deleted_retain_days" value="' + esc(d.msg_deleted_retain_days || '30') + '"></div>'
                         + '<p style="font-size:12px;color:#5C5C5C;margin:4px 0 12px">删除消息时正文立即清空（原文不可恢复），但记录行会保留到本期限满后物理清除，'
