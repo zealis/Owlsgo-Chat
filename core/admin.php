@@ -4,6 +4,16 @@
  */
 class Admin
 {
+    /** 秒 → 人类可读时长（计划任务间隔展示用） */
+    public static function intervalText(int $sec): string
+    {
+        $sec = max(60, $sec);
+        if ($sec % 86400 === 0) return ($sec / 86400) . ' 天';
+        if ($sec % 3600 === 0)  return ($sec / 3600) . ' 小时';
+        if ($sec % 60 === 0)    return ($sec / 60) . ' 分钟';
+        return $sec . ' 秒';
+    }
+
     public static function requireAdmin(array $actor): void
     {
         if ($actor['role'] !== 'admin') {
@@ -263,6 +273,96 @@ class Admin
                 }
                 Sec::log('admin_settings', $actor['nickname']);
                 Api::json(['ok' => true, 'msg' => '设置已保存']);
+
+            // ---------- 计划任务（v1.1.13） ----------
+            case 'admin_cron_list': {
+                // 描述不进 cron_tasks 表（插件升级改描述时不必改库），
+                // 按「插件::任务名」从注册表补齐；插件停用时注册表无条目，描述留空。
+                $desc = [];
+                $active = [];
+                foreach (Plugin::crons() as $t) {
+                    $desc[$t['plugin'] . '::' . $t['name']] = (string)$t['description'];
+                    $active[$t['plugin']] = true;
+                }
+                $rows = DB::all('SELECT * FROM cron_tasks ORDER BY enabled DESC, next_run_at ASC');
+                $now = time();
+                foreach ($rows as &$r) {
+                    $key = $r['plugin'] . '::' . $r['name'];
+                    $r['description'] = $desc[$key] ?? '';
+                    // 停用插件的任务仍在表里，但每次执行都会被跳过 →
+                    // 对它显示「启用」按钮是误导，前端据此隐藏启停开关。
+                    $r['plugin_active'] = ($r['plugin'] === '') || isset($active[$r['plugin']]);
+                    $r['interval_text'] = Admin::intervalText((int)$r['interval']);
+                    $r['next_run_text'] = (int)$r['next_run_at'] > 0
+                        ? date('Y-m-d H:i:s', (int)$r['next_run_at']) : '—';
+                    $r['last_run_text'] = (int)$r['last_run_at'] > 0
+                        ? date('Y-m-d H:i:s', (int)$r['last_run_at']) : '从未执行';
+                    $r['due'] = (int)$r['enabled'] === 1 && (int)$r['next_run_at'] > 0 && (int)$r['next_run_at'] <= $now;
+                }
+                unset($r);
+                // 最近一次执行：同时看任务表与日志表（跳过类任务也写日志）
+                $lastTask = (int)DB::val('SELECT COALESCE(MAX(last_run_at),0) FROM cron_tasks');
+                $lastLog  = (int)DB::val('SELECT COALESCE(MAX(created_at),0) FROM cron_logs');
+                $page = max(1, (int)$p('page'));
+                $psize = max(5, min(100, (int)($p('psize') ?: 30)));
+                $total = (int)DB::val('SELECT COUNT(*) FROM cron_logs');
+                Api::json([
+                    'ok'       => true,
+                    'tasks'    => $rows,
+                    'total'    => count($rows),
+                    'due'      => (int)DB::val('SELECT COUNT(*) FROM cron_tasks WHERE enabled=1 AND next_run_at>0 AND next_run_at<=?', [$now]),
+                    'enabled'  => (int)DB::val('SELECT COUNT(*) FROM cron_tasks WHERE enabled=1'),
+                    'last_run' => max($lastTask, $lastLog),
+                    'token'    => (string)DB::setting('cron_token', ''),
+                    'logs'     => DB::all('SELECT * FROM cron_logs ORDER BY id DESC LIMIT ' . $psize . ' OFFSET ' . (($page - 1) * $psize)),
+                    'log_total'=> $total,
+                    'page'     => $page,
+                    'pages'    => max(1, (int)ceil($total / $psize)),
+                ]);
+            }
+
+            case 'admin_cron_toggle': {
+                $id = (int)$p('id');
+                $row = DB::one('SELECT * FROM cron_tasks WHERE id=?', [$id]);
+                // ⚠️ 必须查 rowCount / 存在性：0 行时若仍返回 ok:true，
+                // 前端会弹「已启用」但刷新后状态没变 —— 与 v1.1.2 公告删不掉是同一类假成功。
+                if (!$row) Api::json(['ok' => false, 'msg' => '任务不存在'], 404);
+                $on = (int)$row['enabled'] !== 1;
+                DB::run('UPDATE cron_tasks SET enabled=?, next_run_at=?, updated_at=? WHERE id=?',
+                    [$on ? 1 : 0, $on ? time() + max(60, (int)$row['interval']) : 0, time(), $id]);
+                Sec::log('cron_toggle', $row['plugin'] . '::' . $row['name']);
+                Api::json(['ok' => true, 'msg' => $on ? '任务已启用' : '任务已停用', 'enabled' => $on]);
+            }
+
+            case 'admin_cron_run': {
+                // force=true：忽略 next_run_at 全跑一遍。否则刚跑过的任务要等满整个间隔
+                // 才会再次到期，连点「立即执行」永远是「执行 0 个」。
+                $res = Plugin::runCron(50, true);
+                $fail = 0;
+                foreach ($res as $x) if ($x['status'] === 'error') $fail++;
+                Sec::log('cron_run', '', ['count' => count($res), 'fail' => $fail]);
+                $parts = ['执行 ' . count($res) . ' 个任务'];
+                if ($fail > 0) $parts[] = '失败 ' . $fail . ' 个';
+                Api::json(['ok' => true, 'msg' => implode('，', $parts), 'results' => $res]);
+            }
+
+            case 'admin_cron_token': {
+                // 重置后旧地址立即失效
+                $t = bin2hex(random_bytes(24));
+                DB::setSetting('cron_token', $t);
+                Sec::log('cron_token', $actor['nickname']);
+                Api::json(['ok' => true, 'msg' => '新的触发令牌已生成，旧地址立即失效', 'token' => $t]);
+            }
+
+            case 'admin_cron_logs_clear': {
+                $days = max(0, (int)($p('days') ?: 30));
+                $n = $days > 0
+                    ? (int)DB::val('SELECT COUNT(*) FROM cron_logs WHERE created_at<?', [time() - $days * 86400])
+                    : (int)DB::val('SELECT COUNT(*) FROM cron_logs');
+                DB::run($days > 0 ? 'DELETE FROM cron_logs WHERE created_at<?' : 'DELETE FROM cron_logs',
+                    $days > 0 ? [time() - $days * 86400] : []);
+                Api::json(['ok' => true, 'msg' => "已清理 $n 条日志", 'deleted' => $n]);
+            }
 
             // ---------- 插件管理 ----------
             case 'admin_plugins':

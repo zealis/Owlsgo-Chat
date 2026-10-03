@@ -213,8 +213,32 @@ class DB
                 id $id, room_id $int NOT NULL, room_name $str NOT NULL,
                 action $str NOT NULL, before_data $text NOT NULL,
                 undone $int NOT NULL DEFAULT 0, created_at $ts NOT NULL)",
+            // 插件计划任务（v1.1.13）：由 Plugin::cron() 声明后同步入库，
+            // 本表只存**调度状态**，执行逻辑在 Plugin::runCron()。
+            // plugin+name 唯一 —— 插件重复加载（清单重建时也会真加载一次）不会插出重复行。
+            "CREATE TABLE IF NOT EXISTS cron_tasks (
+                id $id, plugin $str NOT NULL DEFAULT '', name $str NOT NULL,
+                interval $int NOT NULL DEFAULT 3600,
+                last_run_at $int NOT NULL DEFAULT 0, next_run_at $int NOT NULL DEFAULT 0,
+                last_status $str NOT NULL DEFAULT '', run_count $int NOT NULL DEFAULT 0,
+                enabled $int NOT NULL DEFAULT 1, created_at $ts NOT NULL, updated_at $ts NOT NULL)",
+            // 计划任务执行日志：每次执行落一条（含被跳过 / 失败），后台可查最近成败。
+            "CREATE TABLE IF NOT EXISTS cron_logs (
+                id $id, name $str NOT NULL DEFAULT '', status $str NOT NULL DEFAULT 'ok',
+                message $str NOT NULL DEFAULT '', duration $int NOT NULL DEFAULT 0,
+                created_at $ts NOT NULL)",
         ];
         foreach ($tables as $sql) self::$pdo->exec($sql);
+
+        // 计划任务表的复合唯一索引：SQLite / MySQL / PostgreSQL 都要求先有唯一列才能建，
+        // 且 SQLite 的 CREATE UNIQUE INDEX IF NOT EXISTS 三驱动均支持（MySQL 8 见下方兜底）。
+        foreach ([
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_cron_tasks_key ON cron_tasks (plugin, name)',
+            'CREATE INDEX IF NOT EXISTS idx_cron_tasks_due ON cron_tasks (enabled, next_run_at)',
+            'CREATE INDEX IF NOT EXISTS idx_cron_logs_created ON cron_logs (created_at)',
+        ] as $sql) {
+            try { self::$pdo->exec($sql); } catch (Throwable $e) { /* MySQL 8 不支持 IF NOT EXISTS，忽略 */ }
+        }
 
         // ---------- 增量迁移（幂等） ----------
         self::addColumn('messages', 'quote', 'text', "''");   // 引用快照 JSON：{nick,text}（v1.0.69 引用功能）

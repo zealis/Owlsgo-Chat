@@ -189,10 +189,16 @@ if ($action !== '') {
         echo Sec::captchaSvg($code);
         exit;
     }
-    // 系统 cron 入口（可选，供系统计划任务调用）
+    // 系统 cron 入口（供系统计划任务调用）
+    // ⚠️ v1.1.13 起强制鉴权。原实现**完全无鉴权**，任何匿名访客都能触发插件代码，
+    // 也能被当作压测入口。现在只接受：后台生成的令牌，或已登录的管理员。
     if ($action === 'cron') {
-        Plugin::cronTick(true);
-        Api::json(['ok' => true]);
+        $tok = (string)DB::setting('cron_token', '');
+        $given = (string)($_GET['token'] ?? '');
+        $ok = ($tok !== '' && $given !== '' && hash_equals($tok, $given))
+           || (($actor['role'] ?? '') === 'admin');
+        if (!$ok) Api::json(['ok' => false, 'msg' => '令牌无效或已过期'], 403);
+        Api::json(['ok' => true, 'results' => Plugin::cronTick(true)]);
     }
 
     // 插件打包下载（GET 免签名：只读操作；鉴权在下方校验管理员会话）
@@ -241,6 +247,9 @@ if ($action !== '') {
         // v1.1.11 群成员变更：邀请/移出/重置邀请码都会改变谁能进群，
         // 与 ban-manager 的禁言同属「谁能看到什么」的边界，一律走一次性票据。
         'room_invite', 'room_remove_member', 'room_invite_code_reset',
+        // v1.1.13 计划任务：启停 / 立即执行 / 重置令牌 / 清理日志都改动服务端状态，
+        // 与管理员对话类操作同等敏感，一律走一次性票据。
+        'admin_cron_toggle', 'admin_cron_run', 'admin_cron_token', 'admin_cron_logs_clear',
     ];
     $isSensitive = in_array($action, $SENSITIVE, true) || Plugin::isSensitive($action);
     if ($isSensitive) {
@@ -1035,6 +1044,8 @@ function renderAdmin(array $actor): void
        . '<li data-apage="rooms" class="active"><span class="ow-admin-ico">' . ow_icon('chat', 16) . '</span>群聊审核</li>'
        // 敏感词过滤（v1.0.104）、群聊公告（v1.0.102）已剥离为插件，菜单由插件 adminPage 自动挂载
        . '<li data-apage="logs"><span class="ow-admin-ico">' . ow_icon('shield', 16) . '</span>安全日志</li>'
+       // 计划任务（v1.1.13）：插件通过 Plugin::cron() 注册的任务在此集中查看 / 启停 / 手动触发
+       . '<li data-apage="cron"><span class="ow-admin-ico">' . ow_icon('gear', 16) . '</span>计划任务</li>'
        . '<li data-apage="settings"><span class="ow-admin-ico">' . ow_icon('gear', 16) . '</span>系统设置</li>'
        // 插件管理置于系统设置之下，作为分类，其下挂载各插件自己的设置页面
        . $pluginMenu

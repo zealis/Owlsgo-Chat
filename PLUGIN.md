@@ -157,6 +157,26 @@ ow_abs_url('uploads/a.jpg');    // 拼接绝对地址；第二个参数默认 tr
 | `page.head`           | 各页面 `<head>` 输出时（`pageHead()` 内） | 无参，可直接 echo                                                          |
 | `page.footer`         | 聊天页 / 后台页 body 输出末尾              | 无参，可直接 echo                                                          |
 | `cron.minute`         | 统一计划任务（每分钟至多一次）                  | 无参                                                                   |
+
+> **`cron.minute` 钩子 vs `Plugin::cron()` 声明式任务**（v1.1.13 起）
+>
+> | | `cron.minute` 钩子 | `Plugin::cron()` |
+> |---|---|---|
+> | 写法 | `Plugin::on('cron.minute', fn)` | `Plugin::cron('name', $间隔, $处理器, '说明')` |
+> | 调度 | 每分钟醒一次，回调**自己判断**是否到期 | 到期自动执行，表里有 `next_run_at` |
+> | 后台可见 | ❌ 不可见、不可控 | ✅ 「计划任务」页可看、可启停、可手动触发 |
+> | 执行留痕 | ❌ 无 | ✅ 每次写 `cron_logs`（结果 / 耗时 / 报错信息） |
+>
+> **新任务一律用 `Plugin::cron()`**；`cron.minute` 只为兼容既有插件保留。
+>
+> 约束：
+> - 只能在 `main.php` **顶层**调用（与其它 `Plugin::*` 注册同一位置）。
+> - 间隔单位秒，**小于 60 按 60 处理**（防止任务被高频调用打爆）。
+> - 任务名同插件内唯一（`UNIQUE(plugin, name)`），重复注册不会插出重复行。
+> - 插件停用后任务仍显示在后台，但状态为 `skip`、**不提供启停按钮**（`plugin_active=false`）。
+> - 处理器抛异常会被捕获，任务记为 `error` 并写日志，**不影响其它任务、不影响主流程**。
+> - 调度由长轮询驱动（每分钟至多一次，多进程有 `flock` 排他锁）；
+>   也可挂系统计划任务访问 `?action=cron&token=<后台生成的令牌>` 强制触发。
 | `nickname.before_save` | 昵称校验（注册 / 改资料 / 安装向导，`Auth::checkNickname` 内） | `[&$nick, &$err, $ctx]` —— 可改写 `$nick`，或把 `$err` 设为非空字符串拦截（即用户看到的文案）；`$ctx['scene']` 为 `register` / `profile` / `install`。参考实现：`plugins/nickname-guard/` |
 | `ban.check` | 消息发送禁言判定（`Chat::isBanned` 内，核心 bans 表无命中时触发，每条消息一次） | `[&$reason, $actor, $roomId]` —— `$reason` 初始为 **null**，设为非空字符串即拦截（即用户看到的文案）；回调签名必须用 **`?string &$reason`**（nullable，初始 null 传非 nullable 引用会 TypeError 且被 fire 静默吞掉）。参考：`plugins/ban-manager/` 的运行时说明 |
 | `ban.after_add` / `ban.after_del` | 禁言添加 / 解除后（ban-manager 插件触发） | `[$banId, $type, $target, $actor]` / `[$banId, $actor]` —— 通知型，供审计、通知类插件扩展 |

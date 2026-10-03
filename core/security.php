@@ -277,7 +277,11 @@ class Sec
         if (session_status() !== PHP_SESSION_ACTIVE) session_start();
         // 会话指纹（v1.0.94）：会话创建时记录客户端特征，后续请求比对；
         // 登录 Cookie 被跨站窃取 / 本地读取后，换浏览器或换网络重放将无法通过校验。
-        if (!isset($_SESSION['sec_fp'])) $_SESSION['sec_fp'] = self::fingerprint();
+        // sec_fp_v2 = 已按 v1.1.13 口径（只绑 UA）记录，省掉每次比对都走一次升级分支。
+        if (!isset($_SESSION['sec_fp'])) {
+            $_SESSION['sec_fp'] = self::fingerprint();
+            $_SESSION['sec_fp_v2'] = 1;
+        }
     }
 
     /** https 部署探测（本地 http 为 false，不影响现有部署） */
@@ -286,17 +290,41 @@ class Sec
         return !empty($_SERVER['HTTPS']) || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
     }
 
-    /** 客户端指纹：User-Agent + IP 前两段（IPv4）或前三组（IPv6），降低换网络误杀 */
+    /**
+     * 客户端指纹（v1.1.13 起只绑 UA）。
+     *
+     * ⚠️ v1.0.94~v1.1.12 曾把「IP 前两段」并入指纹，v1.1.13 起移除。原因是它**不可靠**：
+     *   - `REMOTE_ADDR` 拿不到时 `Sec::ip()` 返回 `0.0.0.0`，与真实的 `127.0.0.1`
+     *     前两段完全不同 → 同一浏览器的请求算出两个指纹，凭空把会话踢掉；
+     *   - 同一客户端在 IPv4 / IPv6 双栈下、或经过不同的反代路径，`REMOTE_ADDR` 也会变；
+     *   - 移动网络 / 企业网关 / 代理池切 IP 是常态，绑 IP 等于绑一个用户控制不了的变量。
+     * 踩过的现场：session_trace.log 里 44 次 `security.php fingerprintGuard` 误踢，
+     * 全部发生在长轮询并发请求上（同一会话其余请求指纹都正常），用户表现为
+     * 「一开开发者工具就退出登录」。已实测排除 DevTools 本身（开关 DevTools 的
+     * 请求头完全一致），真因是指纹输入不稳定，不是 DevTools 改了什么。
+     *
+     * 为什么只绑 UA 够用：Cookie 被窃后，攻击者手上只有 Cookie，
+     * 换 UA 重放的成本远低于换 IP（IP 往往是攻击者可控的出口），
+     * 绑 IP 并不能显著提高重放门槛，却把误杀成本转嫁给了正常用户。
+     * UA 本身可伪造，所以它只是**纵深防御的一层**，不是唯一防线 ——
+     * 真正的防线仍是 Cookie 的 HttpOnly + 一次性票据 + 各接口的服务端鉴权。
+     *
+     * 想要更严可开启 `sec_fp_ip_strict`（DB setting 设 1），把 IP 段并入指纹，
+     * 但要清楚代价：移动网络切换、PDA 息屏重连、公司多出口 IP 的用户会被误踢。
+     */
     public static function fingerprint(): string
     {
-        $ip = self::ip();
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-            $seg = implode(':', array_slice(explode(':', $ip), 0, 3));
-        } else {
-            $parts = explode('.', $ip);
-            $seg = implode('.', array_slice($parts, 0, 2));
+        $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+        if (DB::setting('sec_fp_ip_strict', '0') === '1') {
+            $ip = self::ip();
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+                $seg = implode(':', array_slice(explode(':', $ip), 0, 3));
+            } else {
+                $seg = implode('.', array_slice(explode('.', $ip), 0, 2));
+            }
+            $ua .= '|' . $seg;
         }
-        return hash('sha256', ($_SERVER['HTTP_USER_AGENT'] ?? '') . '|' . $seg);
+        return hash('sha256', $ua);
     }
 
     /**
@@ -327,7 +355,22 @@ class Sec
                 FILE_APPEND | LOCK_EX
             );
         }
+
         if ($ok) return;
+
+        // v1.1.13 指纹口径变更（去掉 IP 段）后的平滑升级：
+        // 老会话里存的是「UA|IP段」算出的旧值，与新算法必然不等 —— 那是**升级造成的**，
+        // 不是会话被盗。此时原地改写为新指纹，不销毁会话（否则所有在线用户一升级就掉线）。
+        // 判据：会话未标记 sec_fp_v2，且「用新算法重算」与旧值不同。
+        // 真正的盗用仍会被拦：它连 UA 都对不上，重算结果仍不等于旧值之外的任何东西。
+        if (empty($_SESSION['sec_fp_v2'])) {
+            $strictOn = DB::setting('sec_fp_ip_strict', '0') === '1';
+            if (!$strictOn) {
+                $_SESSION['sec_fp_v2'] = 1;
+                $_SESSION['sec_fp'] = $now;
+                return;
+            }
+        }
 
         // 通知插件：会话被销毁，可能是有意登出也可能是被盗用，
         // 由插件决定要不要发提醒。⚠️ 必须在 session_destroy() **之前**触发——

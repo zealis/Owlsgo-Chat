@@ -2838,6 +2838,9 @@
                            + '<div class="ow-plugin-head"><b>' + esc(d.name) + '</b>'
                            + (d.enabled ? '<span class="ow-tag ow-tag-green">启用</span>' : '<span class="ow-tag ow-tag-guest">未启用</span>') + '</div>'
                            + '<div class="ow-plugin-meta">' + esc(d.id) + ' · v' + esc(d.version) + ' · ' + esc(d.source || '本地')
+                           // 计划任务数放在最前：它是「这个插件会自己在后台动什么」的规模指标，
+                           // 比「注册了几个函数」更值得管理员先看到（v1.1.13）
+                           + ' · 计划任务 ' + (d.crons || 0)
                            + ' · 钩子 ' + (d.hooks || 0) + ' · 路由 ' + (d.routes || 0) + ' · 后台页 ' + (d.pages || 0) + '</div>'
                            + '<div class="ow-plugin-desc">' + esc(d.description || '') + '</div>'
                            + '<div class="ow-plugin-actions">'
@@ -2905,6 +2908,15 @@ logs: function (main) {
                     }
                     main.innerHTML = h + '</table></div>';
                 });
+            },
+            /* 计划任务（v1.1.13）：插件通过 Plugin::cron() 声明式注册的任务。
+               与旧的 cron.minute 钩子不同——那些任务在这里不可见、不可控。
+               任务表只显示「已注册」的：插件停用后其任务仍在表里但每次都会被跳过，
+               服务端用 plugin_active 标记，前端据此隐藏启停开关（避免给一个必然被跳过的
+               任务提供「启用」按钮）。 */
+            cron: function (main) {
+                OwAdmin._cronPage = 1;
+                OwAdmin.cronLoad(main);
             },
             settings: function (main) {
                 OwApi.post('admin_settings_get', {}, function (r) {
@@ -3115,6 +3127,159 @@ logs: function (main) {
         roomDel: function (id) {
             OwAdmin.confirm('确定删除该群聊？删除后可在「审核回收站」撤销恢复。', function () {
                 OwApi.secure('admin_room_del', { id: id }, function (r) { toast(r.msg); OwAdmin.page('rooms'); });
+            });
+        },
+
+        /* ---------- 计划任务（v1.1.13） ---------- */
+
+        /* 状态徽标：ok 成功 / error 失败 / skip 跳过（插件未启用）。
+           ⚠️ 只用 CSS 里真实存在的 ow-tag-*：green / owner / vip / member / guest / title。
+           没有 ow-tag-red、没有 ow-tag-gray —— 别臆造，会静默退化成无背景的裸文字。
+           失败借用 owner（橙红，视觉上最接近警示），跳过用 member（灰）。 */
+        _cronStatusTag: function (s) {
+            var map = { ok: 'green', error: 'owner', skip: 'member' };
+            var cn = { ok: '成功', error: '失败', skip: '跳过' };
+            return '<span class="ow-tag ow-tag-' + (map[s] || 'guest') + '">' + esc(cn[s] || s || '—') + '</span>';
+        },
+
+        /* 把相对时间说人话：刚刚 / N 分钟前 / N 小时前 / 具体日期 */
+        _cronAgo: function (ts) {
+            ts = parseInt(ts, 10) || 0;
+            if (!ts) return '从未执行';
+            var d = Math.floor((Date.now() / 1000 - ts) / 60);
+            if (d < 1) return '刚刚';
+            if (d < 60) return d + ' 分钟前';
+            if (d < 1440) return Math.floor(d / 60) + ' 小时前';
+            if (d < 10080) return Math.floor(d / 1440) + ' 天前';
+            return new Date(ts * 1000).toISOString().slice(0, 10);
+        },
+
+        cronLoad: function (main) {
+            var page = OwAdmin._cronPage || 1;
+            main = main || $('owAdminMain');
+            OwApi.post('admin_cron_list', { page: page, psize: 30 }, function (r) {
+                if (!r.ok) { main.innerHTML = '<div class="ow-card">' + esc(r.msg) + '</div>'; return; }
+
+                var lastRun = r.last_run ? OwAdmin._cronAgo(r.last_run) : '从未执行';
+                var h = '<h2>计划任务</h2>'
+                  + '<p class="ow-admin-desc">插件通过 <code>Plugin::cron()</code> 声明式注册的任务。'
+                  + '由长轮询每分钟驱动一次（多进程下有排他锁，不会重复执行），也可挂系统计划任务访问触发地址。'
+                  + '「立即执行」会忽略到期时间强制跑一遍，便于验证任务是否正常。</p>'
+                  + '<div class="ow-card" style="margin-bottom:12px">'
+                  + '<div class="ow-form-row" style="align-items:center;gap:10px">'
+                  + '<button type="button" class="ow-btn ow-btn-primary" onclick="OwAdmin.cronRun()">立即执行全部</button>'
+                  + '<button type="button" class="ow-btn ow-btn-ghost" onclick="OwAdmin.cronToken()">重置触发令牌</button>'
+                  + '<button type="button" class="ow-btn ow-btn-ghost" onclick="OwAdmin.cronClearLogs()">清理 30 天前日志</button>'
+                  + '<span style="margin-left:auto;color:#5C5C5C;font-size:12px">最近一次执行：' + esc(lastRun) + '</span>'
+                  + '</div>'
+                  + '<div class="ow-form-row" style="margin-top:10px">'
+                  + '<div style="flex:1;min-width:0">'
+                  + '<label style="display:block;font-size:12px;color:#5C5C5C;margin-bottom:4px">外部触发地址（系统计划任务用，间隔建议 1 分钟）</label>'
+                  + '<input class="ow-input" readonly value="' + esc(OwAdmin._cronUrl(r.token)) + '" onclick="this.select()">'
+                  + '</div></div></div>';
+
+                /* ---- 任务表 ---- */
+                h += '<div class="ow-card"><table class="ow-table"><tr>'
+                  + '<th>任务</th><th>说明</th><th>间隔</th><th>下次执行</th><th>最近执行</th><th>状态</th><th>操作</th></tr>';
+                if (!r.tasks.length) {
+                    h += '<tr><td colspan="7" style="color:#5C5C5C">暂无计划任务。插件在 main.php 顶层调用 Plugin::cron() 注册后，刷新本页即会出现。</td></tr>';
+                }
+                for (var i = 0; i < r.tasks.length; i++) {
+                    var t = r.tasks[i];
+                    h += '<tr>'
+                       + '<td><b>' + esc(t.plugin ? t.plugin + '::' + t.name : t.name) + '</b>'
+                       +   (t.due ? ' <span class="ow-tag ow-tag-owner">待执行</span>' : '')
+                       +   '<div style="color:#8A8A8A;font-size:12px">已运行 ' + (parseInt(t.run_count, 10) || 0) + ' 次</div></td>'
+                       + '<td>' + esc(t.description || '—') + '</td>'
+                       + '<td>' + esc(t.interval_text) + '</td>'
+                       + '<td>' + esc(t.next_run_text) + '</td>'
+                       + '<td>' + esc(t.last_run_text) + (t.last_status ? ' ' + OwAdmin._cronStatusTag(t.last_status) : '') + '</td>'
+                       + '<td>' + (t.enabled ? '<span class="ow-tag ow-tag-green">启用</span>' : '<span class="ow-tag ow-tag-guest">停用</span>')
+                       +   (t.plugin_active ? '' : '<div style="color:#F4995D;font-size:12px">插件未启用</div>') + '</td>'
+                       + '<td>';
+                    if (t.plugin_active) {
+                        h += '<button class="ow-btn ow-btn-mini ' + (t.enabled ? 'ow-btn-ghost' : 'ow-btn-primary') + '"'
+                           + ' onclick="OwAdmin.cronToggle(' + (parseInt(t.id, 10) || 0) + ')">'
+                           + (t.enabled ? '停用' : '启用') + '</button>';
+                    }
+                    h += '</td></tr>';
+                }
+                h += '</table></div>';
+
+                /* ---- 执行日志 ---- */
+                h += '<h2 style="margin-top:20px">执行日志</h2><div class="ow-card"><table class="ow-table"><tr>'
+                  + '<th>任务</th><th>结果</th><th>耗时</th><th>信息</th><th>时间</th></tr>';
+                if (!r.logs.length) {
+                    h += '<tr><td colspan="5" style="color:#5C5C5C">暂无执行记录</td></tr>';
+                }
+                for (var j = 0; j < r.logs.length; j++) {
+                    var g = r.logs[j];
+                    h += '<tr><td>' + esc(g.name) + '</td>'
+                       + '<td>' + OwAdmin._cronStatusTag(g.status) + '</td>'
+                       + '<td>' + (parseInt(g.duration, 10) || 0) + ' ms</td>'
+                       + '<td>' + esc(g.message || '—') + '</td>'
+                       + '<td>' + esc(new Date(parseInt(g.created_at, 10) * 1000).toISOString().slice(0, 19).replace('T', ' ')) + '</td></tr>';
+                }
+                h += '</table>';
+                if (r.pages > 1) {
+                    h += '<div class="ow-form-row" style="margin-top:10px;justify-content:center;gap:8px">'
+                       + '<button class="ow-btn ow-btn-ghost ow-btn-mini" ' + (page <= 1 ? 'disabled' : '')
+                       + ' onclick="OwAdmin.cronPage(' + (page - 1) + ')">上一页</button>'
+                       + '<span style="font-size:12px;color:#5C5C5C">第 ' + page + ' / ' + r.pages + ' 页 · 共 ' + r.log_total + ' 条</span>'
+                       + '<button class="ow-btn ow-btn-ghost ow-btn-mini" ' + (page >= r.pages ? 'disabled' : '')
+                       + ' onclick="OwAdmin.cronPage(' + (page + 1) + ')">下一页</button></div>';
+                }
+                h += '</div>';
+
+                main.innerHTML = h;
+            });
+        },
+
+        _cronUrl: function (token) {
+            var base = location.origin + location.pathname + '?action=cron';
+            return token ? base + '&token=' + encodeURIComponent(token) : base;
+        },
+        cronPage: function (p) {
+            OwAdmin._cronPage = Math.max(1, p);
+            OwAdmin.cronLoad();
+        },
+        /* 启停：敏感操作，走一次性票据（OwApi.secure），不能用普通 post */
+        cronToggle: function (id) {
+            OwApi.secure('admin_cron_toggle', { id: id }, function (r) {
+                toast(r.msg);
+                if (r.ok) OwAdmin.cronLoad();
+            });
+        },
+        cronRun: function () {
+            OwAdmin.confirm('立即执行全部已启用的计划任务？\n忽略到期时间，任务可能包含清理类操作。', function () {
+                OwApi.secure('admin_cron_run', {}, function (r) {
+                    toast(r.msg);
+                    if (r.ok) {
+                        // 失败详情单独提示，否则「执行 3 个，失败 1 个」看不出是哪个挂了
+                        var bad = [];
+                        for (var i = 0; i < (r.results || []).length; i++) {
+                            if (r.results[i].status !== 'ok') bad.push(r.results[i].name + '：' + (r.results[i].message || r.results[i].status));
+                        }
+                        if (bad.length) toast(bad.join('；'), 'err');
+                        OwAdmin.cronLoad();
+                    }
+                });
+            });
+        },
+        cronToken: function () {
+            OwAdmin.confirm('重置外部触发令牌？\n旧地址立即失效，已配置的系統计划任务需要更新为新地址。', function () {
+                OwApi.secure('admin_cron_token', {}, function (r) {
+                    toast(r.msg);
+                    if (r.ok) OwAdmin.cronLoad();
+                });
+            });
+        },
+        cronClearLogs: function () {
+            OwAdmin.confirm('清理 30 天前的执行日志？该操作不可恢复。', function () {
+                OwApi.secure('admin_cron_logs_clear', { days: 30 }, function (r) {
+                    toast(r.msg);
+                    if (r.ok) OwAdmin.cronLoad();
+                });
             });
         },
 

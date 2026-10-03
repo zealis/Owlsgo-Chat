@@ -22,6 +22,7 @@ class Plugin
     private static array $routes = [];
     private static array $adminPages = [];
     private static array $assets = ['css' => [], 'js' => []];
+    private static array $crons = [];   // 插件注册的计划任务（v1.1.13）
     private static array $stats = [];   // 兼容保留：每个插件本次加载的注册计数
     private static string $dir = '';
     private static string $cacheDir = '';
@@ -41,6 +42,32 @@ class Plugin
         self::$cacheDir = $cacheDir !== '' ? $cacheDir : dirname(rtrim($dir, '/\\')) . '/data/cache';
         @mkdir($dir, 0775, true);
 
+        // 同进程内重复 init（CLI 脚本、测试）必须重置这些状态，否则会累积出脏数据：
+        //  · $crons 累积 → 插件被停用后旧处理器还留在注册表里，
+        //    runCron 照样判定「处理器已注册」并执行，skip 分支永远走不到；
+        //    syncCronTasks 也会把已停用插件的任务重新写回。
+        // 线上每请求一个新进程，碰不到这里，但同进程内 init 两次就出问题了。
+        self::$crons = [];
+        self::$loaded = [];
+        self::$stats = [];
+        self::$hooks = [];
+        self::$routes = [];
+        self::$adminPages = [];
+        self::$assets = ['css' => [], 'js' => []];
+        self::$meta = [];
+        self::$manifest = [];
+        self::$pending = null;
+        self::$dirty = false;
+        self::$lastCron = 0;
+
+        // 核心自身的计划任务（v1.1.13）：plugin 名为空串，与插件任务在表里天然区分。
+        // 注册在 init 最前面 —— 它不依赖任何插件，且 syncCronTasks() 在 init 末尾才跑。
+        self::$loading = '';
+        self::cron('purge_deleted_messages', 3600, function () {
+            if (class_exists('Chat')) Chat::purgeDeleted();
+        }, '物理清除超过保留期的软删除消息（每小时一次）');
+        self::$loading = '';
+
         // 1) 轻量目录扫描（目录名 + mtime），识别插件名单变化
         $dirs = [];
         foreach (glob($dir . '/*', GLOB_ONLYDIR) ?: [] as $d) {
@@ -55,8 +82,17 @@ class Plugin
             $c = $cache['plugins'][$n] ?? null;
             $sig = self::sigOf($n, $dm);
             if ($c && ($c['sig'] ?? null) === $sig) {
+                // 旧版本清单没有 crons 键（v1.1.13 之前）→ 视为过期并重建。
+                // 否则计划任务永远进不了按需加载：清单看着「完整」，实际漏了注册信息。
+                $legacy = !array_key_exists('crons', $c);
                 self::$meta[$n] = $c['meta'] ?? self::readMeta($n);
-                self::$manifest[$n] = $c;
+                if ($legacy) {
+                    self::$manifest[$n] = $c + self::blankManifestParts();
+                    self::$dirty = true;
+                    $stale[$n] = true;
+                } else {
+                    self::$manifest[$n] = $c;
+                }
             } else {
                 // 新插件或文件有变更：重读元数据，旧清单仅作兜底，标记待重建
                 self::$meta[$n] = self::readMeta($n);
@@ -78,6 +114,9 @@ class Plugin
         foreach (self::$order as $n) {
             if (isset($stale[$n]) || empty(self::$manifest[$n]['stats'])) self::loadPlugin($n);
         }
+        // 计划任务入库（v1.1.13）：插件清单此时已就绪，syncCronTasks 幂等，
+        // 只在「新任务」或「间隔变化」时才动 next_run_at。
+        self::syncCronTasks();
         self::saveCache();
     }
 
@@ -115,9 +154,9 @@ class Plugin
 
     private static function blankManifestParts(): array
     {
-        return ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [],
+        return ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'crons' => [],
                 'assets' => ['css' => [], 'js' => []],
-                'stats' => ['hooks' => 0, 'routes' => 0, 'pages' => 0]];
+                'stats' => ['hooks' => 0, 'routes' => 0, 'pages' => 0, 'crons' => 0]];
     }
 
     /** 原子落盘缓存（tmp + rename，多进程并发下后写覆盖，内容等价无害） */
@@ -126,7 +165,11 @@ class Plugin
         if (!self::$dirty || self::$cacheDir === '') return;
         if (!is_dir(self::$cacheDir)) @mkdir(self::$cacheDir, 0775, true);
         $data = ['v' => 1, 'plugins' => []];
-        $keep = array_flip(['hooks', 'routes', 'pages', 'sensitive', 'assets', 'stats', 'sig']);
+        // ⚠️ 白名单漏一个键，那个键就**永远不会被写进缓存**：
+        // 落盘丢失 → 下次读缓存缺失 → 判定为「清单不完整」→ 每次请求都重新加载插件，
+        // 而按需加载（fire/dispatch 靠清单里的 hooks/crons 决定要不要加载）随之失效。
+        // 加新的注册类型时，这里必须同步加，否则症状是「性能下降 + 行为诡异」而非报错。
+        $keep = array_flip(['hooks', 'routes', 'pages', 'sensitive', 'crons', 'assets', 'stats', 'sig']);
         foreach (self::$manifest as $n => $m) {
             $data['plugins'][$n] = array_intersect_key($m, $keep)
                 + ['sig' => self::sigOf($n), 'meta' => self::$meta[$n] ?? []]
@@ -149,18 +192,25 @@ class Plugin
         $main = self::$dir . '/' . $name . '/main.php';
         if (!is_file($main)) return;
 
-        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'assets' => ['css' => [], 'js' => []]];
+        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'crons' => [], 'assets' => ['css' => [], 'js' => []]];
         self::$loading = $name;
-        try { require $main; } catch (Throwable $e) { Sec::log('plugin_error', $name, ['error' => $e->getMessage()]); }
+        // ⚠️ 必须 require_once，不能用 require。
+        // 同一请求内一个插件可能被加载两次：init() 的「重建清单」与 inspect() 的「探测计数」，
+        // 以及后台页里 adminPages() 先加载、随后 fire() 又按清单加载。
+        // 用 require 时第二次会重新执行整个文件 → 插件顶层定义的函数重复声明
+        // → Fatal error: Cannot redeclare xxx() → 整个请求 500（空响应，无 JSON）。
+        // 踩过：login-logs 的 owLLEnsureTable() 就是这么把 ?action=cron 打成 500 的。
+        // require_once 第二次直接返回 true 且不执行，语义正是我们要的。
+        try { require_once $main; } catch (Throwable $e) { Sec::log('plugin_error', $name, ['error' => $e->getMessage()]); }
         self::$loading = '';
         $p = self::$pending;
         self::$pending = null;
 
-        $stats = ['hooks' => count($p['hooks']), 'routes' => count($p['routes']), 'pages' => count($p['pages'])];
+        $stats = ['hooks' => count($p['hooks']), 'routes' => count($p['routes']), 'pages' => count($p['pages']), 'crons' => count($p['crons'])];
         self::$stats[$name] = $stats;
         $old = self::$manifest[$name] ?? null;
         $m = ($old ?? []) + self::blankManifestParts() + ['sig' => []];
-        foreach (['hooks', 'routes', 'pages', 'sensitive'] as $k) {
+        foreach (['hooks', 'routes', 'pages', 'sensitive', 'crons'] as $k) {
             $m[$k] = array_values(array_unique(array_merge($m[$k], $p[$k])));
         }
         foreach (['css', 'js'] as $t) {
@@ -218,6 +268,174 @@ class Plugin
             self::$pending['assets'][$type][] = $path;
         }
     }
+
+    // ---------- 计划任务（v1.1.13） ----------
+
+    /**
+     * 注册一个计划任务（插件在 main.php 顶层调用）。
+     *
+     * 与 `cron.minute` 钩子的区别：那个是「每分钟醒一次，要不要干活自己判断」，
+     * 无状态、无列表、无法在后台查看；本方法是**声明式注册**——
+     * 任务名、间隔、中文说明都入库，后台「计划任务」页能列出来、能启停、能手动触发，
+     * 每次执行还留一条日志。
+     *
+     * ```php
+     * Plugin::cron('purge_expired', 86400, function () {
+     *     Chat::purgeDeleted();
+     * }, '清理到期软删除消息');
+     * ```
+     *
+     * @param string          $name        任务名（同插件内唯一，只允许字母数字下划线）
+     * @param int             $interval    运行间隔（秒），小于 60 按 60 处理
+     * @param callable|string $handler     处理器：闭包，或 "Class@method" 字符串
+     * @param string          $description 面向管理员的中文说明（后台列表展示；不写则只显示任务名）
+     */
+    public static function cron(string $name, int $interval, $handler, string $description = ''): void
+    {
+        if (!is_callable($handler) && !is_string($handler)) return;
+        $safe = preg_replace('/[^A-Za-z0-9_]/', '_', $name);
+        self::$crons[] = [
+            'plugin'      => self::$loading,
+            'name'        => ($safe !== '' && $safe !== null) ? $safe : 'task',
+            'interval'    => max(60, $interval),
+            'handler'     => $handler,
+            'description' => trim($description),
+        ];
+        if (self::$pending !== null) self::$pending['crons'][] = $safe;
+    }
+
+    /**
+     * 已注册的计划任务清单（来自本请求已加载的插件）。
+     * 后台用它补齐 cron_tasks 表里不存的 description。
+     * @return list<array{plugin:string,name:string,interval:int,handler:mixed,description:string}>
+     */
+    public static function crons(): array
+    {
+        return self::$crons;
+    }
+
+    /**
+     * 把已加载插件注册的计划任务同步进 cron_tasks 表。
+     *
+     * 只在「新增或间隔变化」时改 next_run_at —— 否则每次请求都会把到期时间往后推，
+     * 任务永远等不到执行（论坛踩过这个坑，这里明确区分首次写入与更新）。
+     * 已在库里的 enabled / last_run_at / run_count 一律不动，那是管理员与历史的状态。
+     */
+    public static function syncCronTasks(): void
+    {
+        $now = time();
+        foreach (self::$crons as $t) {
+            $row = DB::one('SELECT id, interval FROM cron_tasks WHERE plugin=? AND name=?',
+                [$t['plugin'], $t['name']]);
+            if (!$row) {
+                DB::insert('cron_tasks', [
+                    'plugin'      => $t['plugin'],
+                    'name'        => $t['name'],
+                    'interval'    => (int)$t['interval'],
+                    'last_run_at' => 0,
+                    'next_run_at' => $now + (int)$t['interval'],
+                    'last_status' => '',
+                    'run_count'   => 0,
+                    'enabled'     => 1,
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ]);
+                continue;
+            }
+            // 间隔被插件改过 → 按新间隔重算到期时间；否则原样保留
+            if ((int)$row['interval'] !== (int)$t['interval']) {
+                DB::run('UPDATE cron_tasks SET interval=?, next_run_at=?, updated_at=? WHERE id=?',
+                    [(int)$t['interval'], $now + (int)$t['interval'], $now, (int)$row['id']]);
+            }
+        }
+    }
+
+    /**
+     * 执行到期的计划任务。
+     *
+     * @param int  $limit 单次最多执行多少个（防止一次性堆积的任务把请求拖死）
+     * @param bool $force true = 忽略 next_run_at，把启用的任务全跑一遍（后台「立即执行」用）。
+     *                     false = 只跑到期任务（长轮询驱动时用，保持调度节奏）
+     * @return list<array{name:string,status:string,message:string,duration:int}>
+     */
+    public static function runCron(int $limit = 10, bool $force = false): array
+    {
+        $now = time();
+        $limit = max(1, min(50, $limit));
+        $sql = 'SELECT * FROM cron_tasks WHERE enabled=1';
+        if (!$force) $sql .= ' AND next_run_at<=?';
+        $sql .= ' ORDER BY next_run_at ASC LIMIT ' . $limit;
+
+        $tasks = DB::all($sql, $force ? [] : [$now]);
+        if (!$tasks) return [];
+
+        // 「插件::任务名」→ 处理器。未加载的插件这里取不到（按需加载，见下）
+        $handlers = [];
+        foreach (self::cronsOfEnabledPlugins() as $t) {
+            $handlers[$t['plugin'] . '::' . $t['name']] = $t['handler'];
+        }
+
+        $results = [];
+        foreach ($tasks as $task) {
+            $key = $task['plugin'] . '::' . $task['name'];
+            $started = microtime(true);
+            $status = 'ok';
+            $message = '';
+
+            if (!isset($handlers[$key])) {
+                // 插件停用后任务仍留在表里，但每次都会走到这里被跳过。
+                // 后台据此显示「插件未启用」并隐藏启停开关。
+                $status = 'skip';
+                $message = '处理器未注册（插件可能已停用）';
+            } else {
+                try {
+                    self::callCronHandler($handlers[$key]);
+                } catch (Throwable $e) {
+                    $status = 'error';
+                    $message = $e->getMessage();
+                    Sec::log('cron_error', $key, ['err' => $e->getMessage()]);
+                }
+            }
+
+            $duration = (int)round((microtime(true) - $started) * 1000);
+            $interval = max(60, (int)$task['interval']);
+            // 状态与日志必须成对写：只更新状态没日志，后台看不出这次跑了什么；
+            // 只写日志没更新状态，任务会被反复重跑。
+            DB::run('UPDATE cron_tasks SET last_run_at=?, next_run_at=?, last_status=?, run_count=run_count+1, updated_at=? WHERE id=?',
+                [$now, $now + $interval, $status, $now, (int)$task['id']]);
+            DB::insert('cron_logs', [
+                'name'       => $key,
+                'status'     => $status,
+                'message'    => mb_substr($message, 0, 400),
+                'duration'   => $duration,
+                'created_at' => $now,
+            ]);
+            $results[] = ['name' => $key, 'status' => $status, 'message' => $message, 'duration' => $duration];
+        }
+        return $results;
+    }
+
+    /** 收集所有启用插件注册的计划任务（按需加载各插件 main.php） */
+    private static function cronsOfEnabledPlugins(): array
+    {
+        foreach (self::$order as $name) {
+            if (empty(self::$loaded[$name]) && !empty(self::$manifest[$name]['crons'])) {
+                self::loadPlugin($name);
+            }
+        }
+        return self::$crons;
+    }
+
+    /** 调用处理器：支持 callable 与 "Class@method" 字符串 */
+    private static function callCronHandler($handler)
+    {
+        if (is_string($handler) && strpos($handler, '@') !== false) {
+            [$cls, $method] = explode('@', $handler, 2);
+            return $cls::$method();
+        }
+        return call_user_func($handler);
+    }
+
 
     // ---------- 运行时触发（按清单懒加载涉及的插件） ----------
 
@@ -307,13 +525,41 @@ class Plugin
         return $out;
     }
 
-    /** 统一计划任务：每分钟最多触发一次 cron.minute（由长轮询驱动，也可挂系统 cron 调 ?action=cron） */
-    public static function cronTick(bool $force = false): void
+    /**
+     * 统一计划任务驱动（v1.1.13 升级）
+     *
+     * 两层：
+     *  1. `cron.minute` 钩子 —— 旧机制，每分钟醒一次，回调自行判断到期没到。保留不删，
+     *     现有插件仍挂在这里。
+     *  2. 声明式任务（`Plugin::cron()` 注册）—— 到期就由 runCron() 执行。
+     *
+     * 频率取抹由长轮询驱动（每分钟最多一次），也可挂系统 cron 调 `?action=cron`。
+     * 淘过到期任务：多进程下先刺断已有进程在跑，不阻塞每个请求。
+     *
+     * @param bool $force true = 忽略 next_run_at，强制跑全部已启用任务（后台「立即执行」）
+     * @return list<array{name:string,status:string,message:string,duration:int}>
+     */
+    public static function cronTick(bool $force = false): array
     {
         $minute = (int)(time() / 60);
-        if (!$force && $minute === self::$lastCron) return;
+        if (!$force && $minute === self::$lastCron) return [];
         self::$lastCron = $minute;
-        self::fire('cron.minute');
+        // 锁存在 data/cron.lock，内容为进程 pid：保持 110 秒自动过期，
+        // 避免多个 php-cgi 进程在同一分钟重复执行（轮询是并发的）。
+        $lockDir = self::$cacheDir !== '' ? self::$cacheDir : dirname(self::$dir) . '/data/cache';
+        $lock = @fopen($lockDir . '/cron.lock', 'c');
+        if ($lock === false) return [];
+        if (@flock($lock, LOCK_EX | LOCK_NB) === false) { @fclose($lock); return []; }
+        try {
+            @ftruncate($lock, 0);
+            @fwrite($lock, (string)getmypid());
+            // 先火钩子、后声明式任务：保证旧机制的依赖不受影响
+            self::fire('cron.minute');
+            return self::runCron(20, $force);
+        } finally {
+            @flock($lock, LOCK_UN);
+            @fclose($lock);
+        }
     }
 
     // ---------- 后台管理 ----------
@@ -341,6 +587,8 @@ class Plugin
                 'hooks' => (int)$stats['hooks'],
                 'routes' => (int)$stats['routes'],
                 'pages' => (int)$stats['pages'],
+                // 计划任务数（v1.1.13）：后台插件管理页在「钩子/路由/后台页」之前展示
+                'crons' => (int)($stats['crons'] ?? 0),
             ];
         }
         return $out;
@@ -364,7 +612,7 @@ class Plugin
     /** 已启用插件的注册计数（加载时记录） */
     public static function stats(string $name): array
     {
-        return self::$stats[$name] ?? ['hooks' => 0, 'routes' => 0, 'pages' => 0];
+        return self::$stats[$name] ?? ['hooks' => 0, 'routes' => 0, 'pages' => 0, 'crons' => 0];
     }
 
     /**
@@ -375,24 +623,30 @@ class Plugin
     {
         if (!preg_match('/^[a-zA-Z0-9_-]+$/', $name)) return ['hooks' => 0, 'routes' => 0, 'pages' => 0];
         $main = self::$dir . '/' . $name . '/main.php';
-        if (!is_file($main)) return ['hooks' => 0, 'routes' => 0, 'pages' => 0];
+        if (!is_file($main)) return ['hooks' => 0, 'routes' => 0, 'pages' => 0, 'crons' => 0];
         $before = self::snapshot();
         $beforeAssets = self::$assets;
-        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'assets' => ['css' => [], 'js' => []]];
+        $beforeCrons = self::$crons;
+        self::$pending = ['hooks' => [], 'routes' => [], 'pages' => [], 'sensitive' => [], 'crons' => [], 'assets' => ['css' => [], 'js' => []]];
         self::$loading = $name;
-        try { require $main; $stats = ['hooks' => count(self::$pending['hooks']), 'routes' => count(self::$pending['routes']), 'pages' => count(self::$pending['pages'])]; }
-        catch (Throwable $e) { $stats = ['hooks' => 0, 'routes' => 0, 'pages' => 0]; }
+        // require_once：inspect() 可能与 loadPlugin() 在同一请求内先后加载同一插件，
+        // 用 require 会因函数重复声明直接 fatal（见 loadPlugin 内的说明）。
+        try { require_once $main; $stats = ['hooks' => count(self::$pending['hooks']), 'routes' => count(self::$pending['routes']), 'pages' => count(self::$pending['pages']), 'crons' => count(self::$pending['crons'])]; }
+        catch (Throwable $e) { $stats = ['hooks' => 0, 'routes' => 0, 'pages' => 0, 'crons' => 0]; }
         $p = self::$pending;
         self::$pending = null;
         self::$loading = '';
-        // 回滚全部注册（探测不生效，包括资源）
+        // 回滚全部注册（探测不生效，包括资源与计划任务）
         self::$hooks = $before['hooks'];
         self::$routes = $before['routes'];
         self::$adminPages = $before['pages'];
         self::$assets = $beforeAssets;
+        // ⚠️ 计划任务必须一并回滚：Plugin::cron() 直接 push 到 self::$crons，
+        // 漏掉会让「探测」变成真注册，同一任务在表里出现两次。
+        self::$crons = $beforeCrons;
         // 刷新清单与签名（后续后台列表免探测）
         $m = (self::$manifest[$name] ?? []) + self::blankManifestParts() + ['sig' => []];
-        foreach (['hooks', 'routes', 'pages', 'sensitive'] as $k) {
+        foreach (['hooks', 'routes', 'pages', 'sensitive', 'crons'] as $k) {
             $m[$k] = array_values(array_unique(array_merge($m[$k], $p[$k])));
         }
         foreach (['css', 'js'] as $t) {
@@ -453,6 +707,25 @@ class Plugin
         if (!preg_match('/^[a-zA-Z0-9_-]+$/', $name)) return;
         if (!is_file(self::$dir . "/$name/plugin.json")) return;
         DB::upsert('plugins', ['name' => $name, 'enabled' => $enable ? 1 : 0, 'config' => ''], ['name']);
+        // 同步本进程的内存状态：否则同一请求里紧接着调 runCron()，看到的仍是启停**前**的
+        // order / crons —— 表现为「刚启用却提示插件未启用」或「刚停用却照常执行」。
+        // 跨请求自然一致，但请求内必须自己跟上。
+        $key = array_search($name, self::$order, true);
+        if ($enable && $key === false) {
+            self::$order[] = $name;
+        } elseif (!$enable && $key !== false) {
+            unset(self::$order[$key]);
+            self::$order = array_values(self::$order);
+        }
+        // 停用时从注册表剔除该插件的任务。⚠️ require_once 的副作用：同进程内该插件的
+        // main.php 已执行过，再 loadPlugin 不会重跑、闭包拿不回来；
+        // 所以「启用」只能等下个请求（刷新页面）生效，这里不做无效尝试。
+        if (!$enable) {
+            self::$crons = array_values(array_filter(
+                self::$crons,
+                fn($c) => ($c['plugin'] ?? '') !== $name
+            ));
+        }
     }
 
     /** 在线安装：上传 zip 解压到 plugins/（ZipArchive 为 PHP 内置扩展） */
