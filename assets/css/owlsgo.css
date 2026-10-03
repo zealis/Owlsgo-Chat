@@ -33,6 +33,11 @@
     --ow-blue-light: #E6F7FF;
     --ow-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     --ow-mono: Consolas, Monaco, "Courier New", monospace;
+    /* v1.1.17：顶栏高度带。实测 = padding 10+10 + 图标钮 36 + 下边框 1 = 57px。
+       抽成变量的唯一目的：**让右侧栏「群聊设置」下方的分隔线与顶栏下边框
+       落在同一水平线上**（见文件末尾 v1.1.17 的桌面端对齐块）。
+       改这个值只需改这一处，两侧同时跟随，不会各自漂移。 */
+    --ow-topbar-h: 57px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -553,6 +558,10 @@ button { font-family: inherit; cursor: pointer; }
     align-items: center; -webkit-align-items: center;
     gap: 10px;
     flex-shrink: 0; -webkit-flex-shrink: 0;   /* 头部与输入栏不参与压缩 */
+    /* v1.1.17：显式高度并引用 --ow-topbar-h，供右侧栏首行对齐使用。
+       原先高度是「padding 10+10 + 图标钮 36 + 边框 1」算出来的 57px，
+       数值本身不变，只是把它变成**可被引用的真源**（见文件末尾对齐块）。 */
+    height: var(--ow-topbar-h);
     padding: 10px 16px;
     border-bottom: 1px solid var(--ow-border);
     /* 顶栏底色与群聊界面一致（v1.0.120），靠下边框区分。
@@ -856,11 +865,15 @@ button { font-family: inherit; cursor: pointer; }
 /* v1.1.16：右侧栏「群聊信息」标题已删，这个容器只剩收起按钮（JS 定位用）。
    ⚠️ **不要写 height:0 / overflow:hidden** —— 收起按钮 .ow-online-close 是
    position:absolute 定位到这个容器上的，压掉高度会让按钮在窄屏彻底不可见
-   （Playwright 判 hidden，点不到）。这里只清掉标题留下的上下内边距。 */
+   （Playwright 判 hidden，点不到）。这里只清掉标题留下的上下内边距。
+   v1.1.17：桌面端下这 20px 会把首行分隔线顶偏，窄屏仍需保留，故在末尾
+   的对齐块里用 min-height:0 单独归零（窄屏不受影响）。 */
 #owPanelTitle { padding: 0; position: relative; min-height: 20px; }
 #owPanelTitle .ow-online-close { position: absolute; top: 2px; right: 8px; float: none; }
 .ow-panel-members { flex: 1; -webkit-flex: 1; overflow: hidden; }
-.ow-panel-room-body { padding: 0 16px 14px; }
+/* v1.1.17：底部留白从 14px 收到 10px。原先 14px 是配合「群聊信息」标题的
+   呼吸感，标题删掉后这段空白只会让首行分隔线离顶栏更远。 */
+.ow-panel-room-body { padding: 0 16px 10px; }
 .ow-panel-hint { padding: 4px 0 10px; font-size: 13px; color: var(--ow-text-sub); }
 /* 空态文案（群简介未填写）：弱化颜色，与有值时形成对比 */
 .ow-panel-empty { color: var(--ow-text-sub); }
@@ -922,6 +935,44 @@ button { font-family: inherit; cursor: pointer; }
 .ow-online-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ow-green); flex-shrink: 0; -webkit-flex-shrink: 0; }
 .ow-online-name { flex: 1; -webkit-flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ow-online-name:hover { color: var(--ow-primary-dark); }
+
+/* ---------- v1.1.17：首行分隔线与顶栏下边框水平对齐（仅宽屏） ----------
+   现象（1440×900 实测）：右侧栏「群聊设置」下方的分隔线在 y=[60.39, 61.39]，
+   而 .ow-topbar 的下边框在 y=[56, 57] —— **差 4.39px**，肉眼可见两条线不在同一水平。
+
+   根因：.ow-panel-room 顶部由三段累加而成，而它们的总高不是顶栏高度：
+     #owPanelTitle          20px（v1.1.16 删标题后残留的空占位，宽屏下纯浪费）
+     .ow-panel-entry 首行   40.39px（padding 9×2 + 图标行 22.39）
+     .ow-panel-entry-row    41.39px（首行 + 自己的 border-top 1px）
+     ───────────────────── 合计 60.39px = 分隔线的 y
+   而顶栏是 57px（10 + 36 + 10 + 1）。两者各自独立算高度，差值就固化成了 4.39px。
+
+   修法：**不让高度靠内容自然累加**，而是把顶部区块的总高钉死为 --ow-topbar-h，
+   多出来的高度给首行（min-height 撑开，flex 居中），少掉的高度从空占位里扣。
+
+   ⚠️ 这里的 -1px 不是凑数，是**像素账的必然结果**（第一版就漏了它，实测 delta=1）：
+     顶栏   内容 [0, 56] + border-bottom 1px = 线占 [56, 57]
+     侧栏   首行 [0, H]  + 下一行的 border-top 1px = 线占 [H, H+1]
+     要两条线**占同一像素行**，必须 H + 1 == 57，即 H = 56 = 57 - 1。
+     写 57 会让分隔线落到 [57, 58]，比顶栏整整低 1px —— 依然肉眼可见不齐。
+
+   于是分隔线落在 y=[56, 57]，与顶栏、左侧栏 .ow-brand 三线齐平。
+
+   ⚠️ 为什么必须限定 min-width:961px：
+     窄屏（≤960px）侧栏是 fixed 浮层（top:52px），此时 #owPanelTitle 是
+     .ow-online-close 的定位父级，min-height:20px **必须保留** ——
+     归零会让收起按钮彻底不可见（Playwright 判 hidden，点不到）。
+     窄屏下侧栏与顶栏本就不在同一坐标系，无需对齐。 */
+@media (min-width: 961px) {
+    /* 空占位归零：宽屏下 .ow-online-close 是 display:none，这里没有任何可见内容 */
+    #owPanelTitle { min-height: 0; }
+    /* 首行（.ow-panel-entry）撑满顶部区块：区块总高 = 0 + 首行高 = 顶栏高度。
+       ⚠️ 用 min-height 而非 height：内容若换行变高，行会向下顶而不是被裁切。
+       ⚠️ 减 1px：让下一行的 border-top 正好落进顶栏 border-bottom 的那个像素行。
+       ⚠️ 群公告行（.ow-panel-entry-row）的 min-height **不要动** —— 它带
+         border-top，撑高会连带把它自己的下边框也推走，破坏下面那条线。 */
+    .ow-panel-room > .ow-panel-room-body > .ow-panel-entry { min-height: calc(var(--ow-topbar-h) - 1px); }
+}
 
 /* ---------- 弹层 ---------- */
 .ow-modal-mask {
