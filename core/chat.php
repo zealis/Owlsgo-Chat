@@ -8,18 +8,25 @@ class Chat
     public static function rooms(array $actor): array
     {
         $list = DB::all('SELECT * FROM rooms WHERE status=1 ORDER BY id');
+        // v1.1.11：一次性取出「我加入的所有群」，避免在循环里逐群查成员表（N+1）。
+        $mineSet = self::memberRoomIds($actor);
         $out = [];
         foreach ($list as $r) {
             if (!self::canEnter($r, $actor, true)) continue;
             $out[] = [
                 'id' => (int)$r['id'], 'name' => $r['name'], 'slug' => $r['slug'],
                 'type' => $r['type'], 'need_password' => $r['type'] === 'password',
+                // v1.1.11：公开性随房间下发，前端据此显示「公开/不公开」与邀请入口
+                'is_public' => (int)($r['is_public'] ?? 1) === 1,
+                // 我是否在这个群的成员表里（群主恒为 true，不依赖 room_members 行）
+                'is_member' => (int)($r['owner_id'] ?? 0) === (int)($actor['id'] ?? 0)
+                    || (isset($mineSet[(int)$r['id']]) && $actor['kind'] === 'user'),
                 'description' => $r['description'] ?? '',
                 'owner_id' => (int)($r['owner_id'] ?? 0),
                 'avatar' => (string)($r['avatar'] ?? ''),
                 'mine' => (int)($r['owner_id'] ?? 0) === (int)($actor['id'] ?? 0) && $actor['kind'] === 'user',
             ];
-            // 前台可编辑（群聊设置 ⋮ / 右侧栏入口）：群主 + 超级管理员。
+            // 前台可编辑（群聊设置弹窗 / 右侧栏入口）：群主 + 超级管理员。
             // v1.1.0 修正：原先只判群主，导致「非群主的超管」进不去群聊设置，
             // 连带群公告等插件入口（onRoomEdit 按 isOwner||isAdmin 渲染）也拿不到，
             // 表现为「服务端允许删除但前台没有删除按钮」的契约不一致。
@@ -27,8 +34,131 @@ class Chat
             $out[count($out) - 1]['can_edit'] = $actor['kind'] === 'user'
                 && ($actor['role'] === 'admin'
                     || ((int)($r['owner_id'] ?? 0) === (int)$actor['id']));
+            // v1.1.11：能否邀请成员 = 本人是群成员（含群主）且对方有邀请入口。
+            // 群主与超管必然是成员；普通成员在公开群里进过群也算「加入了该群」。
+            $out[count($out) - 1]['can_invite'] = $actor['kind'] === 'user'
+                && ((int)($r['owner_id'] ?? 0) === (int)$actor['id']
+                    || $actor['role'] === 'admin'
+                    || (isset($mineSet[(int)$r['id']])));
         }
         return $out;
+    }
+
+    // ---------- 群成员（v1.1.11） ----------
+
+    /**
+     * 当前身份已加入的房间 ID 集合（room_members.room_id => true）。
+     * 游客与未登录一律返回空数组：游客身份随浏览器会话消亡，
+     * 同名游客背后可能是任意多个人，不能也不该成为成员。
+     */
+    public static function memberRoomIds(array $actor): array
+    {
+        if (($actor['kind'] ?? '') !== 'user') return [];
+        $uid = (int)($actor['id'] ?? 0);
+        if ($uid <= 0) return [];
+        $set = [];
+        foreach (DB::all('SELECT room_id FROM room_members WHERE user_id=?', [$uid]) as $r) {
+            $set[(int)$r['room_id']] = true;
+        }
+        return $set;
+    }
+
+    /** 是否为该群成员（群主恒真；游客恒假） */
+    public static function isMember(array $room, array $actor): bool
+    {
+        if (($actor['kind'] ?? '') !== 'user') return false;
+        $uid = (int)($actor['id'] ?? 0);
+        if ($uid <= 0) return false;
+        if ((int)($room['owner_id'] ?? 0) === $uid) return true;      // 群主恒为成员
+        if ($actor['role'] === 'admin') return true;                // 超管可见全部群（既有口径）
+        // ⚠️ 必须转 int 再比大小，**不能**写 !== null：
+        // DB::val() 底层是 PDOStatement::fetchColumn()，无匹配行时返回 **false** 而非 null，
+        // `false !== null` 恒为 true —— 会把所有人都判成成员，不公开群直接形同虚设。
+        // 全库其余 DB::val 调用点都是 (int) 或 ?: 转型，只有这里踩过这个坑。
+        return (int)DB::val('SELECT 1 FROM room_members WHERE room_id=? AND user_id=?',
+            [(int)$room['id'], $uid]) > 0;
+    }
+
+    /** 该房间是否允许邀请他人（群主 + 成员 + 超管） */
+    public static function canInvite(array $room, array $actor): bool
+    {
+        return self::isMember($room, $actor);
+    }
+
+    /**
+     * 邀请一名注册用户进群（幂等：已在群内直接返回已存在）。
+     * 只接受**数字用户 ID**——与全站身份口径一致（昵称可重名、邮箱属个人信息，
+     * 二者都不能做身份标识或反查，见开发文档「开发约束」）。
+     */
+    public static function inviteMember(array $room, array $actor, int $userId): array
+    {
+        $user = DB::one('SELECT id, nickname FROM users WHERE id=? AND status=1', [$userId]);
+        if (!$user) return [false, '用户不存在或已停用'];
+        if ((int)$room['owner_id'] === $userId) return [false, '对方就是群主，无需邀请'];
+        $exists = DB::val('SELECT 1 FROM room_members WHERE room_id=? AND user_id=?',
+            [(int)$room['id'], $userId]);
+        if ($exists) return [false, ($user['nickname'] ?? '') . ' 已在群内'];
+        DB::insert('room_members', [
+            'room_id' => (int)$room['id'],
+            'user_id' => $userId,
+            'invited_by' => (int)($actor['id'] ?? 0),
+            'created_at' => time(),
+        ]);
+        return [true, '已邀请 ' . ($user['nickname'] ?? '') . '（用户 ID ' . $userId . '）'];
+    }
+
+    /** 移出成员（仅群主/超管；群主不能移除自己，避免把群变成无人可管） */
+    public static function removeMember(array $room, array $actor, int $userId): array
+    {
+        $uid = (int)($actor['id'] ?? 0);
+        $isOwner = (int)($room['owner_id'] ?? 0) === $uid || $actor['role'] === 'admin';
+        if (!$isOwner) return [false, '仅群主或超级管理员可移出成员'];
+        if ($userId === (int)$room['owner_id']) return [false, '不能移出群主'];
+        $st = DB::run('DELETE FROM room_members WHERE room_id=? AND user_id=?', [(int)$room['id'], $userId]);
+        $n = is_object($st) && method_exists($st, 'rowCount') ? (int)$st->rowCount() : 0;
+        if ($n <= 0) return [false, '该用户不是本群成员'];
+        return [true, '已移出成员'];
+    }
+
+    /** 成员列表（含昵称/角色），按加入时间倒序 */
+    public static function memberList(array $room): array
+    {
+        $rows = DB::all(
+            'SELECT rm.id, rm.user_id, rm.invited_by, rm.created_at,
+                    u.nickname, u.role, u.avatar
+             FROM room_members rm LEFT JOIN users u ON u.id = rm.user_id
+             WHERE rm.room_id=? ORDER BY rm.created_at DESC', [(int)$room['id']]);
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'user_id' => (int)$r['user_id'],
+                'nickname' => (string)($r['nickname'] ?? ''),
+                'role' => (string)($r['role'] ?? 'member'),
+                'avatar' => (string)($r['avatar'] ?? ''),
+                'invited_by' => (int)($r['invited_by'] ?? 0),
+                'created_at' => (int)$r['created_at'],
+            ];
+        }
+        return $out;
+    }
+
+    /** 生成/重置邀请码（仅群主/超管）。返回新码 */
+    public static function resetInviteCode(array $room, array $actor): string
+    {
+        $code = strtolower(bin2hex(random_bytes(5)));   // 10 位 hex，无歧义字符
+        DB::run('UPDATE rooms SET invite_code=? WHERE id=?', [$code, (int)$room['id']]);
+        return $code;
+    }
+
+    /**
+     * 新建群时按公开性决定是否预生成邀请码。
+     * 不公开群必须一建好就有码，否则「成员管理」里既展示不出邀请链接、
+     * 也没有「重置邀请码」按钮可点（前端按 invite_code 非空来渲染这两处）。
+     * @param int $isPublic 1=公开 0=不公开
+     */
+    public static function newInviteCode(int $isPublic): string
+    {
+        return $isPublic === 1 ? '' : strtolower(bin2hex(random_bytes(5)));
     }
 
     public static function room(int $id): ?array
@@ -39,6 +169,13 @@ class Chat
     /** 进入权限检查（$silent 仅判断可见性） */
     public static function canEnter(array $room, array $actor, bool $silent = false): bool
     {
+        // v1.1.11：不公开群的**第一道闸**，先于 type 判断——
+        // 未被邀请的人一律看不到、进不去，无论 type 是 public/password/role。
+        // 群主与超管恒放行（isMember 内已含）；游客在非公开群没有任何入口，
+        // 也无法被邀请（游客身份随会话消亡，不能作为成员，见 memberRoomIds）。
+        if ((int)($room['is_public'] ?? 1) !== 1 && !self::isMember($room, $actor)) {
+            return false;
+        }
         if ($room['type'] === 'role') {
             $need = Auth::roleLevel($room['min_role']);
             return Auth::roleLevel($actor['role'] ?? 'guest') >= $need;
@@ -745,7 +882,7 @@ class Chat
      *
      * @return array [bool, string]
      */
-    public static function updateRoom(array $actor, int $roomId, string $name, string $description, string $avatar = ''): array
+    public static function updateRoom(array $actor, int $roomId, string $name, string $description, string $avatar = '', ?int $isPublic = null): array
     {
         $room = self::room($roomId);
         if (!$room) return [false, '群聊不存在'];
@@ -766,6 +903,14 @@ class Chat
 
         $sets = ['name' => $name, 'description' => $description];
         if ($avatar !== '') $sets['avatar'] = $avatar;
+        // v1.1.11 公开性开关；null = 不改（兼容旧调用方，如后台）。
+        // 切到「不公开」时若无邀请码，顺手生成一个，省得群主再点一次。
+        if ($isPublic !== null) {
+            $sets['is_public'] = $isPublic ? 1 : 0;
+            if (!$isPublic && empty($room['invite_code'])) {
+                $sets['invite_code'] = self::newInviteCode(0);
+            }
+        }
         $up = implode(',', array_map(fn($c) => "$c=?", array_keys($sets)));
         DB::run("UPDATE rooms SET $up WHERE id=?", [...array_values($sets), $roomId]);
         Sec::log('room_update', $name, ['id' => $roomId, 'by' => $actor['role']]);

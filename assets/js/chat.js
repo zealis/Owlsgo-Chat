@@ -1380,13 +1380,29 @@
                 + '<div class="ow-form-item" id="owRCRoleRow" style="display:none"><label>最低进入角色</label><select class="ow-input" id="owRCRole">'
                 + opts(ROLE, ['guest', 'member', 'vip', 'admin'], 'guest') + '</select></div>'
                 + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRCDesc" maxlength="200" placeholder="一句话介绍这个群"></div>'
+                // v1.1.11 公开性 State 开关。与上面的「类型」正交：
+                // 类型管「进入方式」（密码/角色门槛），开关管「谁能发现这个群」。
+                + '<div class="ow-form-item ow-form-item-switch">'
+                + switchHtml('owRCPublic', '公开群聊', true, '开启：显示在群聊列表，游客可进入并发言。关闭：不进公开列表，只能由群成员邀请加入。')
+                + '</div>'
+                + '<div class="ow-form-msg ow-rc-note" id="owRCPubNote"></div>'
                 + '<div class="ow-room-form-tip" id="owRCTip"></div>'
                 + '<div class="ow-form-msg" id="owRCMsg"></div>'
                 + '<div class="ow-modal-actions">'
                 + '<button class="ow-btn ow-btn-ghost" id="owRCCancel">取消</button>'
                 + '<button class="ow-btn ow-btn-primary" id="owRCCreate">创 建</button></div>'
             );
+            bindSwitches($('owModal'));
             var typeSel = $('owRCType'), tip = $('owRCTip'), msg = $('owRCMsg');
+            var pubBox = $('owRCPublic'), pubNote = $('owRCPubNote');
+            // 公开性提示随开关变化：把「谁能进这个群」讲清楚，避免建完才发现进不去
+            var refreshPub = function () {
+                pubNote.innerHTML = pubBox.checked
+                    ? '<span style="color:var(--ow-text-sub)">群聊将出现在左侧列表，所有人（含游客）都能看到并进入。</span>'
+                    : '<span style="color:#C41D1F">群聊不会出现在列表里。创建后只有你能进，其他人需要你或群成员在群聊设置里按用户 ID 邀请。</span>';
+            };
+            pubBox.onchange = refreshPub;
+            refreshPub();
             var refreshTip = function () {
                 var t = typeSel.value;
                 $('owRCPassRow').style.display = t === 'password' ? 'block' : 'none';
@@ -1423,11 +1439,15 @@
                 OwApi.post('room_create', {
                     name: name, type: t, password: $('owRCPass') ? $('owRCPass').value : '',
                     min_role: $('owRCRole').value,
-                    description: $('owRCDesc').value
+                    // v1.1.11：公开性开关。传 '0'/'1' 字符串，服务端按 === '0' 归一
+                    description: $('owRCDesc').value,
+                    is_public: pubBox.checked ? '1' : '0'
                 }, function (r) {
                     if (!r.ok) { msg.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>'; return; }
                     self.closeModal();
-                    toast('群聊「' + r.name + '」已创建' + (r.cost > 0 ? '，扣除 ' + r.cost + ' 积分' : ''));
+                    toast('群聊「' + r.name + '」已创建'
+                        + (r.cost > 0 ? '，扣除 ' + r.cost + ' 积分' : '')
+                        + (pubBox.checked ? '' : '（不公开，可在群聊设置里邀请成员）'));
                     self.refreshRooms(r.id, r.name);
                 });
             };
@@ -1885,7 +1905,9 @@
             var canEdit = !!r.can_edit;   // 服务端下发：群主 + 超管（口径唯一，前端不自行判身份）
             var meId = me.id || 0;
             var isOwner = !!meId && meId === (r.owner_id || 0);
-            var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '公开群');
+            var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '群聊');
+            var isPublic = r.is_public !== false;   // 缺省视为公开，兼容旧缓存数据
+            var canInvite = !!r.can_invite;
             // 待保存头像按群缓存：切群时必须重置，否则会把上一个群的头像带过来
             if (this._roomAvatarRoom !== this.room) {
                 this._roomAvatarRoom = this.room;
@@ -1902,14 +1924,21 @@
                 + '<div class="ow-card-id">'
                 + '<div class="ow-card-name">' + esc(r.name) + '</div>'
                 + '<div class="ow-card-badges"><span class="ow-tag ow-tag-green">' + typeName + '</span>'
-                + '<span class="ow-tag ow-tag-member">群主 ' + esc(fmtUid(r.owner_id)) + '</span></div>'
+                + '<span class="ow-tag ow-tag-member">' + (isPublic ? '公开' : '不公开') + '</span></div>'
                 + '</div></div>'
                 + (canEdit
                     ? '<div class="ow-card-meta">'
                       + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(r.name) + '" maxlength="30"></div>'
                       + '<div class="ow-form-item" style="margin-top:10px"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(r.description || '') + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
+                      // v1.1.11 公开性开关：与「类型」正交，只控制谁能发现这个群。
+                      // 关闭后群不出现在列表，只能靠成员邀请（按用户 ID）。
+                      + '<div class="ow-form-item ow-form-item-switch">'
+                      + switchHtml('owRoomPublic', '公开群聊', isPublic, '开启：显示在群聊列表，游客可进入并发言。关闭：只有群主与成员能进，需邀请加入。')
                       + '</div>'
-                      + '<div class="ow-modal-actions">'
+                      + '</div>'
+                      + '<div class="ow-modal-actions ow-modal-actions-split">'
+                      + (canInvite ? '<button class="ow-btn ow-btn-ghost" onclick="OwChat.roomMembers(' + r.id + ')">成员管理</button>' : '')
+                      + '<span class="ow-modal-actions-sp"></span>'
                       + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
                       + '<button class="ow-btn ow-btn-primary" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button></div>'
                     // 只读：非群主会员也能看到群名称 / 简介 / 群主，信息不设限，仅不可改
@@ -1918,11 +1947,15 @@
                           ? '<div class="ow-card-meta-row"><span class="ow-card-meta-k">简介</span><span class="ow-card-meta-v">' + esc(r.description) + '</span></div>'
                           : '<div class="ow-card-meta-row"><span class="ow-card-meta-v ow-panel-empty">群主还没有写简介</span></div>')
                       + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">群主</span><span class="ow-card-meta-v">' + esc(fmtUid(r.owner_id)) + '</span></div>'
+                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">可见性</span><span class="ow-card-meta-v">' + (isPublic ? '公开（所有人可见，游客可发言）' : '不公开（仅群主与成员）') + '</span></div>'
                       + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">修改</span><span class="ow-card-meta-v">仅群主与超级管理员可修改</span></div>'
                       + '</div>'
-                      + '<div class="ow-modal-actions">'
+                      + '<div class="ow-modal-actions ow-modal-actions-split">'
+                      + (canInvite ? '<button class="ow-btn ow-btn-ghost" onclick="OwChat.roomMembers(' + r.id + ')">成员管理</button>' : '')
+                      + '<span class="ow-modal-actions-sp"></span>'
                       + '<button class="ow-btn ow-btn-ghost ow-btn-block" onclick="OwChat.closeModal()">关闭</button></div>')
             );
+            bindSwitches($('owModal'));
 
             var f = $('owRoomAvatarFile');
             if (f) f.onchange = function () {
@@ -1931,6 +1964,108 @@
                 self2.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，弹窗主体保持完好
                 this.value = '';
             };
+        },
+
+        /* ---------- 群成员管理（v1.1.11） ---------- */
+        /**
+         * 成员管理弹窗：列出成员 + 按用户 ID 邀请 + 群主/超管移出成员。
+         *
+         * 身份口径：**只用数字用户 ID**。昵称可重名、邮箱属个人信息，
+         * 二者都不能做身份标识或反查（见开发文档「开发约束」）。
+         * 因此这里**不提供**「按昵称搜索用户」的功能——只接受对方主动报给你的 ID。
+         */
+        roomMembers: function (roomId) {
+            var self = this;
+            OwApi.post('room_members', { room_id: roomId }, function (r) {
+                if (!r.ok) { toast(r.msg); return; }
+                var list = r.data || [], canInvite = !!r.can_invite;
+                var isOwnerOrAdmin = (self.cfg.actor.role === 'admin')
+                    || ((self.cfg.me || {}).id === r.owner_id);
+                var meId = (self.cfg.me || {}).id || 0;
+                var cards = '';
+                if (!list.length) cards = '<div class="ow-mem-empty">还没有其他成员，可按用户 ID 邀请</div>';
+                for (var i = 0; i < list.length; i++) {
+                    var m = list[i];
+                    cards += '<div class="ow-mem-row">'
+                        + avatarHtml(m.avatar, m.nickname, 'sm', m.role)
+                        + '<span class="ow-mem-name">' + esc(m.nickname || 'ID' + m.user_id) + '</span>'
+                        + '<span class="ow-mem-id">ID ' + esc(fmtUid(m.user_id)) + '</span>'
+                        + (isOwnerOrAdmin
+                            ? '<button class="ow-btn ow-btn-ghost ow-btn-mini ow-mem-del" data-id="' + m.user_id + '">移出</button>'
+                            : '')
+                        + '</div>';
+                }
+                // 邀请码仅成员可见；不公开群没有它没法被外部找到，所以要提供
+                var codeRow = '';
+                if (r.invite_code) {
+                    var link = self.cfg.site_url + '/?room_invite=' + esc(r.invite_code);
+                    codeRow = '<div class="ow-card-meta">'
+                        + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">邀请码</span>'
+                        + '<span class="ow-card-meta-v">' + esc(r.invite_code) + '</span></div>'
+                        + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">邀请链接</span>'
+                        + '<span class="ow-card-meta-v ow-mem-link">'
+                        + '<a href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(link) + '</a></span></div>'
+                        + '</div>';
+                }
+                self.openModal(
+                    '<h3>群成员</h3>'
+                    + '<div class="ow-mem-head">共 ' + (list.length + 1) + ' 人（含群主）</div>'
+                    + '<div class="ow-mem-list">' + cards + '</div>'
+                    + (canInvite
+                        ? '<div class="ow-mem-invite">'
+                          + '<div class="ow-form-item"><label>邀请用户</label>'
+                          + '<input class="ow-input" id="owMemInviteId" placeholder="对方用户 ID（数字）" inputmode="numeric"></div>'
+                          + '<button class="ow-btn ow-btn-primary ow-btn-block" id="owMemInviteBtn">邀请加入</button>'
+                          + '</div>'
+                        : '')
+                    + codeRow
+                    + '<div class="ow-modal-actions">'
+                    + (isOwnerOrAdmin && r.invite_code
+                        ? '<button class="ow-btn ow-btn-ghost" onclick="OwChat.roomInviteReset(' + roomId + ')">重置邀请码</button>' : '')
+                    + '<button class="ow-btn ow-btn-ghost ow-btn-block" onclick="OwChat.closeModal()">关闭</button></div>'
+                );
+                // 邀请
+                var ib = $('owMemInviteBtn');
+                if (ib) ib.onclick = function () {
+                    var uid = ($('owMemInviteId').value || '').replace(/[^0-9]/g, '');
+                    if (!uid) { toast('请输入对方的用户 ID（数字）'); return; }
+                    ib.disabled = true; ib.textContent = '邀请中…';
+                    OwApi.secure('room_invite', { room_id: roomId, user_id: uid }, function (res) {
+                        toast(res.msg);
+                        if (!res.ok) { ib.disabled = false; ib.textContent = '邀请加入'; return; }
+                        self.closeModal();
+                        self.roomMembers(roomId);   // 成功即刷新成员列表
+                    });
+                };
+                // 移出（敏感操作：票据一次性）
+                var delBtns = document.querySelectorAll('#owModal .ow-mem-del');
+                for (var k = 0; k < delBtns.length; k++) {
+                    (function (el) {
+                        el.onclick = function () {
+                            var uid = el.getAttribute('data-id');
+                            self.confirm('确定把该成员移出本群？他将无法再进入不公开群。', function () {
+                                OwApi.secure('room_remove_member', { room_id: roomId, user_id: uid }, function (res) {
+                                    toast(res.msg);
+                                    if (res.ok) { self.closeModal(); self.roomMembers(roomId); }
+                                });
+                            });
+                        };
+                    })(delBtns[k]);
+                }
+                var rb = $('owModal').querySelector('[onclick*="roomInviteReset"]');
+                if (rb) rb.onclick = function () { self.roomInviteReset(roomId); };
+            });
+        },
+
+        /** 重置邀请码（旧链接立即失效）；敏感操作 */
+        roomInviteReset: function (roomId) {
+            var self = this;
+            this.confirm('重置后，旧邀请链接与邀请码立即失效。确定继续？', function () {
+                OwApi.secure('room_invite_code_reset', { room_id: roomId }, function (r) {
+                    toast(r.msg);
+                    if (r.ok) { self.closeModal(); self.roomMembers(roomId); }
+                });
+            });
         },
 
         /* ---------- 公告轮播 ---------- */
@@ -2265,7 +2400,9 @@
                 id: id,
                 name: nameEl.value,
                 description: descEl.value,
-                avatar: this._roomAvatar || ''
+                avatar: this._roomAvatar || '',
+                // v1.1.11 公开性：只在有开关时提交，避免别处复用本函数时误改
+                is_public: $('owRoomPublic') ? ($('owRoomPublic').checked ? '1' : '0') : null
             }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 toast('群聊信息已更新');

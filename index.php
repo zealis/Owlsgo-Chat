@@ -238,6 +238,9 @@ if ($action !== '') {
         'logout', 'msg_delete', 'recall', 'sticker_del',
         'admin_room_del', 'admin_room_trash_undo', 'admin_room_batch',
         'admin_ann_del', 'admin_word_del', 'admin_plugin_uninstall',
+        // v1.1.11 群成员变更：邀请/移出/重置邀请码都会改变谁能进群，
+        // 与 ban-manager 的禁言同属「谁能看到什么」的边界，一律走一次性票据。
+        'room_invite', 'room_remove_member', 'room_invite_code_reset',
     ];
     $isSensitive = in_array($action, $SENSITIVE, true) || Plugin::isSensitive($action);
     if ($isSensitive) {
@@ -367,6 +370,59 @@ if ($action !== '') {
                 'ttl' => Chat::passTtl(),
             ]);
 
+        /* ---------- 群成员管理（v1.1.11「不公开群聊」） ----------
+           身份口径：邀请对象一律用**数字用户 ID**，不用昵称（可重名）也不用邮箱。
+           权限口径：邀请 = 本群成员（群主/成员/超管）；移出 = 仅群主或超管。
+           与插件 $oaCanManage（群主+超管）刻意不同：成员邀请是「群内协作」，
+           普通成员也能邀请他人，否则「成员相互邀请」无从谈起。 */
+        case 'room_members':
+            $room = Chat::room((int)$p('room_id'));
+            if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
+            if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权访问该群聊']);
+            Api::json([
+                'ok' => true,
+                'is_public' => (int)($room['is_public'] ?? 1) === 1,
+                'can_invite' => Chat::canInvite($room, $actor),
+                'owner_id' => (int)($room['owner_id'] ?? 0),
+                'invite_code' => $actor['kind'] === 'user' && Chat::isMember($room, $actor)
+                    ? (string)($room['invite_code'] ?? '') : '',
+                'data' => Chat::memberList($room),
+            ]);
+
+        case 'room_invite':
+            $room = Chat::room((int)$p('room_id'));
+            if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
+            if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权访问该群聊']);
+            if (!Chat::canInvite($room, $actor)) Api::json(['ok' => false, 'msg' => '只有本群成员可以邀请'], 403);
+            // 游客不能被邀请：身份随会话消亡，无法审计，也不能作为成员身份标识
+            if ($actor['kind'] !== 'user') Api::json(['ok' => false, 'msg' => '请先登录后再邀请成员'], 403);
+            $target = (int)$p('user_id');
+            if ($target <= 0) Api::json(['ok' => false, 'msg' => '请填写有效的用户 ID']);
+            [$ok, $msg] = Chat::inviteMember($room, $actor, $target);
+            if ($ok) Sec::log('room_invite', $actor['nickname'], ['room' => (int)$room['id'], 'to' => $target]);
+            Api::json(['ok' => $ok, 'msg' => $msg]);
+
+        case 'room_remove_member':
+            $room = Chat::room((int)$p('room_id'));
+            if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
+            if (!Chat::canEnter($room, $actor)) Api::json(['ok' => false, 'msg' => '无权访问该群聊']);
+            $target = (int)$p('user_id');
+            [$ok, $msg] = Chat::removeMember($room, $actor, $target);
+            if ($ok) Sec::log('room_member_del', $actor['nickname'], ['room' => (int)$room['id'], 'uid' => $target]);
+            Api::json(['ok' => $ok, 'msg' => $msg]);
+
+        case 'room_invite_code_reset':
+            $room = Chat::room((int)$p('room_id'));
+            if (!$room) Api::json(['ok' => false, 'msg' => '群聊不存在']);
+            $uid = (int)($actor['id'] ?? 0);
+            if ($actor['kind'] !== 'user'
+                || !((int)($room['owner_id'] ?? 0) === $uid || $actor['role'] === 'admin')) {
+                Api::json(['ok' => false, 'msg' => '仅群主或超级管理员可重置邀请码'], 403);
+            }
+            $code = Chat::resetInviteCode($room, $actor);
+            Sec::log('room_invite_code', $actor['nickname'], ['room' => (int)$room['id']]);
+            Api::json(['ok' => true, 'msg' => '邀请码已重置，旧链接立即失效', 'code' => $code]);
+
         case 'poll':
             $roomId = (int)$p('room_id');
             $room = Chat::room($roomId);
@@ -404,7 +460,11 @@ if ($action !== '') {
         // ---------- 前台编辑群聊信息（列表 ⋮ 菜单，管理员/房主） ----------
         case 'room_update':
             if ($actor['kind'] !== 'user') Api::json(['ok' => false, 'msg' => '请先登录'], 403);
-            [$ok, $msg] = Chat::updateRoom($actor, (int)$p('id'), (string)($_POST['name'] ?? ''), (string)($_POST['description'] ?? ''), (string)($_POST['avatar'] ?? ''));
+            // v1.1.11：is_public 缺省不传时保持原值（null = 不改），
+            // 避免旧客户端保存群资料时把公开性意外改回默认值。
+            $pubRaw = $_POST['is_public'] ?? null;
+            $pub = ($pubRaw === null || $pubRaw === '') ? null : (($pubRaw === '0') ? 0 : 1);
+            [$ok, $msg] = Chat::updateRoom($actor, (int)$p('id'), (string)($_POST['name'] ?? ''), (string)($_POST['description'] ?? ''), (string)($_POST['avatar'] ?? ''), $pub);
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         // ---------- 删除消息（内容右键「删除」，与「撤回」区分） ----------
@@ -472,6 +532,7 @@ if ($action !== '') {
             }
             // 随机位段 ID（同用户 ID 规则）：插入失败（含并发撞主键）重新分配重试，
             // 最多 5 次；仍失败则退还已扣积分后抛出，不让用户白扣分
+            $isPublic = ($p('is_public') === '0') ? 0 : 1;
             $roomAttempts = 0;
             while (true) {
                 try {
@@ -483,6 +544,11 @@ if ($action !== '') {
                         'password' => $type === 'password' ? $p('password') : null,
                         'min_role' => $minRole,
                         'owner_id' => $uid,
+                        // v1.1.11 公开性开关：与 type 正交。缺省为 1（公开），
+                        // 兼容旧前端/旧客户端；非法值一律归一为 1，不接受「不明确的真」。
+                        'is_public' => $isPublic,
+                        // 不公开群建好即带邀请码，成员管理弹窗才能给出可复制的邀请链接
+                        'invite_code' => Chat::newInviteCode($isPublic),
                         'description' => mb_substr($desc, 0, 200),   // 已过滤（text.filter 钩子）
                         'status' => 1,
                         'created_at' => time(),

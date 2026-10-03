@@ -68,6 +68,12 @@ button { font-family: inherit; cursor: pointer; }
 .ow-btn-ghost { background: transparent; border-color: var(--ow-border-control); }
 .ow-btn-ghost:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
 .ow-btn-block { display: block; width: 100%; text-align: center; }
+/* 小号按钮（列表行内操作，如「移出」）：与正文同色系但更紧凑 */
+.ow-btn-mini { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+/* 弹窗按钮行分列：左侧一个辅助操作（如「成员管理」），右侧保持右对齐的取消/保存。
+   中间的弹性占位把右半组推到右边，避免给按钮加 margin-left:auto（移动端会挤）。 */
+.ow-modal-actions-split { justify-content: space-between; -webkit-justify-content: space-between; }
+.ow-modal-actions-split .ow-modal-actions-sp { flex: 1; -webkit-flex: 1; min-width: 0; }
 .ow-btn-danger { background: var(--ow-red); color: #fff; }
 .ow-btn-danger:hover { background: #cf1322; }
 .ow-btn[disabled] { opacity: .5; cursor: not-allowed; }
@@ -108,8 +114,15 @@ button { font-family: inherit; cursor: pointer; }
 /* ---------- 开关（State 按钮，v1.1.5 通用样式轮子） ----------
    结构：.ow-switch-row（行） > label.ow-switch-label（左侧文字）
         + .ow-switch（右侧 iOS 风格开关） + p.ow-switch-hint（下方提示）
-   用法见 assets/js/chat.js 的 OwChat.switchHtml()，前后台与插件共用同一套。 */
-.ow-switch-row {
+   用法见 assets/js/chat.js 的 OwChat.switchHtml()，前后台与插件共用同一套。
+
+   ⚠️ 选择器写成 `.ow-switch-row, .ow-switch-row.ow-switch-row` 是刻意的：
+   .ow-switch-row 本身就是 <label>，放进 .ow-form-item 里会被
+   `.ow-form-item label { display:block }`（特异性 0,0,1,1）盖掉
+   `.ow-switch-row`（0,0,1,0）的 flex 布局 —— 表现为开关掉到文字下一行、
+   整行高度与其它表单项对不齐。重复类名把权重提到 0,0,2,0 稳定压过它。 */
+.ow-switch-row,
+.ow-switch-row.ow-switch-row {
     display: flex; display: -webkit-flex;
     align-items: center; -webkit-align-items: center;
     gap: 12px;
@@ -117,6 +130,7 @@ button { font-family: inherit; cursor: pointer; }
     min-height: 30px;      /* 与 .ow-input 的 9px*2+1px*2+14 ≈ 35px 视觉对齐 */
     cursor: pointer;
     user-select: none; -webkit-user-select: none;
+    font-size: 13px;       /* 同为覆盖 .ow-form-item label 的继承值 */
 }
 .ow-switch-row.is-disabled { cursor: not-allowed; opacity: .5; }
 .ow-switch-label {
@@ -263,6 +277,41 @@ button { font-family: inherit; cursor: pointer; }
 .ow-card-meta-row { display: flex; display: -webkit-flex; align-items: baseline; -webkit-align-items: baseline; gap: 8px; padding: 3px 0; }
 .ow-card-meta-k { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-text-sub); }
 .ow-card-meta-v { min-width: 0; word-break: break-all; }
+
+/* ---------- 表单里的开关项（v1.1.11） ----------
+   创建群聊 / 群聊设置里的「公开群聊」State 开关。
+   .ow-switch-row 本身自带布局，这里只把表单容器的 label 上边距让出来，
+   避免开关与上方输入框贴得太近（form-item 的 margin-bottom 仍由容器控制）。 */
+.ow-form-item-switch { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ow-border); }
+.ow-rc-note { margin: -4px 0 10px; }
+
+/* ---------- 群成员（v1.1.11） ---------- */
+.ow-mem-head { font-size: 12px; color: var(--ow-text-sub); margin: -8px 0 8px; }
+.ow-mem-list {
+    border-top: 1px solid var(--ow-border);
+    border-bottom: 1px solid var(--ow-border);
+    max-height: 40vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.ow-mem-row {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-top: 1px solid var(--ow-border);
+}
+.ow-mem-row:first-child { border-top: none; }
+.ow-mem-name { flex: 1; -webkit-flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ow-mem-id { flex-shrink: 0; -webkit-flex-shrink: 0; font-size: 12px; color: var(--ow-text-sub); font-variant-numeric: tabular-nums; }
+.ow-mem-del { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-red); }
+.ow-mem-del:hover { background: #fff1f0; color: #cf1322; }
+.ow-mem-empty { padding: 14px 0; text-align: center; font-size: 13px; color: var(--ow-text-sub); }
+.ow-mem-invite { margin-top: 12px; }
+/* 邀请链接很长，允许换行并整段可点；不设 word-break:break-all 免得断在字符中间 */
+.ow-mem-link { word-break: break-all; }
+.ow-mem-link a { color: var(--ow-primary-dark); text-decoration: none; }
+.ow-mem-link a:hover { text-decoration: underline; }
 /* 头像裁剪：canvas 直绘 + 滑块实时重绘（与论坛一致，所见即所得） */
 .ow-crop-wrap { text-align: center; margin: 6px 0 12px; }
 .ow-crop-wrap canvas {
@@ -874,6 +923,9 @@ button { font-family: inherit; cursor: pointer; }
 .ow-modal-actions { display: flex; display: -webkit-flex; justify-content: flex-end; -webkit-justify-content: flex-end; gap: 8px; margin-top: 16px; }   /* 与上方输入框/说明文字保持一致间隔（相邻兄弟 margin 折叠取大值） */
 @media (max-width: 720px) {
     .ow-modal-actions .ow-btn { flex: 1; -webkit-flex: 1; }
+    /* split 行里左边的「成员管理」不该跟着撑满：让它按内容宽，
+       占位符继续吃掉剩余空间，右半组照常右对齐。 */
+    .ow-modal-actions-split .ow-btn { flex: 0 0 auto; -webkit-flex: 0 0 auto; }
 }
 
 .ow-img-viewer {

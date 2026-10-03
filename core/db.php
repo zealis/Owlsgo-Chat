@@ -156,6 +156,20 @@ class DB
                 type $str NOT NULL DEFAULT 'public', password $str,
                 min_role $str NOT NULL DEFAULT 'guest', owner_id $int,
                 description $text, status $int NOT NULL DEFAULT 1, created_at $ts NOT NULL)",
+            // 群成员（v1.1.11「不公开群聊」）：房间与用户的归属关系。
+            // 设计要点：
+            //  - 只有**注册用户**是成员，游客不占行（游客身份随浏览器会话消亡，
+            //    同名游客背后可能是任意多个人，无法审计，也不能作为邀请对象）。
+            //  - (room_id, user_id) 唯一，重复邀请直接 INSERT OR REPLACE 幂等。
+            //  - invited_by 记下「谁邀请的」，与 rooms.owner_id（群主）区分：
+            //    群主也可能不是直接邀请者。
+            //  - created_at 单列存加入时间；角色（member/admin）暂不入表，
+            //    群内权限一律以 rooms.owner_id + users.role 为准，避免两套口径打架。
+            "CREATE TABLE IF NOT EXISTS room_members (
+                id $id,
+                room_id $int NOT NULL, user_id $int NOT NULL,
+                invited_by $int NOT NULL DEFAULT 0,
+                created_at $ts NOT NULL)",
             "CREATE TABLE IF NOT EXISTS messages (
                 id $id, room_id $int NOT NULL, user_id $int, guest_id $int,
                 nickname $str NOT NULL, role $str NOT NULL DEFAULT 'guest',
@@ -216,6 +230,16 @@ class DB
         // 已废弃字段：rooms.min_age（进入该房间的最低年龄）随 1.0.31 下线，应用层已不再读写。
         // 保留此行仅为兼容历史数据库（列仍存在且幂等），勿在业务代码中重新启用。
         self::addColumn('rooms', 'min_age', 'int', '0');
+        // v1.1.11「公开 / 不公开」开关：与 type（public/password/role）**正交**。
+        // type 管的是「进入方式」（要不要密码 / 要什么角色），is_public 管的是
+        //「谁能发现这个群」——公开群进公开列表、游客可进可发言；
+        // 不公开群不进公开列表，只有群主与 room_members 里的成员能进。
+        // 默认 1（公开）：存量群全部保持原有可见性，不做隐式收紧。
+        self::addColumn('rooms', 'is_public', 'int', '1');
+        // 不公开群的邀请码：不公开群不出现在列表里，只能靠邀请链接进入。
+        // 为空表示从未生成过（前端显示「生成邀请链接」按钮）；
+        // 群主可在群聊设置里重置（重置后旧链接立即失效）。
+        self::addColumn('rooms', 'invite_code', 'varchar(16)', "''");
 
         // v1.0.33 起取消「用户名」：账号不再有独立登录名，显示名统一为 nickname（昵称）。
         // 迁移策略（一次性、幂等）：先把昵称回填为原用户名（原 nickname 里用户自定义的值按需求丢弃），
