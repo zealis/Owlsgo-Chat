@@ -342,6 +342,30 @@
         return '<span class="' + cls + '" style="background:' + colors[ci] + '">' + ch + '</span>';
     }
 
+    /* ---------- 侧栏入口行（v1.1.10） ----------
+       右侧栏「群聊信息」区的统一行样式：图标 + 文案 + 右箭头，整行可点。
+       「群聊设置」由核心渲染，「群公告」等插件入口复用同一外观（announcements 插件
+       走 #owREExtras 容器并用 .ow-panel-entry 类），因此两行视觉上完全一致。
+       icon 用内联 SVG 路径表（与 PHP 侧 ow_icon 的路径一致，避免为此新增接口）。 */
+    var OW_ENTRY_ICONS = {
+        gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/>',
+        mega: '<path d="M3 11v3l4 .5V10.5z"/><path d="M7 10.5L18 5v13l-11-4.5"/><path d="M9 15.5V18a2 2 0 0 0 4 .5"/>'
+    };
+
+    /** 生成一行侧栏入口（整行可点）。onclick 缺省时渲染为不可点的静态行 */
+    function entryRow(label, icon, onclick) {
+        var d = OW_ENTRY_ICONS[icon] || OW_ENTRY_ICONS.gear;
+        var svg = '<svg class="ow-ico ow-panel-entry-ico" width="16" height="16" viewBox="0 0 24 24" fill="none"'
+            + ' stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+        var arrow = '<span class="ow-panel-entry-arrow">›</span>';
+        if (!onclick) {
+            return '<div class="ow-panel-entry is-static">' + svg + '<span class="ow-panel-entry-t">' + esc(label) + '</span>' + arrow + '</div>';
+        }
+        return '<div class="ow-panel-entry" role="button" tabindex="0" onclick="' + onclick + '"'
+            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();' + onclick + '}">'
+            + svg + '<span class="ow-panel-entry-t">' + esc(label) + '</span>' + arrow + '</div>';
+    }
+
     /* ==========================================================================
        OwAuth：登录 / 注册 / 找回密码
        ========================================================================== */
@@ -1102,10 +1126,13 @@
             try { fn({ roomId: this.room, ownerId: CUR_OWNER, isAdmin: this.cfg.actor.role === 'admin' }); } catch (e) {}
         },
         /**
-         * 注册「群聊设置区渲染」回调：fn({ roomId, ownerId, isAdmin, isOwner })。
-         * v1.1.1：触发时机从「打开群聊设置弹窗」改为「右侧栏群聊设置区渲染」
+         * 注册「群聊信息入口区渲染」回调：fn({ roomId, ownerId, isAdmin, isOwner })。
+         * v1.1.1：触发时机从「打开群聊设置弹窗」改为「右侧栏群聊信息区渲染」
          * （init / 切群 / 进私聊 / 打开侧栏 / 保存群资料后都会触发），
-         * 可往 #owREExtras 追加入口。非群主渲染的是只读版，#owREExtras 依然存在，
+         * 可往 #owREExtras 追加入口。
+         * v1.1.10：群资料表单已搬回弹窗，#owREExtras 现在是**入口行容器**
+         * （不再是表单里的一行），插件入口不再与表单耦合；请用 .ow-panel-entry
+         * 类保持与「群聊设置」行一致的外观。#owREExtras 必定存在，
          * 但插件应按 ctx.isOwner || ctx.isAdmin 自行决定是否填充。
          */
         onRoomEdit: function (fn) { if (typeof fn === 'function') this._roomEditHooks.push(fn); },
@@ -1799,14 +1826,21 @@
             box.innerHTML = html;
         },
 
-        /* ---------- 右侧栏：群聊设置区 ---------- */
+        /* ---------- 右侧栏：群聊信息入口区 ---------- */
         /**
-         * 渲染右侧栏上方的「群聊设置」。
+         * 渲染右侧栏上方的「群聊信息」入口区（v1.1.10 重做）。
          *
-         * v1.1.1：原先群设置是列表项里的三点按钮 → 弹窗，现改为常驻侧栏区块。
-         * 群主 / 超级管理员（room.can_edit）看到可编辑表单 + 保存按钮；
-         * 普通会员与游客看到只读信息。插件入口（群公告等）通过 onRoomEdit
-         * 钩子往 #owREExtras 追加，钩子契约与原弹窗版保持一致。
+         * 形态变更史（别走回头路）：
+         *   v1.1.0  群资料是**弹窗**，入口在会话列表行内三点菜单。
+         *   v1.1.1  改为**常驻侧栏内联表单**（本区块直接渲染可编辑表单）。
+         *   v1.1.10 按需求回退到**弹窗**，侧栏只留两行入口：
+         *     第 1 行「群聊设置」→ openRoomEdit() 打开模态框
+         *     第 2 行「群公告」  → announcements 插件经 onRoomEdit 钩子填进 #owREExtras
+         *     两行同款样式（.ow-panel-entry），群公告因此位于「所有成员」区块上方，
+         *     **不再与群资料表单耦合**——插件不必关心表单是弹窗还是内联。
+         *
+         * 钩子契约（onRoomEdit）保持不变：
+         *   fn({ roomId, ownerId, isAdmin, isOwner })，#owREExtras 必定存在。
          */
         renderRoomPanel: function () {
             var box = $('owRoomPanel');
@@ -1817,10 +1851,38 @@
             for (i = 0; i < list.length; i++) { if (list[i].id === this.room) { r = list[i]; break; } }
 
             if (isDm || !r) {
-                box.innerHTML = '<div class="ow-panel-hint">' + (isDm ? '私聊会话没有群聊设置' : '请先选择一个群聊') + '</div>';
+                box.innerHTML = '<div class="ow-panel-hint">' + (isDm ? '私聊会话没有群聊信息' : '请先选择一个群聊') + '</div>';
                 return;
             }
-            var canEdit = !!r.can_edit;
+            var meId = me.id || 0;
+            var isOwner = !!meId && meId === (r.owner_id || 0);
+
+            box.innerHTML = entryRow('群聊设置', 'gear', 'OwChat.openRoomEdit()')
+                + '<div class="ow-panel-entry-row" id="owREExtras"></div>';
+
+            // 插件扩展钩子（v0.0.102 起）：群公告等入口往 #owREExtras 追加
+            var ctx = { roomId: this.room, ownerId: r.owner_id || 0, isAdmin: isAdmin, isOwner: isOwner };
+            for (var hi = 0; hi < this._roomEditHooks.length; hi++) {
+                try { this._roomEditHooks[hi](ctx); } catch (e) {}
+            }
+        },
+
+        /**
+         * 群聊设置弹窗（v1.1.10 恢复弹窗形态，v1.1.1~v1.1.9 曾内联常驻在侧栏）。
+         *
+         * 与 v1.1.0 弹窗版的差异：
+         *  - 群头像尺寸统一走 avatarHtml 的 'lg' 档（64px），与资料卡/个人设置一致；
+         *  - 编辑区保留「群名称 + 群简介」两个字段（v1.1.0 的密码/类型设置不在本弹窗内，
+         *    那部分历史上就是独立入口，勿在此扩张）；
+         *  - 非群主看到只读信息（简介、群主、类型），可改与否由 room.can_edit 决定。
+         */
+        openRoomEdit: function () {
+            var me = this.cfg.me || {}, isAdmin = this.cfg.actor.role === 'admin';
+            var r = null, list = this.cfg.rooms || [], i;
+            for (i = 0; i < list.length; i++) { if (list[i].id === this.room) { r = list[i]; break; } }
+            if (this.room === 0 || !r) { toast('私聊会话没有群聊设置'); return; }
+
+            var canEdit = !!r.can_edit;   // 服务端下发：群主 + 超管（口径唯一，前端不自行判身份）
             var meId = me.id || 0;
             var isOwner = !!meId && meId === (r.owner_id || 0);
             var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '公开群');
@@ -1830,37 +1892,45 @@
                 this._roomAvatar = r.avatar || '';
             }
 
-            box.innerHTML = '<div class="ow-panel-room-head">'
+            this.openModal(
+                '<h3>群聊设置</h3>'
+                + '<div class="ow-card-head">'
                 + '<span class="ow-set-avatar-btn" id="owRoomAvatarPreview"'
                 + (canEdit ? ' title="点击更换群头像" onclick="OwChat.roomAvatarPick()"' : '') + '>'
-                + avatarHtml(this._roomAvatar, r.name, false, 'member') + '</span>'
+                + avatarHtml(this._roomAvatar, r.name, 'lg', 'member') + '</span>'
                 + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none">'
-                + '<div class="ow-panel-room-meta"><b>' + esc(r.name) + '</b>'
-                + '<span class="ow-panel-room-type">' + typeName + '</span></div></div>'
+                + '<div class="ow-card-id">'
+                + '<div class="ow-card-name">' + esc(r.name) + '</div>'
+                + '<div class="ow-card-badges"><span class="ow-tag ow-tag-green">' + typeName + '</span>'
+                + '<span class="ow-tag ow-tag-member">群主 ' + esc(fmtUid(r.owner_id)) + '</span></div>'
+                + '</div></div>'
                 + (canEdit
-                    ? '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(r.name) + '" maxlength="30"></div>'
-                      + '<div class="ow-form-item"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(r.description || '') + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
-                      + '<div class="ow-form-row" id="owREExtras"></div>'
-                      + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button>'
+                    ? '<div class="ow-card-meta">'
+                      + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(r.name) + '" maxlength="30"></div>'
+                      + '<div class="ow-form-item" style="margin-top:10px"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(r.description || '') + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
+                      + '</div>'
+                      + '<div class="ow-modal-actions">'
+                      + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">取消</button>'
+                      + '<button class="ow-btn ow-btn-primary" onclick="OwChat.roomEditSave(' + r.id + ')">保存</button></div>'
                     // 只读：非群主会员也能看到群名称 / 简介 / 群主，信息不设限，仅不可改
-                    : '<div class="ow-panel-ro">'
-                      + (r.description ? '<p class="ow-panel-ro-desc">' + esc(r.description) + '</p>' : '<p class="ow-panel-ro-desc ow-panel-empty">群主还没有写简介</p>')
-                      + '<div class="ow-form-row" id="owREExtras"></div>'
-                      + '<p class="ow-panel-ro-tip">群主：' + esc(fmtUid(r.owner_id))
-                      + (isAdmin || isOwner ? '' : '　·　仅群主与超级管理员可修改') + '</p></div>');
+                    : '<div class="ow-card-meta">'
+                      + (r.description
+                          ? '<div class="ow-card-meta-row"><span class="ow-card-meta-k">简介</span><span class="ow-card-meta-v">' + esc(r.description) + '</span></div>'
+                          : '<div class="ow-card-meta-row"><span class="ow-card-meta-v ow-panel-empty">群主还没有写简介</span></div>')
+                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">群主</span><span class="ow-card-meta-v">' + esc(fmtUid(r.owner_id)) + '</span></div>'
+                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">修改</span><span class="ow-card-meta-v">仅群主与超级管理员可修改</span></div>'
+                      + '</div>'
+                      + '<div class="ow-modal-actions">'
+                      + '<button class="ow-btn ow-btn-ghost ow-btn-block" onclick="OwChat.closeModal()">关闭</button></div>')
+            );
 
             var f = $('owRoomAvatarFile');
             if (f) f.onchange = function () {
                 if (!this.files || !this.files[0]) return;
                 var self2 = OwChat;
-                self2.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，侧栏保持完好
+                self2.roomAvatarCrop(this.files[0]);   // 裁剪浮层独立，弹窗主体保持完好
                 this.value = '';
             };
-            // 插件扩展钩子（v1.0.102）：群公告等入口往 #owREExtras 追加
-            var ctx = { roomId: this.room, ownerId: r.owner_id || 0, isAdmin: isAdmin, isOwner: isOwner };
-            for (var hi = 0; hi < this._roomEditHooks.length; hi++) {
-                try { this._roomEditHooks[hi](ctx); } catch (e) {}
-            }
         },
 
         /* ---------- 公告轮播 ---------- */
@@ -2177,15 +2247,20 @@
         clearQuote: function () { this.quote = null; this.renderQuote(); },
 
         /**
-         * 触发群头像文件选择（右侧栏内的隐藏 input，v1.1.1）
+         * 触发群头像文件选择（群聊设置弹窗内的隐藏 input，v1.1.10）
          */
         roomAvatarPick: function () { var f = $('owRoomAvatarFile'); if (f) f.click(); },
 
-        /** 保存群聊设置（右侧栏内联表单，v1.1.1 起不再走弹窗） */
+        /**
+         * 保存群聊设置（群聊设置弹窗内的表单，v1.1.10）
+         *
+         * v1.1.1~v1.1.9 表单内联在侧栏，保存后不关任何浮层；v1.1.10 恢复弹窗形态，
+         * 因此保存成功必须 closeModal()，否则弹窗会盖在已更新的界面上继续显示旧数据。
+         */
         roomEditSave: function (id) {
             var self = this;
             var nameEl = $('owRoomEditName'), descEl = $('owRoomEditDesc');
-            if (!nameEl || !descEl) { toast('请先打开群聊信息侧栏'); return; }
+            if (!nameEl || !descEl) { toast('请先打开群聊设置弹窗'); return; }
             OwApi.post('room_update', {
                 id: id,
                 name: nameEl.value,
@@ -2194,6 +2269,7 @@
             }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 toast('群聊信息已更新');
+                self.closeModal();
                 self.reloadRooms();
             });
         },
@@ -2207,9 +2283,9 @@
                 // v1.1.0：列表已改为「群聊+私聊」聚合，走 conversations 重新拉取，
                 // 直接 renderRooms 会把私聊行冲掉。
                 self.loadConversations();
-                // v1.1.1：群资料已变（名称/简介/头像），侧栏设置区同步刷新。
-                // _roomAvatar 不用动：保存后它与服务端值一致；renderRoomPanel
-                // 只在「换了群」时才重置它（见 _roomAvatarRoom 判断）。
+                // 群资料已变（名称/简介/头像）→ 顶栏群名与侧栏入口区同步刷新。
+                // _roomAvatar 不用动：保存后它与服务端值一致；openRoomEdit / renderRoomPanel
+                // 都只在「换了群」时才重置它（见 _roomAvatarRoom 判断）。
                 self.renderRoomPanel();
             });
         },

@@ -873,11 +873,19 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . '<div class="ow-emoji-panel" id="owEmojiPanel" style="display:none"></div>'
        . '</main>';
 
-    // 右侧栏（v1.1.1）：上方群聊设置、下方所有成员
-    // 私聊（room_id=0）时无「群聊设置」，前端 renderRoomPanel 负责置空该区并提示。
+    // 右侧栏（v1.1.10）：上方「群聊信息」入口区、下方所有成员
+    //
+    // 结构说明（v1.1.10 调整，务必与 renderRoomPanel / onRoomEdit 钩子契约对齐）：
+    //   · 本区块**不再常驻展开群资料表单**——群聊设置恢复为点击弹出的模态框
+    //     （v1.1.1~v1.1.9 曾把它内联常驻在侧栏，本次按需求回退到弹窗形态）。
+    //   · 本区块只放**两行入口**：第一行「群聊设置」、第二行「群公告」。
+    //     两行同款样式（.ow-panel-entry），群公告行由 announcements 插件经
+    //     onRoomEdit 钩子填进 #owREExtras，位于「群聊设置」下方、
+    //     「所有成员」区块上方 —— 插件入口因此不再与群资料表单耦合。
+    //   · 私聊（room_id=0）时两者都不适用，renderRoomPanel 置空并给出提示。
     echo '<aside class="ow-online" id="owOnline">'
        . '<div class="ow-panel-sec ow-panel-room">'
-       . '<div class="ow-side-title">群聊设置'
+       . '<div class="ow-side-title">群聊信息'
        . '<button class="ow-online-close" id="owOnlineClose" aria-label="收起侧栏" title="收起">×</button></div>'
        . '<div class="ow-panel-room-body" id="owRoomPanel"></div>'
        . '</div>'

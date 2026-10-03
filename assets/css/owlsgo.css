@@ -781,22 +781,48 @@ button { font-family: inherit; cursor: pointer; }
 .ow-online.hidden { display: none; }
 /* 两个区块：设置区按内容高度（可长可短），成员区吃掉剩余空间并独立滚动 */
 .ow-panel-sec { display: flex; display: -webkit-flex; flex-direction: column; -webkit-flex-direction: column; min-height: 0; }
-.ow-panel-room { flex-shrink: 0; -webkit-flex-shrink: 0; max-height: 62%; overflow-y: auto; -webkit-overflow-scrolling: touch; border-bottom: 1px solid var(--ow-border); }
+/* v1.1.10：群资料表单已搬回弹窗，本区块只剩两行入口，max-height 收紧到 24%
+   （原来 62% 是为内联表单预留的，现在两行永远放得下） */
+.ow-panel-room { flex-shrink: 0; -webkit-flex-shrink: 0; max-height: 24%; overflow-y: auto; -webkit-overflow-scrolling: touch; border-bottom: 1px solid var(--ow-border); }
 .ow-panel-members { flex: 1; -webkit-flex: 1; overflow: hidden; }
 .ow-panel-room-body { padding: 0 16px 14px; }
-.ow-panel-room-head { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 10px; margin-bottom: 12px; }
-.ow-panel-room-meta { min-width: 0; }
-.ow-panel-room-meta b { display: block; font-size: 14px; color: var(--ow-text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ow-panel-room-type { font-size: 12px; color: var(--ow-text-sub); }
 .ow-panel-hint { padding: 4px 0 10px; font-size: 13px; color: var(--ow-text-sub); }
-.ow-panel-ro-desc { margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: var(--ow-text); word-break: break-word; }
-.ow-panel-ro-desc.ow-panel-empty { color: var(--ow-text-sub); }
-.ow-panel-ro-tip { margin: 8px 0 0; font-size: 12px; color: var(--ow-text-sub); }
-/* 侧栏里的表单间距收紧：240px 宽的输入框在侧栏里要留足呼吸 */
-.ow-panel-room .ow-form-item { margin-bottom: 10px; }
-/* 侧栏里的插件入口（#owREExtras）：整行块级按钮，不要弹窗里那套 flex-end 对齐 */
-.ow-panel-room .ow-form-row { display: block; }
-.ow-panel-room .ow-form-row > .ow-btn { display: block; width: 100%; margin: 0 0 10px; padding-top: 8px; padding-bottom: 8px; }
+/* 空态文案（群简介未填写）：弱化颜色，与有值时形成对比 */
+.ow-panel-empty { color: var(--ow-text-sub); }
+
+/* ---------- 侧栏入口行（v1.1.10） ----------
+   「群聊信息」区的统一行外观：图标 + 文案 + 右箭头，整行可点。
+   「群聊设置」由核心渲染，「群公告」等插件入口走 #owREExtras 容器、
+   复用同一套类，因此两行视觉完全一致（同款 hover / 同款箭头）。
+
+   分隔线的关键约束：**线画在容器（.ow-panel-entry-row）上，不画在行上**。
+   早先把它写成 .ow-panel-entry{border-top}，结果第一行（:first-child 去掉边框）
+   与第二行相差 1px —— 实测高度 40.4 vs 41.4，肉眼就是两行没对齐。
+   现在两行的 padding/边框完全相同，高度严格一致（均为 40.4px）。 */
+.ow-panel-entry-row { margin: 0; border-top: 1px solid var(--ow-border); }
+/* 容器为空（插件没填内容）时不占位，也不画线 */
+.ow-panel-entry-row:empty { display: none; }
+.ow-panel-entry {
+    display: flex; display: -webkit-flex;
+    align-items: center; -webkit-align-items: center;
+    gap: 8px;
+    padding: 9px 0;
+    border: none;
+    font-size: 14px;
+    color: var(--ow-text);
+    cursor: pointer;
+    user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.ow-panel-entry-ico { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-text-sub); }
+.ow-panel-entry-t { flex: 1; -webkit-flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ow-panel-entry-arrow { flex-shrink: 0; -webkit-flex-shrink: 0; font-size: 16px; line-height: 1; color: var(--ow-text-sub); }
+.ow-panel-entry:hover, .ow-panel-entry:focus { color: var(--ow-primary-dark); outline: none; }
+.ow-panel-entry:hover .ow-panel-entry-ico, .ow-panel-entry:hover .ow-panel-entry-arrow { color: var(--ow-primary-dark); }
+/* 静态行（无 onclick）：保留外观但不可点，用于纯展示项 */
+.ow-panel-entry.is-static { cursor: default; }
+.ow-panel-entry.is-static:hover { color: var(--ow-text); }
+.ow-panel-entry.is-static:hover .ow-panel-entry-ico, .ow-panel-entry.is-static:hover .ow-panel-entry-arrow { color: var(--ow-text-sub); }
 /* 关闭按钮仅在窄屏浮层模式下出现 */
 .ow-online-close {
     display: none;

@@ -153,8 +153,16 @@
     }
 
     /**
-     * 右侧栏「群聊设置」区里的「群公告」入口（群主 / 超级管理员可见）。
-     * v1.1.1：入口从列表三点弹窗迁到常驻侧栏，#owREExtras 的位置与钩子契约不变。
+     * 右侧栏「群聊信息」区里的「群公告」入口行（群主 / 超级管理员可见）。
+     *
+     * v1.1.10：核心把群资料表单搬回了弹窗，#owREExtras 从「表单里的一行」变成
+     * 「入口行容器」。本插件因此改为渲染与「群聊设置」**完全同款**的 .ow-panel-entry
+     * （图标 + 文案 + 右箭头，整行可点），位置在「群聊设置」下方、「所有成员」上方。
+     * 样式不复制一份：直接用核心的类，两行外观由 CSS 保证一致。
+     *
+     * ⚠️ 钩子契约：核心保证 #owREExtras 必定存在（渲染入口行后紧接着就是它），
+     *    但插件仍须按 ctx.isOwner || ctx.isAdmin 自行决定是否填充 —— 群公告的
+     *    发布/删除权限与「群资料可改」是同一口径（群主 + 超管）。
      */
     w.OwChat.onRoomEdit(function (ctx) {
         current.roomId = ctx.roomId;
@@ -162,14 +170,27 @@
         current.isOwner = !!ctx.isOwner;
         var box = d.getElementById('owREExtras');
         if (!box || !(ctx.isOwner || ctx.isAdmin)) return;
-        box.innerHTML = '<button class="ow-btn ow-btn-ghost ow-btn-block" id="oaManageBtn">群公告</button>';
-        d.getElementById('oaManageBtn').onclick = function () {
+        box.innerHTML = '<div class="ow-panel-entry" role="button" tabindex="0" id="oaManageBtn"'
+            + ' title="查看与发布本群公告">'
+            + '<svg class="ow-ico ow-panel-entry-ico" width="16" height="16" viewBox="0 0 24 24" fill="none"'
+            + ' stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            + '<path d="M3 11v3l4 .5V10.5z"/><path d="M7 10.5L18 5v13l-11-4.5"/><path d="M9 15.5V18a2 2 0 0 0 4 .5"/></svg>'
+            + '<span class="ow-panel-entry-t">群公告</span>'
+            + '<span class="ow-panel-entry-arrow">›</span></div>';
+        // 事件用 JS 绑定而非 inline onclick：闭包直接拿到 ctx，避免把 roomId
+        // 拼进 HTML 属性（也省掉一个不存在的 OwChat.oaOpen 全局函数）。
+        var btn = d.getElementById('oaManageBtn');
+        btn.onclick = function () {
             OwApi.post('plugin_announcements_list', { room_id: ctx.roomId }, function (r) {
                 current.list = r.ok ? (r.data || []) : [];
                 var rooms = (w.OwChat.cfg.rooms || []);
                 for (var i = 0; i < rooms.length; i++) if (rooms[i].id === ctx.roomId) current.roomName = rooms[i].name;
-                setTimeout(showPage, 60);   // 公告页仍是弹窗；侧栏本身不需要关
+                setTimeout(showPage, 60);
             });
+        };
+        // 键盘可达：入口行是 div 不是 button，必须自己补 Enter/Space
+        btn.onkeydown = function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.onclick(); }
         };
     });
 
