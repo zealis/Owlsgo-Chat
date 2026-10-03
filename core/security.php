@@ -5,6 +5,8 @@
 class Sec
 {
     private static array $cfg = [];
+    /** 是否把 IP 段并入会话指纹（由 loadFpOptions() 在 DB::init() 之后回填） */
+    private static bool $fpIpStrict = false;
 
     public static function init(array $cfg): void { self::$cfg = $cfg; }
 
@@ -315,7 +317,16 @@ class Sec
     public static function fingerprint(): string
     {
         $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-        if (DB::setting('sec_fp_ip_strict', '0') === '1') {
+
+        // ⚠️ 这里**绝对不能查数据库**。
+        // fingerprint() 由 sessionStart() 在写入 sec_fp 时调用，而 index.php 的
+        // 顺序是 sessionStart() → DB::init()，此刻 self::$pdo 还是 null，
+        // 一旦调用 DB::setting() 就会抛
+        // 「Call to a member function prepare() on null」→ 整站 500（v1.1.13 踩过）。
+        //
+        // 替代方案：把开关放进一个由 config.php 提供的**静态数组**，
+        // 由入口在 DB::init() 之后回填；未回填时按默认（不绑 IP）处理。
+        if (!empty(self::$fpIpStrict)) {
             $ip = self::ip();
             if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
                 $seg = implode(':', array_slice(explode(':', $ip), 0, 3));
@@ -325,6 +336,21 @@ class Sec
             $ua .= '|' . $seg;
         }
         return hash('sha256', $ua);
+    }
+
+    /**
+     * 是否把 IP 段并入会话指纹（默认 false = 只绑 UA，理由见 fingerprint()）。
+     *
+     * ⚠️ 必须在 DB::init() **之后**调用（读 settings 表）。
+     * index.php 里已接好：指纹守卫之前、DB::init() 之后。
+     */
+    public static function loadFpOptions(): void
+    {
+        try {
+            self::$fpIpStrict = DB::setting('sec_fp_ip_strict', '0') === '1';
+        } catch (Throwable $e) {
+            self::$fpIpStrict = false;   // 表还没建 / DB 不可用：按最宽松的默认值走
+        }
     }
 
     /**
@@ -364,8 +390,8 @@ class Sec
         // 判据：会话未标记 sec_fp_v2，且「用新算法重算」与旧值不同。
         // 真正的盗用仍会被拦：它连 UA 都对不上，重算结果仍不等于旧值之外的任何东西。
         if (empty($_SESSION['sec_fp_v2'])) {
-            $strictOn = DB::setting('sec_fp_ip_strict', '0') === '1';
-            if (!$strictOn) {
+            // 用 loadFpOptions() 缓存的静态值，不在此再查库
+            if (!self::$fpIpStrict) {
                 $_SESSION['sec_fp_v2'] = 1;
                 $_SESSION['sec_fp'] = $now;
                 return;

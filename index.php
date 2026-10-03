@@ -77,6 +77,10 @@ try {
     $dbOk = false;
     $dbErr = $e->getMessage();
 }
+// v1.1.13：回填会话指纹开关。⚠️ 必须放在 DB::init() 之后 ——
+// Sec::fingerprint() 由更早的 sessionStart() 调用，那会儿 PDO 还是 null，
+// 指纹函数内部不能查库（详见 core/security.php fingerprint() 的注释）。
+Sec::loadFpOptions();
 
 // 会话指纹守卫（v1.0.94）：登录 Cookie 被窃取后在其它浏览器 / 网络重放时销毁会话。
 // 必须在 DB::init 之后（守卫拒绝时会写安全日志），且在认证（Auth::user）之前执行。
