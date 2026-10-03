@@ -326,8 +326,11 @@
     /* 头像：有图用图；无图时游客固定米金底（#E5D5A0，深字保证可读），
        用户按昵称长度从色盘取色 */
     function avatarHtml(url, name, sm, role) {
-        // 尺寸档：'xs'=20px（设置弹窗）、true/sm=28px（列表）、'md'=32px、false=40px（资料区）
-        var sizeCls = sm === 'xs' ? ' ow-avatar-xs' : (sm === 'md' ? ' ow-avatar-md' : (sm ? ' ow-avatar-sm' : ''));
+        // 尺寸档：'xs'=20px、true/sm=28px（列表）、'md'=32px、'lg'=64px（资料卡/个人设置）、false=40px
+        // v1.1.9：新增 'lg'。原来资料卡与个人设置都用 'md'(32px)，在 380px 弹窗里偏小。
+        var sizeCls = sm === 'xs' ? ' ow-avatar-xs'
+            : (sm === 'lg' ? ' ow-avatar-lg'
+            : (sm === 'md' ? ' ow-avatar-md' : (sm ? ' ow-avatar-sm' : '')));
         var cls = 'ow-avatar' + sizeCls;
         if (url) return '<span class="' + cls + '"><img src="' + esc(url) + '" alt=""></span>';
         var ch = esc((name || '?').charAt(0));
@@ -1700,14 +1703,17 @@
         /**
          * 打开用户资料卡。
          *
-         * v1.1.8 起与个人设置**共用同一套头像轮子**（cropForTarget → avatarCropSave
+         * v1.1.9 重做布局：**头像左上 + 昵称/身份在右**（原为居中大图 + 下方文字）。
+         * 与个人设置**共用同一套头像轮子**（cropForTarget → avatarCropSave
          * → avatarUpload），并统一头像尺寸：
-         *  - 尺寸：资料卡与设置页都用 'md'（32px）。原先资料卡是 40px、设置页是
-         *    20px，比例 2:1 看着不像同一个东西。
+         *  - 尺寸：资料卡与设置页都用 'lg'（64px）。v1.1.8 曾统一到 'md'(32px)，
+         *    但 32px 在 380px 宽的弹窗里视觉权重太轻，看着仍偏小，故再放大一档。
+         *    尺寸由 CSS 档位锁死（.ow-avatar + overflow:hidden + img 的 max-*），
+         *    **与原图实际像素无关**，不会被大图撑破。
          *  - 自己的卡片：头像可点直接换头像（标题提示 + hover 反馈），
          *    与设置页的点击上传走同一条链；上传后两处预览同时回填。
-         *  - 「关闭」按钮对所有身份都显示（原先只有能私信的人才有，
-         *    看自己资料卡时只剩右上角 ✕）。
+         *  - 「关闭」按钮对所有身份都显示。
+         * 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示。
          */
         userCard: function (uid, nick) {
             if (!uid) { this.pmHint(nick); return; }
@@ -1720,21 +1726,29 @@
                 // v1.1.0：资料卡加「发私信」入口，与头像右键菜单走同一条私聊路径
                 var canPm = self.cfg.actor.kind === 'user' && !isMe && self.cfg.actor.id !== u.id;
                 // 自己的卡片：头像包一层可点容器，点它=打开隐藏的 file input
-                var avHtml = avatarHtml(u.avatar, u.nickname, 'md', u.role);
+                var avHtml = avatarHtml(u.avatar, u.nickname, 'lg', u.role);
                 if (isMe) {
                     avHtml = '<span class="ow-set-avatar-btn" id="owCardAvatarPreview" title="点击更换头像"'
                         + ' onclick="OwChat.pickCardAvatar()">' + avHtml + '</span>'
                         + '<input type="file" id="owCardAvatarFile" accept="image/*" style="display:none">';
                 }
+                var regDate = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-';
                 OwChat.openModal(
                     '<h3>用户资料</h3>'
-                    + '<div style="text-align:center;margin-bottom:14px">' + avHtml
-                    + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
-                    + '<div style="margin-top:4px">' + roleTag(u.role, u.title, u.id) + '</div></div>'
-                    // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
-                    + '<p style="font-size:13px;color:#5C5C5C">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
-                    + '积分：' + esc(u.points || 0) + '<br>'
-                    + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
+                    + '<div class="ow-card-head">'
+                    + avHtml
+                    + '<div class="ow-card-id">'
+                    + '<div class="ow-card-name">' + esc(u.nickname) + '</div>'
+                    + '<div class="ow-card-badges">' + roleTag(u.role, u.title, u.id) + '</div>'
+                    + '</div></div>'
+                    + '<div class="ow-card-meta">'
+                    + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">用户 ID</span>'
+                    + '<span class="ow-card-meta-v">' + esc(fmtUid(u.id)) + '</span></div>'
+                    + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">积分</span>'
+                    + '<span class="ow-card-meta-v">' + esc(u.points || 0) + '</span></div>'
+                    + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">注册</span>'
+                    + '<span class="ow-card-meta-v">' + esc(regDate) + '</span></div>'
+                    + '</div>'
                     + '<div class="ow-modal-actions">'
                     + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">关闭</button>'
                     + (canPm ? '<button class="ow-btn ow-btn-primary" onclick="OwChat.closeModal();OwChat.openDm(\'user:' + (u.id) + '\',' + JSON.stringify(u.nickname).replace(/"/g, '&quot;') + ')">发私信</button>' : '')
@@ -1965,7 +1979,7 @@
                 // 头像置顶：点击当前头像即触发上传（不另设上传按钮）
                 + '<div class="ow-set-avatar">'
                 + '<span id="owSetAvatarPreview" class="ow-set-avatar-btn" title="点击更换头像" onclick="document.getElementById(\'owSetAvatarFile\').click()">'
-                + avatarHtml(me.avatar, me.nickname, 'md', me.role) + '</span>'
+                + avatarHtml(me.avatar, me.nickname, 'lg', me.role) + '</span>'
                 + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none">'
                 + '</div>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
@@ -2304,10 +2318,10 @@
                     self.cfg.me.avatar = url;
                     // 设置弹窗预览
                     var pv = $('owSetAvatarPreview');
-                    if (pv) pv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'md', self.cfg.me.role);
+                    if (pv) pv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'lg', self.cfg.me.role);
                     // 自己的资料卡预览
                     var cv = $('owCardAvatarPreview');
-                    if (cv) cv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'md', self.cfg.me.role);
+                    if (cv) cv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'lg', self.cfg.me.role);
                     self.renderMe();
                     toast('头像已上传，点击保存生效');
                 });

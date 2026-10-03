@@ -215,12 +215,54 @@ button { font-family: inherit; cursor: pointer; }
     flex-shrink: 0;
     -webkit-flex-shrink: 0;
 }
-.ow-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+/* <img> 尺寸锁死：width/height 100% + object-fit:cover，
+   再补 max-* 与 min-* —— 任何尺寸的原图（超大位图、SVG、CSS 生成的 dataURL）
+   都不允许撑破容器；min-width/min-height:0 保证在 flex 容器里不被内容顶开。
+   容器 .ow-avatar 已有 overflow:hidden + border-radius:50%，构成第二重保险。 */
+.ow-avatar img {
+    width: 100%; height: 100%;
+    max-width: 100%; max-height: 100%;
+    min-width: 0; min-height: 0;
+    object-fit: cover; object-position: center;
+    border-radius: 50%; display: block;
+}
 .ow-avatar-sm { width: 28px; height: 28px; line-height: 28px; font-size: 12px; }
 .ow-avatar-md { width: 32px; height: 32px; line-height: 32px; font-size: 14px; }
 .ow-avatar-xs { width: 20px; height: 20px; line-height: 20px; font-size: 10px; }
+/* 'lg' = 64px：资料卡与个人设置共用的头像档（v1.1.9）。
+   原先两处都用 'md'(32px)，在 380px 宽的弹窗里视觉权重太轻，
+   且头像本身（首字色块）只有 14px 字号，看上去更小，故整体放大一档。 */
+.ow-avatar-lg { width: 64px; height: 64px; line-height: 64px; font-size: 26px; }
 /* 个人设置：头像置顶居中，点击即可更换 */
 .ow-set-avatar { text-align: center; margin: 0 0 16px; }
+/* 头像上传的可点容器：固定成方框并裁圆，保证 hover 热区与视觉尺寸一致 */
+.ow-set-avatar-btn { display: inline-block; cursor: pointer; border-radius: 50%; line-height: 0; vertical-align: middle; }
+.ow-set-avatar-btn:hover { opacity: .88; }
+
+/* ---------- 用户资料卡（v1.1.9 重做：头像左上 + 文字右侧，取代原「居中大图」布局） ---------- */
+.ow-card-head { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 14px; margin-bottom: 14px; }
+.ow-card-av {
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+    width: 64px; height: 64px;
+    line-height: 0;
+    overflow: hidden;
+    border-radius: 50%;
+}
+.ow-card-id { min-width: 0; -webkit-flex: 1; flex: 1; -webkit-flex: 1; }
+.ow-card-name {
+    font-size: 17px; font-weight: 600; color: var(--ow-text-title);
+    word-break: break-all; line-height: 1.4;
+}
+.ow-card-badges { margin-top: 6px; display: flex; display: -webkit-flex; flex-wrap: wrap; -webkit-flex-wrap: wrap; gap: 6px; align-items: center; -webkit-align-items: center; }
+/* 资料明细：改竖排文本为「标签 : 值」两列，视觉上与头部区分层 */
+.ow-card-meta {
+    border-top: 1px solid var(--ow-border);
+    padding-top: 12px;
+    font-size: 13px; color: #5C5C5C;
+}
+.ow-card-meta-row { display: flex; display: -webkit-flex; align-items: baseline; -webkit-align-items: baseline; gap: 8px; padding: 3px 0; }
+.ow-card-meta-k { flex-shrink: 0; -webkit-flex-shrink: 0; color: var(--ow-text-sub); }
+.ow-card-meta-v { min-width: 0; word-break: break-all; }
 /* 头像裁剪：canvas 直绘 + 滑块实时重绘（与论坛一致，所见即所得） */
 .ow-crop-wrap { text-align: center; margin: 6px 0 12px; }
 .ow-crop-wrap canvas {
@@ -232,8 +274,6 @@ button { font-family: inherit; cursor: pointer; }
 .ow-crop-ctrl { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 10px; margin-bottom: 14px; }
 .ow-crop-ctrl input[type=range] { flex: 1; -webkit-flex: 1; min-width: 0; }
 .ow-crop-val { font-size: 12px; color: var(--ow-text-sub); width: 48px; text-align: right; flex-shrink: 0; -webkit-flex-shrink: 0; }
-.ow-set-avatar-btn { display: inline-block; cursor: pointer; border-radius: 50%; }
-.ow-set-avatar-btn:hover { opacity: .88; }
 
 /* ==========================================================================
    登录 / 注册 / 安装
