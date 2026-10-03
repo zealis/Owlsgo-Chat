@@ -237,6 +237,17 @@ class DB
             "CREATE TABLE IF NOT EXISTS message_hides (
                 id $id, user_id $int NOT NULL, message_id $int NOT NULL,
                 created_at $ts NOT NULL)",
+            // 联系人（v1.1.24）：**双向**好友关系，一人一行。
+            // 设计要点：
+            //  - 不用 `UNIQUE(friend_id)`：A 加 B 与 B 加 A 是**两条独立行**，
+            //    「我加了他」不等于「他加了我」。查询时恒定 WHERE user_id = 我。
+            //  - 只存注册用户（与 room_members 同口径）：游客身份随会话消亡，
+            //    写进表也无法审计，且回查不到 users 行。
+            //  - 无 nickname/avatar 等快照列，一律 JOIN users 取实时值 ——
+            //    好友改昵称/换头像后联系人列表应立即同步，存快照会长期不一致。
+            "CREATE TABLE IF NOT EXISTS friends (
+                id $id, user_id $int NOT NULL, friend_id $int NOT NULL,
+                created_at $ts NOT NULL)",
         ];
         foreach ($tables as $sql) self::$pdo->exec($sql);
 
@@ -248,6 +259,8 @@ class DB
             'CREATE INDEX IF NOT EXISTS idx_cron_logs_created ON cron_logs (created_at)',
             // 同一用户重复隐藏同一条消息必须幂等，否则反复点会插出一堆重复行
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_hides_key ON message_hides (user_id, message_id)',
+            // 同一人重复加同一好友必须幂等（否则联系人列表出现重名行）
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_friends_pair ON friends (user_id, friend_id)',
         ] as $sql) {
             try { self::$pdo->exec($sql); } catch (Throwable $e) { /* MySQL 8 不支持 IF NOT EXISTS，忽略 */ }
         }

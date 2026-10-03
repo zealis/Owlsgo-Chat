@@ -254,6 +254,10 @@ if ($action !== '') {
         // v1.1.13 计划任务：启停 / 立即执行 / 重置令牌 / 清理日志都改动服务端状态，
         // 与管理员对话类操作同等敏感，一律走一次性票据。
         'admin_cron_toggle', 'admin_cron_run', 'admin_cron_token', 'admin_cron_logs_clear',
+        // v1.1.24 联系人：删除会改变「谁能被我找到」，与群成员变更同属关系边界，走票据。
+        // ⚠️ 添加（friend_add）**不走**票据：它只影响自己，且是纯新增无破坏性，
+        //   走票据会让「加好友」多一次往返，徒增摩擦。
+        'friend_remove',
     ];
     $isSensitive = in_array($action, $SENSITIVE, true) || Plugin::isSensitive($action);
     if ($isSensitive) {
@@ -336,6 +340,20 @@ if ($action !== '') {
         // ---------- 聊天 ----------
         case 'rooms':
             Api::json(['ok' => true, 'data' => Chat::rooms($actor)]);
+
+        // ---------- 联系人（v1.1.24） ----------
+        // 好友列表。前端一次拿全，再按需向 signature 插件批量取签名。
+        case 'friends':
+            Api::json(['ok' => true, 'data' => Chat::friends($actor)]);
+
+        case 'friend_add': {   // 加联系人：幂等（重复加返回明确错误，不插重行）
+            $r = Chat::addFriend($actor, (int)$p('friend_id'));
+            Api::json(['ok' => $r[0], 'msg' => $r[1]]);
+        }
+
+        case 'friend_remove':  // 删联系人：已在 $SENSITIVE，需一次性票据
+            $r = Chat::removeFriend($actor, (int)$p('friend_id'));
+            Api::json(['ok' => $r[0], 'msg' => $r[1]]);
 
         // ---------- 私聊会话（v1.1.0） ----------
         case 'conversations':   // 会话列表：群聊 + 私聊聚合，按最后活跃时间倒序
@@ -627,6 +645,17 @@ if ($action !== '') {
         case 'user_card':
             $u = DB::one('SELECT id,nickname,role,title,avatar,points,created_at,last_login FROM users WHERE id=?', [(int)$p('id')]);
             if (!$u) Api::json(['ok' => false, 'msg' => '用户不存在']);
+            // v1.1.24：带出「我是否已把 TA 加为联系人」，前端据此在「加为联系人 / 删除联系人」
+            // 之间二选一（不给两个都能点、其中必报错的按钮）。
+            // 游客无联系人概念，直接 false。
+            $u['is_friend'] = false;
+            if (($actor['kind'] ?? '') === 'user') {
+                $fid = (int)$p('id');
+                if ($fid !== (int)$actor['id']) {
+                    $has = DB::val('SELECT id FROM friends WHERE user_id=? AND friend_id=?', [(int)$actor['id'], $fid]);
+                    $u['is_friend'] = (int)$has > 0;
+                }
+            }
             Api::json(['ok' => true, 'data' => $u]);
 
         // ---------- IP 归属地：核心不再内置实现（原依赖第三方 ip-api.com），
@@ -935,7 +964,9 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
        . ow_icon('more-v', 16) . '</button></div>'
        // v1.1.0：列表已是「群聊 + 私聊」聚合，标题改为「聊天」；
        // 徽标数字含义同步改为「会话总数」，由 conversations 接口返回的 total 在前端回填
-       . '<div class="ow-side-title">聊天 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
+       // v1.1.24：切到联系人视图时标题变「联系人」（聊天会话消失、联系人列表出现）。
+       // 文字与徽标各自套 span，是为了只改文字时不误碰徽标数字。
+       . '<div class="ow-side-title"><span id="owSideTitleText">聊天</span> <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
        . '<ul class="ow-room-list" id="owRoomList"></ul>'
        . '<div class="ow-me" id="owMe"></div>'
        // 登录用户的操作入口收进个人资料区菜单（点击 owMe 弹出）；游客仍直接给登录按钮

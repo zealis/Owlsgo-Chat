@@ -918,8 +918,11 @@
         /**
          * 拉取会话列表（群聊 + 私聊聚合，服务端已按最后活跃时间倒序），交给通用轮子渲染。
          * v1.1.0：取代旧的 renderRooms —— 群聊与私聊共用同一列表与同一交互。
+         * v1.1.24：**联系人视图下不拉会话** —— 联系人要的是好友名单，
+         * 会话列表此刻是多余的请求，且会覆盖 `conversations` 字段导致切回来时列表闪空。
          */
         loadConversations: function () {            var self = this;
+            if (this.view === 'friends') return;
             OwApi.post('conversations', {}, function (r) {
                 if (!r.ok) return;
                 self.conversations = r.data;
@@ -936,6 +939,145 @@
                     }
                 }
                 self.renderConversations();
+            });
+        },
+
+        /* ---------- 联系人视图（v1.1.24） ----------
+           点品牌区菜单「联系人」后，左侧栏从「聊天会话」切成「联系人名单」：
+             标题  聊天 → 联系人
+             内容  群聊 + 私聊会话 → 我加的联系人
+             头像  群用剪影图 / 私聊用用户头像 → 统一用**联系人自己的头像**
+             副行  最后一条消息摘要 → **个性签名**（signature 插件，未启用则留空）
+           点联系人行 = 开私聊（私聊不依赖好友关系，见 Chat::dmPeerKey）。
+           再点菜单同一项（此时文案变「返回聊天」）切回会话列表。 */
+        view: 'chat',              // 'chat' | 'friends'
+        friends: [],               // 好友列表（含签名，签名可能为空串）
+        _sigProbe: null,           // signature 批量接口是否可用（探测一次，缓存结果）
+
+        /**
+         * 切换联系人 / 聊天视图。noArg=true 时强制切到聊天（供「返回」类入口用）。
+         * 切到联系人：拉 friends + 批量签名 → 渲染。
+         * 切回聊天：直接渲染**已在内存**的 conversations（不必重新请求，列表是 10s 轮询维护的）。
+         */
+        toggleFriendsView: function (noArg) {
+            if (noArg) this.view = 'chat';
+            else this.view = (this.view === 'friends' ? 'chat' : 'friends');
+            var title = $('owSideTitleText');
+            if (title) title.textContent = (this.view === 'friends' ? '联系人' : '聊天');
+            if (this.view === 'friends') {
+                this.loadFriends();
+            } else {
+                var badge = $('owRoomCount');
+                // 切回来时恢复会话总数徽标（列表此刻就在内存里，不用再请求）
+                if (badge) badge.innerHTML = this.conversations ? this.conversations.length : 0;
+                this.renderConversations();
+                // ⚠️ 兜底：若进页面后一直待在联系人视图，conversations 可能从未拉过
+                //   （loadConversations 在 friends 视图下直接 return），此时列表会是空的。
+                //   补拉一次；已拉过则跳过（避免每次切回都打接口）。
+                if (!this.conversations) this.loadConversations();
+            }
+        },
+
+        /**
+         * 拉联系人名单 + 个性签名，然后渲染。
+         * ⚠️ 签名来自 signature 插件，**插件未启用时该接口不存在** ——
+         *   此时只渲染好友名单、签名留空（不报错、不阻断列表出现）。
+         */
+        loadFriends: function () {
+            var self = this;
+            OwApi.post('friends', {}, function (r) {
+                if (!r.ok) {
+                    // 游客：服务端返回空数组（friends 对游客直接返回 []），
+                    // 正常不会走到这里；真报错说明未登录等异常，给明确提示
+                    self.renderFriends([]);
+                    return;
+                }
+                self.friends = r.data || [];
+                self.loadFriendSignatures(self.friends);
+            });
+        },
+
+        /**
+         * 批量取个性签名并渲染。
+         * 用 `plugin_signature_bulk`（v1.1.24 新增）一次拿完，避免 N 次请求。
+         * 插件未启用 → 接口返回「未知操作」→ 直接渲染空签名，不打扰用户。
+         */
+        loadFriendSignatures: function (list) {
+            var self = this;
+            if (!list.length) { this.renderFriends(list); return; }
+            var ids = [], i;
+            for (i = 0; i < list.length; i++) ids.push(list[i].user_id);
+            OwApi.post('plugin_signature_bulk', { ids: ids }, function (r) {
+                var sigs = (r && r.ok && r.signatures) || {};
+                for (var k = 0; k < self.friends.length; k++) {
+                    var uid = self.friends[k].user_id;
+                    // ⚠️ 插件未启用时 signatures 为空 → 全部留空串，前端显示空副行
+                    self.friends[k].signature = sigs[String(uid)] || '';
+                }
+                self.renderFriends(self.friends);
+            });
+        },
+
+        /**
+         * 渲染联系人列表 —— **复用 ChatList 轮子**（同一个 DOM 结构与样式）。
+         * 数据形状对齐 ChatList.render 需要的字段：
+         *   conv='dm'（决定走用户头像分支）、peer=数字 user_id（点击时 openDm）、
+         *   name=昵称、last_text=个性签名、last_at=添加时间（右上角时间）。
+         */
+        /* ---------- 联系人增删（v1.1.24） ----------
+           入口在「用户资料卡」底部按钮（与「发私信」同排）。加/删互斥，
+           靠 user_card 返回的 is_friend 决定显示哪个 —— 不做乐观切换，
+           避免「界面显示已加、实际请求失败」的不一致。 */
+
+        /** 加为联系人。幂等：重复加服务端返回明确错误，不插重行。 */
+        addFriend: function (uid) {
+            var self = this;
+            OwApi.post('friend_add', { friend_id: uid }, function (r) {
+                toast(r.msg || (r.ok ? '已添加' : '添加失败'));
+                if (!r.ok) return;
+                // 刷新资料卡让按钮切成「删除联系人」
+                self.userCard(uid);
+                // 正在联系人视图里则同步刷新名单
+                if (self.view === 'friends') self.loadFriends();
+            });
+        },
+
+        /** 删除联系人。走 OwApi.secure —— friend_remove 在 $SENSITIVE 内，需一次性票据。 */
+        removeFriend: function (uid) {
+            var self = this;
+            OwApi.secure('friend_remove', { friend_id: uid }, function (r) {
+                toast(r.msg || (r.ok ? '已删除' : '删除失败'));
+                if (!r.ok) return;
+                self.userCard(uid);
+                if (self.view === 'friends') self.loadFriends();
+            });
+        },
+
+        renderFriends: function (list) {
+            var self = this, box = $('owRoomList');
+            if (!box) return;
+            var rows = [], i;
+            for (i = 0; i < (list || []).length; i++) {
+                var f = list[i];
+                rows.push({
+                    conv: 'dm', peer: f.user_id, id: f.user_id,
+                    name: f.nickname, avatar: f.avatar, role: f.role,
+                    last_text: f.signature || '',
+                    // ⚠️ 时间列显示「加入联系人的时间」而非最后聊天时间 ——
+                    //   联系人列表没有消息流，拿聊天时间会全为空或全同值，没意义。
+                    last_at: f.added_at || 0,
+                });
+            }
+            var badge = $('owRoomCount');
+            if (badge) badge.innerHTML = rows.length;
+            ChatList.render(rows, {
+                container: 'owRoomList',
+                activeKey: this.dm ? ('dm:' + this.dm.peer) : '',
+                emptyText: '还没有联系人，去「成员管理」或资料卡添加吧',
+                onClick: function (el) {
+                    var peer = el.getAttribute('data-dm');
+                    if (peer) self.openDm(peer, el.getAttribute('data-name'));
+                }
             });
         },
 
@@ -963,6 +1105,10 @@
         /** 会话列表渲染 + 行点击分发（群聊走密码房流程，私聊进私聊页） */
         renderConversations: function () {
             var self = this, list = this.conversations || [];
+            // v1.1.24：联系人视图下**不要**渲染会话列表 —— 会把联系人名单冲掉。
+            // loadConversations 已拦了一道，这里再兜一道：
+            // 任何直接调 renderConversations 的路径（切会话、openDm 等）都不该踩坏联系人视图。
+            if (this.view === 'friends') return;
             var activeKey = this.dm ? ('dm:' + this.dm.peer) : ('room:' + this.room);
             ChatList.render(list, {
                 container: 'owRoomList',
@@ -1876,6 +2022,15 @@
                     + '</div>'
                     + '<div class="ow-modal-actions">'
                     + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">关闭</button>'
+                    // v1.1.24 联系人：加为联系人。
+                    // ⚠️ 加/删是**互斥**的：已是联系人时只给「删除联系人」，避免出现两个都能点的按钮
+                    //   （服务端也会拒，但前端不该留下必然报错的入口）。
+                    // 删除走 OwApi.secure —— friend_remove 在 $SENSITIVE 内，需一次性票据。
+                    + (canPm
+                        ? (u.is_friend
+                            ? '<button class="ow-btn ow-btn-ghost" onclick="OwChat.removeFriend(' + (u.id) + ')">删除联系人</button>'
+                            : '<button class="ow-btn ow-btn-ghost" onclick="OwChat.addFriend(' + (u.id) + ')">加为联系人</button>')
+                        : '')
                     + (canPm ? '<button class="ow-btn ow-btn-primary" onclick="OwChat.closeModal();OwChat.openDm(\'user:' + (u.id) + '\',' + JSON.stringify(u.nickname).replace(/"/g, '&quot;') + ')">发私信</button>' : '')
                     + '</div>'
                 );
@@ -2288,13 +2443,16 @@
                         + '<span class="ow-me-name">' + esc(this.cfg.actor.nickname || '游客') + '</span></span>',
                 });
             }
-            // ② 联系人：本期只占位。**不接任何请求** —— 没有接口就是空壳，
-            // 点了给明确说明，而不是「点了没反应」或伪造一个空列表。
+            // ② 联系人：**toggle 语义**（v1.1.24）——
+            // 已切到联系人视图时再点同一项 = 切回聊天列表。
             // 游客：按需求「可见但禁用」—— 与首行同口径，避免出现唯独它能点的例外。
             if (isGuest) {
                 items.push({ t: '联系人', dis: true, tip: '请先登录后使用联系人' });
             } else {
-                items.push({ t: '联系人', run: function () { toast('联系人功能暂未开放'); } });
+                items.push({
+                    t: this.view === 'friends' ? '返回聊天' : '联系人',
+                    run: function () { self.toggleFriendsView(); }
+                });
             }
             // ③ 插件扩展
             for (var i = 0; i < this._brandExt.length; i++) {

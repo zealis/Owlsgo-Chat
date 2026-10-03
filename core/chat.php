@@ -4,6 +4,74 @@
  */
 class Chat
 {
+    // ---------- 联系人（v1.1.24） ----------
+    /**
+     * 好友列表（只返回**我主动加的**那些，即 friends 表里 user_id = 我的行）。
+     *
+     * 语义说明（重要，别当成双向）：
+     *   本表存的是单向关系 —— 「A 把 B 加为联系人」与「B 把 A 加为联系人」是两条独立行。
+     *   因此这里返回的是**我的联系人名单**，不代表对方也把我加了。
+     *   前端列表里点谁都能开私聊（私聊本身不需要好友关系，见 dmPeerKey）。
+     *
+     * 字段一律 JOIN users 取实时值，不存快照 —— 好友改昵称/换头像后立即同步。
+     * 排序：昵称升序（联系人列表无「活跃度」概念，按名字找更顺手）。
+     */
+    public static function friends(array $actor): array
+    {
+        // 游客没有联系人：身份随会话消亡，写进表也无法回查
+        if (($actor['kind'] ?? '') !== 'user') return [];
+        $me = (int)$actor['id'];
+        $rows = DB::all(
+            'SELECT u.id, u.nickname, u.avatar, u.role, u.title, f.created_at
+             FROM friends f JOIN users u ON u.id = f.friend_id
+             WHERE f.user_id = ?
+             ORDER BY u.nickname COLLATE NOCASE ASC', [$me]);
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'user_id' => (int)$r['id'],
+                'nickname' => (string)$r['nickname'],
+                'avatar'   => (string)($r['avatar'] ?? ''),
+                'role'     => (string)($r['role'] ?? 'member'),
+                'title'    => (string)($r['title'] ?? ''),
+                'added_at' => (int)$r['created_at'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * 添加联系人（幂等）。返回 [ok, msg]。
+     * 校验：只能加**注册用户**、不能加自己、目标必须存在且 status=1（未被封禁）。
+     */
+    public static function addFriend(array $actor, int $friendId): array
+    {
+        if (($actor['kind'] ?? '') !== 'user') return [false, '请先登录'];
+        $me = (int)$actor['id'];
+        if ($friendId <= 0) return [false, '参数错误'];
+        if ($friendId === $me) return [false, '不能把自己加为联系人'];
+        // 用数字 user_id 查身份（与全站口径一致：禁止用昵称/邮箱反查）
+        $u = DB::one('SELECT id, nickname, status FROM users WHERE id=?', [$friendId]);
+        if (!$u) return [false, '该用户不存在'];
+        if ((int)$u['status'] !== 1) return [false, '该用户已被封禁，无法添加'];
+        $has = DB::val('SELECT id FROM friends WHERE user_id=? AND friend_id=?', [$me, $friendId]);
+        if ((int)$has > 0) return [false, '已经是联系人了'];   // 幂等：不重复插
+        DB::run('INSERT INTO friends (user_id, friend_id, created_at) VALUES (?,?,?)',
+            [$me, $friendId, time()]);
+        return [true, '已添加「' . (string)$u['nickname'] . '」为联系人'];
+    }
+
+    /** 删除联系人（幂等）。返回 [ok, msg]。 */
+    public static function removeFriend(array $actor, int $friendId): array
+    {
+        if (($actor['kind'] ?? '') !== 'user') return [false, '请先登录'];
+        $me = (int)$actor['id'];
+        if ($friendId <= 0) return [false, '参数错误'];
+        // 只删「我加的这条」行 —— 不动对方那边可能存在的对称行（那是对方的关系）
+        DB::run('DELETE FROM friends WHERE user_id=? AND friend_id=?', [$me, $friendId]);
+        return [true, '已删除联系人'];
+    }
+
     // ---------- 房间 ----------
     public static function rooms(array $actor): array
     {
