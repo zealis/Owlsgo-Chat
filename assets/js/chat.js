@@ -1364,6 +1364,8 @@
             var self = this;
             var TYPE = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
             var ROLE = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '超级管理员' };
+            // v1.1.14：服务端已按当前身份算好（管理员恒为 1），前端不再自行判 role
+            var canPrivate = (this.cfg.settings || {}).room_private_create !== '0';
             var opts = function (map, keys, cur) {
                 var h = '';
                 for (var i = 0; i < keys.length; i++) {
@@ -1382,8 +1384,13 @@
                 + '<div class="ow-form-item"><label>群简介（可选）</label><input class="ow-input" id="owRCDesc" maxlength="200" placeholder="一句话介绍这个群"></div>'
                 // v1.1.11 公开性 State 开关。与上面的「类型」正交：
                 // 类型管「进入方式」（密码/角色门槛），开关管「谁能发现这个群」。
+                // v1.1.14：后台总闸关闭时对当前身份禁用（canPrivate 由服务端按身份算好后下发），
+                // 避免留下「能点、提交必报错」的死开关。
                 + '<div class="ow-form-item ow-form-item-switch">'
-                + switchHtml('owRCPublic', '公开群聊', true, '开启：显示在群聊列表，游客可进入并发言。关闭：不进公开列表，只能由群成员邀请加入。')
+                + switchHtml('owRCPublic', '公开群聊', true,
+                    canPrivate ? '开启：显示在群聊列表，游客可进入并发言。关闭：不进公开列表，只能由群成员邀请加入。'
+                               : '站点已关闭「创建不公开群聊」，新群只能公开（管理员不受此限制）。',
+                    !canPrivate)
                 + '</div>'
                 + '<div class="ow-form-msg ow-rc-note" id="owRCPubNote"></div>'
                 + '<div class="ow-room-form-tip" id="owRCTip"></div>'
@@ -1397,6 +1404,10 @@
             var pubBox = $('owRCPublic'), pubNote = $('owRCPubNote');
             // 公开性提示随开关变化：把「谁能进这个群」讲清楚，避免建完才发现进不去
             var refreshPub = function () {
+                if (!canPrivate) {
+                    pubNote.innerHTML = '<span style="color:#C41D1F">站点已关闭「创建不公开群聊」，新群只能公开。</span>';
+                    return;
+                }
                 pubNote.innerHTML = pubBox.checked
                     ? '<span style="color:var(--ow-text-sub)">群聊将出现在左侧列表，所有人（含游客）都能看到并进入。</span>'
                     : '<span style="color:#C41D1F">群聊不会出现在列表里。创建后只有你能进，其他人需要你或群成员在群聊设置里按用户 ID 邀请。</span>';
@@ -1908,6 +1919,10 @@
             var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '群聊');
             var isPublic = r.is_public !== false;   // 缺省视为公开，兼容旧缓存数据
             var canInvite = !!r.can_invite;
+            // v1.1.14：普通用户在总闸关闭时不能把公开群改成不公开（服务端会拒），
+            // 这里同步禁用开关。已经是不公开的群则放行——改个名不该被总闸拦住。
+            var canTogglePublic = (this.cfg.settings || {}).room_private_create !== '0'
+                || !isPublic || isAdmin;
             // 待保存头像按群缓存：切群时必须重置，否则会把上一个群的头像带过来
             if (this._roomAvatarRoom !== this.room) {
                 this._roomAvatarRoom = this.room;
@@ -1932,8 +1947,12 @@
                       + '<div class="ow-form-item" style="margin-top:10px"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(r.description || '') + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
                       // v1.1.11 公开性开关：与「类型」正交，只控制谁能发现这个群。
                       // 关闭后群不出现在列表，只能靠成员邀请（按用户 ID）。
+                      // v1.1.14：总闸关闭且本群当前是公开时禁用，避免「保存必报错」。
                       + '<div class="ow-form-item ow-form-item-switch">'
-                      + switchHtml('owRoomPublic', '公开群聊', isPublic, '开启：显示在群聊列表，游客可进入并发言。关闭：只有群主与成员能进，需邀请加入。')
+                      + switchHtml('owRoomPublic', '公开群聊', isPublic,
+                          canTogglePublic ? '开启：显示在群聊列表，游客可进入并发言。关闭：只有群主与成员能进，需邀请加入。'
+                                          : '站点已关闭「不公开群聊」，本群只能保持公开。',
+                          !canTogglePublic)
                       + '</div>'
                       + '</div>'
                       + '<div class="ow-modal-actions ow-modal-actions-split">'
@@ -2289,21 +2308,46 @@
         },
 
         /**
+         * 当前会话是否拥有「删除他人消息」的权限（v1.1.14）。
+         * 口径与服务端 deleteMessage() 完全一致：超级管理员 + 本群群主。
+         * 取自 rooms() 下发的 can_edit（其定义就是「群主 + 超管」），私聊无 can_edit → false。
+         * ⚠️ 不用 cfg.actor.role 在这里另判一套，避免前后台口径漂移。
+         */
+        canRemoveOthers: function () {
+            if (this.dm || !this.room) return false;
+            var list = this.cfg.rooms || [];
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].id === this.room) return !!list[i].can_edit;
+            }
+            return false;
+        },
+
+        /**
          * 右键「消息内容」的菜单：复制 / 引用 / 删除。
          * 插件可通过 OwChat.onMsgContent 追加项（如翻译、举报、复制原文…）。
+         *
+         * v1.1.14 权限收口：
+         *   - 有权（管理员 / 群主 / 消息作者）→ 「删除」，对**所有人**生效；
+         *   - 其余人 → 「隐藏」，只在**自己**这里不显示，别人的会话不受影响。
+         * 两档都必须给入口：不给就是死路（用户压根没法处理不想看的内容），
+         * 给了却一律当真删则是越权（他能替别人决定别人还能不能看到）。
          */
         showContentMenu: function (x, y, m) {
             var self = this, admin = this.cfg.actor.role === 'admin', items = [];
+            var canRemove = m.mine || this.canRemoveOthers();
             if (!m.recalled && !m.deleted) {
                 items.push({ t: '复制', run: function () { self.copyMsg(m); } });
                 if (m.type === 'image' && this.cfg.actor.kind === 'user')
                     items.push({ t: '收藏为贴纸', run: function () { self.collect(m.content); } });
                 if (this.cfg.actor.kind !== 'none')
                     items.push({ t: '引用', run: function () { self.quoteMsg(m); } });
-                if (m.mine || admin)
+                if (m.mine || admin || this.canRemoveOthers())
                     items.push({ t: '撤回', run: function () { self.recall(m.id); } });
-                if (m.mine || admin)
-                    items.push({ t: '删除', run: function () { self.deleteMsg(m.id); } });
+                // 「隐藏」只对已登录用户有意义：游客身份不落库，隐藏了刷新就没
+                if (canRemove)
+                    items.push({ t: '删除', run: function () { self.deleteMsg(m.id, false); } });
+                else if (this.cfg.actor.kind === 'user')
+                    items.push({ t: '隐藏', run: function () { self.deleteMsg(m.id, true); } });
                 for (var i = 0; i < this._ctxExtContent.length; i++) {
                     try { this._ctxExtContent[i](items, m, { roomId: this.room, actor: this.cfg.actor }); } catch (e) {}
                 }
@@ -2448,16 +2492,30 @@
             setTimeout(function () { el.classList.remove('ow-msg-jump'); }, 1800);
         },
 
-        /** 删除消息（内容右键）：确认弹窗 → 物理删除 → 就地移除 */
-        deleteMsg: function (id) {
+        /**
+         * 删除 / 隐藏消息（内容右键）
+         *
+         * v1.1.14 两种语义共用一个接口，由服务端按权限裁决：
+         *   hideOnly=true  → 确认框明说「仅你不再看到」，成功后按隐藏提示；
+         *   hideOnly=false → 真删除（管理员 / 群主 / 作者本人）。
+         * ⚠️ 最终以服务端返回的 scope 为准：前端传参只是**期望**，
+         * 权限不足时服务端会降级为 hide，此时必须显示「已隐藏」而不是「已删除」，
+         * 否则用户会以为消息对所有人都没了（实际别人还看得到），这是误导。
+         */
+        deleteMsg: function (id, hideOnly) {
             var self = this;
-            this.confirmModal('确定删除这条消息吗？删除后不可恢复。', function () {
+            var text = hideOnly
+                ? '确定隐藏这条消息吗？隐藏后仅你不再看到，其他人不受影响。'
+                : '确定删除这条消息吗？删除后所有群成员都不再显示，且不可恢复。';
+            this.confirmModal(text, function () {
                 OwApi.secure('msg_delete', { id: id }, function (r) {
                     if (!r.ok) { toast(r.msg); return; }
                     var el = $('owMsg' + id);
                     if (el && el.parentNode) el.parentNode.removeChild(el);
                     delete self.msgCache[id];
-                    toast('已删除');
+                    // 隐藏只影响消息区；删除会影响会话摘要，一并重拉让侧栏同步
+                    toast(r.msg || '已删除');
+                    if (r.scope !== 'hide') self.loadConversations();
                 });
             });
         },
@@ -2961,7 +3019,13 @@ logs: function (main) {
                         + '<div class="ow-form-item"><label>允许用户创建群聊</label>' + sel('room_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
                         + '<div class="ow-form-item"><label>创建群聊扣除积分</label><input class="ow-input" id="owS_room_create_cost" value="' + esc(d.room_create_cost || '0') + '"></div>'
                         + '</div>'
-                        + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在群聊管理中调整。</p>'
+                        // v1.1.14 不公开群总闸：与「允许用户创建群聊」正交 ——
+                        // 那个管能不能建群，这个管建出来的群能不能藏起来。
+                        + '<div class="ow-form-item"><label>允许用户创建不公开群聊</label>'
+                        + sel('room_private_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
+                        + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在群聊管理中调整。<br>'
+                        + '不公开群聊只靠邀请链接传播，不出现在任何列表里。关闭后普通用户只能创建公开群聊，'
+                        + '已存在的不公开群仍可正常改名、改简介（仅禁止把公开群改成不公开）；管理员始终不受此限制。</p>'
                         // v1.1.0 软删除：删除消息只清空正文并留行（供审计），到期才物理清除
                         + '<div class="ow-form-item"><label>已删除消息保留期(天)</label><input class="ow-input" id="owS_msg_deleted_retain_days" value="' + esc(d.msg_deleted_retain_days || '30') + '"></div>'
                         + '<p style="font-size:12px;color:#5C5C5C;margin:4px 0 12px">删除消息时正文立即清空（原文不可恢复），但记录行会保留到本期限满后物理清除，'
@@ -3327,6 +3391,7 @@ logs: function (main) {
                 file_exts: $('owS_file_exts') ? $('owS_file_exts').value : '',
                 room_create_allow: $('owS_room_create_allow') ? $('owS_room_create_allow').value : '',
                 room_create_cost: $('owS_room_create_cost') ? $('owS_room_create_cost').value : '',
+                room_private_create_allow: $('owS_room_private_create_allow') ? $('owS_room_private_create_allow').value : '',
                 login_fail_captcha: $('owS_login_fail_captcha') ? $('owS_login_fail_captcha').value : '',
                 login_fail_lock: $('owS_login_fail_lock') ? $('owS_login_fail_lock').value : '',
                 login_lock_minutes: $('owS_login_lock_minutes') ? $('owS_login_lock_minutes').value : '',

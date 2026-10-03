@@ -259,7 +259,9 @@ class Admin
                           'sound_default', 'room_pass_ttl',
                           'login_fail_captcha', 'login_fail_lock', 'login_lock_minutes', 'min_register_age',
                           'file_upload', 'file_exts', 'file_max_size',
-                          'room_create_allow', 'room_create_cost'];
+                          'room_create_allow', 'room_create_cost',
+                          // v1.1.14：普通用户能否创建不公开群聊（管理员始终可）
+                          'room_private_create_allow'];
                 // 数值型设置统一收敛为非负整数：负数会让间隔/保留期这类
                 // 「窗口秒数」「天数」直接失效或行为诡异，前端输入框挡不住。
                 $intKeys = ['guest_msg_interval', 'msg_deleted_retain_days'];

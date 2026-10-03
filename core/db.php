@@ -227,6 +227,16 @@ class DB
                 id $id, name $str NOT NULL DEFAULT '', status $str NOT NULL DEFAULT 'ok',
                 message $str NOT NULL DEFAULT '', duration $int NOT NULL DEFAULT 0,
                 created_at $ts NOT NULL)",
+            // v1.1.14「仅自己隐藏」的消息黑名单。
+            // 语义边界（务必分清，勿与 messages.deleted 混用）：
+            //   messages.deleted=1  = 真删除，**所有人**都不再看到（清空正文，留行审计）；
+            //   本表一行            = 只是「我不想看这条」，**别人照常能看到**，
+            //                           用于普通用户删除他人消息时的降级形态。
+            // 因此读消息的每条通道（history / poll / dm_history / dm_poll / conversations）
+            // 都必须扣掉本表命中的行，漏一处就会出现「删了却又刷出来」。
+            "CREATE TABLE IF NOT EXISTS message_hides (
+                id $id, user_id $int NOT NULL, message_id $int NOT NULL,
+                created_at $ts NOT NULL)",
         ];
         foreach ($tables as $sql) self::$pdo->exec($sql);
 
@@ -236,6 +246,8 @@ class DB
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_cron_tasks_key ON cron_tasks (plugin, name)',
             'CREATE INDEX IF NOT EXISTS idx_cron_tasks_due ON cron_tasks (enabled, next_run_at)',
             'CREATE INDEX IF NOT EXISTS idx_cron_logs_created ON cron_logs (created_at)',
+            // 同一用户重复隐藏同一条消息必须幂等，否则反复点会插出一堆重复行
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_hides_key ON message_hides (user_id, message_id)',
         ] as $sql) {
             try { self::$pdo->exec($sql); } catch (Throwable $e) { /* MySQL 8 不支持 IF NOT EXISTS，忽略 */ }
         }
@@ -469,6 +481,10 @@ class DB
             // 用户创建群聊
             'room_create_allow' => '1',  // 是否允许普通用户创建群聊（管理员始终可创建）
             'room_create_cost'  => '0',  // 创建群聊扣除的积分（0=免费；管理员不扣）
+            // v1.1.14：是否允许普通用户创建**不公开**群聊（管理员始终可创建）。
+            // 与 room_create_allow 正交：那个管「能不能建群」，这个管「建出来的群能不能藏起来」。
+            // 不公开群只靠邀请链接传播，容易变成灰色宣传阵地，故单独留一道总闸。
+            'room_private_create_allow' => '1',
         ];
         foreach ($defs as $k => $v) {
             if (self::setting($k) === null) self::setSetting($k, $v);

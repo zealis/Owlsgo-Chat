@@ -413,16 +413,62 @@ class Chat
     public static function history(array $actor, int $roomId, int $beforeId, int $limit = 30): array
     {
         self::purgeDeleted();   // v1.1.0：顺带清理过保留期的软删除消息（内部有小时级节流）
+        self::purgeHides();     // v1.1.14：顺带清理指向已消失消息的隐藏行
         $sql = 'SELECT * FROM messages WHERE room_id=?';
         $args = [$roomId];
         if ($beforeId > 0) { $sql .= ' AND id<?'; $args[] = $beforeId; }
         $sql .= ' ORDER BY id DESC LIMIT ' . max(1, min(100, $limit));
         $rows = DB::all($sql, $args);
+        $hidden = self::hiddenIds($actor);
         $out = [];
         foreach (array_reverse($rows) as $m) {
+            if (isset($hidden[(int)$m['id']])) continue;   // v1.1.14：仅自己隐藏的，不下发
             if (self::visible($m, $actor)) $out[] = self::pack($m, $actor);
         }
         return $out;
+    }
+
+    // ---------- 「仅自己隐藏」的消息（v1.1.14） ----------
+
+    /**
+     * 当前身份已隐藏的消息 ID 集合（message_hides.user_id = 我的那批）。
+     *
+     * 游客不查表：游客身份随浏览器会话消亡、同一昵称背后可能是任意多个人，
+     * 往表里写「谁不想看哪条」既无法审计也会留下无主垃圾行。游客直接返回空集，
+     * 即「隐藏」对游客退化为无效操作（前端也不给该入口）。
+     *
+     * @return array<int,bool>  message_id => true
+     */
+    public static function hiddenIds(array $actor): array
+    {
+        if (($actor['kind'] ?? '') !== 'user') return [];
+        $uid = (int)($actor['id'] ?? 0);
+        if ($uid <= 0) return [];
+        $out = [];
+        foreach (DB::all('SELECT message_id FROM message_hides WHERE user_id=?', [$uid]) as $r) {
+            $out[(int)$r['message_id']] = true;
+        }
+        return $out;
+    }
+
+    /**
+     * 把一条消息加入「仅自己隐藏」（幂等）。
+     * 只允许注册用户调用；不校验房间权限——隐藏是**纯个人视图**行为，
+     * 看不见的消息自然也不会出现在自己的列表里，拦不拦没有实际区别。
+     */
+    public static function hideMessage(array $actor, int $msgId): array
+    {
+        if (($actor['kind'] ?? '') !== 'user') return [false, '请先登录后再使用该功能'];
+        $m = DB::one('SELECT id FROM messages WHERE id=?', [$msgId]);
+        if (!$m) return [false, '消息不存在'];
+        if ((int)DB::val('SELECT 1 FROM message_hides WHERE user_id=? AND message_id=?',
+                [(int)$actor['id'], $msgId]) > 0) {
+            return [true, '已隐藏'];
+        }
+        DB::insert('message_hides', [
+            'user_id' => (int)$actor['id'], 'message_id' => $msgId, 'created_at' => time(),
+        ]);
+        return [true, '已隐藏'];
     }
 
     // ---------- 长轮询（主通道，零依赖替代 WebSocket） ----------
@@ -431,11 +477,14 @@ class Chat
         self::heartbeat($actor, $roomId);
         $deadline = time() + max(5, min(30, $timeout));
         $new = [];
+        $hidden = self::hiddenIds($actor);
         while (time() < $deadline) {
             $rows = DB::all('SELECT * FROM messages WHERE room_id=? AND id>? ORDER BY id LIMIT 200', [$roomId, $sinceId]);
             if ($rows) {
                 foreach ($rows as $m) {
-                    if (self::visible($m, $actor)) $new[] = self::pack($m, $actor);
+                    // v1.1.14：隐藏的消息不下发，但仍要推进 sinceId，
+                    // 否则这条会被下一次轮询重新捞出来反复判断。
+                    if (!isset($hidden[(int)$m['id']]) && self::visible($m, $actor)) $new[] = self::pack($m, $actor);
                     $sinceId = max($sinceId, (int)$m['id']);
                 }
                 break;
@@ -513,6 +562,7 @@ class Chat
     public static function conversations(array $actor): array
     {
         $out = [];
+        $hidden = self::hiddenIds($actor);   // v1.1.14：摘要也不能漏，漏了就等于没隐藏
 
         // 群聊：各房间最后一条消息（一条 GROUP BY 取回，避免逐房间查询）
         $last = [];
@@ -532,7 +582,9 @@ class Chat
             $out[] = [
                 'conv' => 'room', 'id' => $r['id'], 'peer' => '',
                 'name' => $r['name'], 'avatar' => $r['avatar'],
-                'last_at' => $meta['at'], 'last_text' => $lastText[$meta['id']] ?? '',
+                'last_at' => $meta['at'],
+                // 末条被我隐藏过 → 摘要置空（但时间戳照旧，列表排序不受影响）
+                'last_text' => isset($hidden[$meta['id']]) ? '' : ($lastText[$meta['id']] ?? ''),
                 'need_password' => $r['need_password'], 'can_edit' => $r['can_edit'], 'mine' => $r['mine'],
             ];
         }
@@ -551,6 +603,7 @@ class Chat
         );
         $seen = [];
         foreach ($rows as $m) {
+            if (isset($hidden[(int)$m['id']])) continue;   // v1.1.14：别拿我已隐藏的消息当会话摘要
             // 对方 = 另一方。v1.1.2 起只可能是「用户↔用户」，
             // 但库内可能残留 v1.1.0 时期写入的跨身份消息，故仍按「谁发的」两分支取对方，
             // 再用 dmPeerKey 做一次协议层校验，非法的直接跳过（不展示、也不可进入）。
@@ -610,7 +663,13 @@ class Chat
              . ' ORDER BY id DESC LIMIT ' . max(1, min(50, $limit));
         $rows = DB::all($sql, $args);
         $rows = array_reverse($rows);           // 升序返回给前端直接追加
-        return array_map(fn($m) => self::pack($m, $actor), $rows);
+        $hidden = self::hiddenIds($actor);      // v1.1.14：扣掉「仅自己隐藏」的
+        $out = [];
+        foreach ($rows as $m) {
+            if (isset($hidden[(int)$m['id']])) continue;
+            $out[] = self::pack($m, $actor);
+        }
+        return $out;
     }
 
     /**
@@ -712,11 +771,12 @@ class Chat
         $sql = "SELECT * FROM messages WHERE type='private' AND room_id=0 AND $cond ORDER BY id LIMIT 200";
         $deadline = time() + max(5, min(30, $timeout));
         $new = [];
+        $hidden = self::hiddenIds($actor);
         while (time() < $deadline) {
             $rows = DB::all($sql, $args);
             if ($rows) {
                 foreach ($rows as $m) {
-                    if (self::visible($m, $actor)) $new[] = self::pack($m, $actor);
+                    if (!isset($hidden[(int)$m['id']]) && self::visible($m, $actor)) $new[] = self::pack($m, $actor);
                     $sinceId = max($sinceId, (int)$m['id']);
                 }
                 break;
@@ -808,51 +868,63 @@ class Chat
 
     // ---------- 撤回 ----------
     /**
-     * 删除消息（内容右键「删除」）：物理删除，与「撤回」区分
-     * ——撤回是标记 recalled 保留占位，删除是真的从库中移除。
-     * 权限：作者本人（不限时间）、管理员、该群房主。
+     * 删除消息（内容右键「删除」）：v1.1.14 起**按权限分两种结果**，前端据返回的 scope 提示用户。
      *
-     * @return array [bool, string]
-     */
-    /**
-     * 删除消息（v1.1.0 起统一为软删除）。
+     * 权限矩阵（唯一口径，前端只按下发的 scope 显示文案，不自行判身份）：
+     *   管理员 / 该群群主 / 消息作者本人 → scope='delete'：真删除，**所有人**都不再看到
+     *     （软删除，清空正文 + 留行审计，见下方说明）；
+     *   其他任何人（含游客）              → scope='hide'：只写 message_hides，
+     *     **仅自己**不再看到这条，别人照常能看到、消息也仍在库里。
      *
-     * 需求背景：聊天记录涉及个人数据，法规要求「删除权」与「留痕举证」并存。
-     * 因此**所有**删除（含超级管理员）都只做软删除——行保留，
-     * content 清空（原文不可恢复），但昵称 / 时间 / IP 等元数据留存以备审计。
-     * 到期后由 purgeDeleted() 物理清除，行彻底消失。
+     * 「删除他人的消息只是自己眼不见」是需求明确要求的产品行为：
+     * 聊天是公共空间，任何人都有权屏蔽自己不想看的发言；但把「我不看」升格成
+     * 「别人也看不到」就越权了，那只留给管理员与群主。
      *
-     * 与 recall（撤回）的区别：撤回是用户对自己消息的 3 分钟内操作，不涉及合规；
-     * 删除是管理动作，进安全日志。
+     * @return array [bool, string, string] [是否成功, 提示文案, 'delete'|'hide']
      */
     public static function deleteMessage(array $actor, int $msgId): array
     {
         $m = DB::one('SELECT * FROM messages WHERE id=?', [$msgId]);
-        if (!$m) return [false, '消息不存在'];
-        if ((int)($m['deleted'] ?? 0) === 1) return [false, '消息已删除'];
+        if (!$m) return [false, '消息不存在', 'hide'];
+        if ((int)($m['deleted'] ?? 0) === 1) return [false, '消息已删除', 'delete'];
         $mine = ($actor['kind'] === 'user' && (int)$m['user_id'] === $actor['id'])
              || ($actor['kind'] === 'guest' && (int)$m['guest_id'] === $actor['id']);
-        $can = $actor['role'] === 'admin' || $mine;
-        if (!$can) {
-            $room = self::room((int)$m['room_id']);
-            if ($room && $actor['kind'] === 'user' && (int)$room['owner_id'] === $actor['id']) $can = true;
+        // 严格比较统一用 int：$actor['id'] 在不同入口可能是字符串
+        $isOwner = false;
+        if (!$mine && $actor['kind'] === 'user' && (int)$m['room_id'] > 0) {
+            $ownerId = (int)(DB::val('SELECT owner_id FROM rooms WHERE id=?', [(int)$m['room_id']]) ?: 0);
+            $isOwner = $ownerId !== 0 && $ownerId === (int)$actor['id'];
         }
+        $can = $actor['role'] === 'admin' || $mine || $isOwner;
+
+        if (!$can) {
+            // 无权真删除 → 降级为「仅自己隐藏」。这是**降级而非拒绝**：
+            // 前端对任何消息都提供「删除」入口，若服务端直接报错就是死按钮。
+            [$ok, $msg] = self::hideMessage($actor, $msgId);
+            return [$ok, $ok ? '已隐藏（仅你不再看到这条消息）' : $msg, 'hide'];
+        }
+
         // 钩子：可放行或拦截（$allow 置 false 即拒绝，$reason 为展示给用户的理由）
-        $allow = $can; $reason = '';
+        $allow = true; $reason = '';
         Plugin::fire('msg.before_delete', [&$allow, &$reason, $m, $actor]);
-        if (!$allow) return [false, $reason !== '' ? $reason : '无权删除该消息'];
+        if (!$allow) return [false, $reason !== '' ? $reason : '无权删除该消息', 'delete'];
 
         // 软删除：清空正文与引用（原文不留存），行本身保留到保留期结束。
         // quote 列是 NOT NULL（历史建表约束），必须写空串而不是 NULL。
-        DB::run('UPDATE messages SET deleted=1, content=?, quote=?, deleted_at=?, deleted_by=? WHERE id=?',
+        $st = DB::run('UPDATE messages SET deleted=1, content=?, quote=?, deleted_at=?, deleted_by=? WHERE id=?',
             ['', '', time(), mb_substr((string)($actor['nickname'] ?? ''), 0, 64), $msgId]);
+        // 与「公告删不掉」同源的教训：DELETE/UPDATE 也必须查 rowCount。
+        // 目标已不存在时若无条件报成功，用户只会看到「提示删了、刷新又回来」。
+        if (is_object($st) && method_exists($st, 'rowCount') && $st->rowCount() === 0) {
+            return [false, '消息不存在或已被删除', 'delete'];
+        }
         Sec::log('msg_delete', (string)$msgId, [
             'room' => (int)$m['room_id'],
             'type' => (string)$m['type'],
             'by' => (string)($actor['kind'] ?? ''),
         ]);
         Plugin::fire('msg.after_delete', [$msgId, $m, $actor]);
-        return [true, '已删除'];
+        return [true, '已删除', 'delete'];
     }
 
     /**
@@ -906,6 +978,14 @@ class Chat
         // v1.1.11 公开性开关；null = 不改（兼容旧调用方，如后台）。
         // 切到「不公开」时若无邀请码，顺手生成一个，省得群主再点一次。
         if ($isPublic !== null) {
+            // v1.1.14 全局总闸同样约束**改**：只拦「公开 → 不公开」这一次转换，
+            // 已经是不公开的群（管理员或开关开启时建的）照常能改名、改简介，
+            // 否则总闸一关，这些群主会被永久锁死在「保存不进去」的状态。
+            $wasPublic = (int)($room['is_public'] ?? 1) === 1;
+            if (!$isPublic && $wasPublic && $actor['role'] !== 'admin'
+                && DB::setting('room_private_create_allow', '1') !== '1') {
+                return [false, '站点已关闭「不公开群聊」，无法将群聊设为不公开'];
+            }
             $sets['is_public'] = $isPublic ? 1 : 0;
             if (!$isPublic && empty($room['invite_code'])) {
                 $sets['invite_code'] = self::newInviteCode(0);
@@ -934,6 +1014,23 @@ class Chat
         if (!$can) return [false, '只能撤回 3 分钟内自己发送的消息'];
         DB::run('UPDATE messages SET recalled=1 WHERE id=?', [$msgId]);
         return [true, '已撤回'];
+    }
+
+    /**
+     * 清理 message_hides 里的孤儿行（v1.1.14）。
+     * 消息被 purgeDeleted 物理清除后，隐藏行会变成指向不存在消息的死记录。
+     * 这里只清「消息已不在库」的，语义与 purgeDeleted 严格区分。
+     */
+    public static function purgeHides(): void
+    {
+        static $lastRun = 0;
+        if (time() - $lastRun < 3600) return;   // 每小时最多跑一次
+        $lastRun = time();
+        try {
+            DB::run('DELETE FROM message_hides WHERE message_id NOT IN (SELECT id FROM messages)');
+        } catch (Throwable $e) {
+            // 清理失败绝不能影响正常读消息，静默即可
+        }
     }
 
     // ---------- 公告 ----------

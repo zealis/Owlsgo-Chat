@@ -481,9 +481,11 @@ if ($action !== '') {
             Api::json(['ok' => $ok, 'msg' => $msg]);
 
         // ---------- 删除消息（内容右键「删除」，与「撤回」区分） ----------
+        // v1.1.14：返回第三项 scope，前端据此区分「已删除（所有人不可见）」与
+        // 「已隐藏（仅自己不可见）」。管理员/群主/作者本人 → delete；其他任何人 → hide。
         case 'msg_delete':
-            [$ok, $msg] = Chat::deleteMessage($actor, (int)$p('id'));
-            Api::json(['ok' => $ok, 'msg' => $msg]);
+            [$ok, $msg, $scope] = Chat::deleteMessage($actor, (int)$p('id'));
+            Api::json(['ok' => $ok, 'msg' => $msg, 'scope' => $scope]);
 
         case 'recall':
             [$ok, $msg] = Chat::recall($actor, (int)$p('id'));
@@ -528,6 +530,16 @@ if ($action !== '') {
             if ($type === 'role' && $minRole !== 'guest' && Auth::roleLevel($actor['role']) < Auth::roleLevel($minRole)) {
                 Api::json(['ok' => false, 'msg' => '最低角色不能高于你自己']);
             }
+            // v1.1.11 公开性开关：与 type 正交。缺省为 1（公开），
+            // 兼容旧前端/旧客户端；非法值一律归一为 1，不接受「不明确的真」。
+            $isPublic = ($p('is_public') === '0') ? 0 : 1;
+            // v1.1.14 全局总闸：是否允许普通用户创建**不公开**群聊（管理员始终可）。
+            // ⚠️ 必须校验在扣积分**之前**：放后面会出现「校验失败 → 积分已扣 → 用户白扣分」，
+            // 且前端拿到的是余额不足之外的报错，排查时极易误判成价格配置问题。
+            if ($isPublic === 0 && $actor['role'] !== 'admin'
+                && DB::setting('room_private_create_allow', '1') !== '1') {
+                Api::json(['ok' => false, 'msg' => '站点已关闭「创建不公开群聊」，请创建公开群聊']);
+            }
             // 积分：管理员免费；普通用户先原子扣款，再创建房间（失败退还）
             // cost 归一化：负数 / 小数 / 脏数据一律按 0 处理，避免 (int) 转换后
             // 跳过整段校验（"-5" 会被当成免费）——这是此前可被绕过的一个口子。
@@ -545,7 +557,6 @@ if ($action !== '') {
             }
             // 随机位段 ID（同用户 ID 规则）：插入失败（含并发撞主键）重新分配重试，
             // 最多 5 次；仍失败则退还已扣积分后抛出，不让用户白扣分
-            $isPublic = ($p('is_public') === '0') ? 0 : 1;
             $roomAttempts = 0;
             while (true) {
                 try {
@@ -903,6 +914,12 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
         'guest_chat' => DB::setting('guest_chat', '1'),
         'sound' => DB::setting('sound_default', '1'),
         'room_create_cost' => DB::setting('room_create_cost', '0'),   // 创建群聊扣分（前端提示用）
+        // v1.1.14：普通用户能否创建不公开群聊。**按当前身份算好后下发**，
+        // 前端据此把「公开群聊」开关置灰——不这样做就会留下「点得动、必报错」的死开关。
+        'room_private_create' => (
+            $actor['role'] === 'admin'
+            || DB::setting('room_private_create_allow', '1') === '1'
+        ) ? '1' : '0',
     ];
     pageHead('群聊');
     echo '<body class="ow-chat-body">';
