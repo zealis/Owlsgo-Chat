@@ -383,6 +383,13 @@ button { font-family: inherit; cursor: pointer; }
     color: var(--ow-text-title);
 }
 .ow-brand img { width: 28px; height: 28px; }
+/* v1.1.15：站点名右侧的竖三点。margin-left:auto 把它推到最右，
+   尺寸收窄到 28×28（比顶栏的 36 小一号），避免与 16px 站点名抢视觉重心。 */
+.ow-brand .ow-brand-more {
+    margin-left: auto;
+    width: 28px; height: 28px; line-height: 28px;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+}
 .ow-side-title {
     padding: 12px 16px 6px;
     font-size: 12px;
@@ -700,6 +707,19 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ow-ctx-menu a { display: block; padding: 6px 14px; font-size: 13px; color: var(--ow-text); white-space: nowrap; }
 .ow-ctx-menu a:hover { background: var(--ow-blue-light); color: var(--ow-primary-dark); }
+
+/* ---------- v1.1.15 品牌区（站点名右侧竖三点）菜单 ----------
+   与右键菜单共用 .ow-ctx-menu 外壳，因此下面三条只覆盖差异部分。 */
+/* 首行「头像 + 昵称」：padding 压到 8px14px，让 28px 头像不显拥挤 */
+.ow-ctx-menu a.ow-ctx-head { padding: 8px 14px; }
+.ow-ctx-head-in { display: flex; display: -webkit-flex; align-items: center; -webkit-align-items: center; gap: 8px; }
+.ow-ctx-head-in .ow-me-name { font-size: 13px; }
+/* 分隔线：与「聊天」列表标题的层次感一致，不引额外变量 */
+.ow-ctx-menu .ow-ctx-sep { height: 1px; margin: 4px 0; background: var(--ow-border); }
+/* 禁用态（游客）：**不能只靠降低透明度**——那看着仍像可点。
+   明确给 not-allowed 光标并去掉 hover 高亮，避免「点得动但没反应」的错觉。 */
+.ow-ctx-menu a.ow-ctx-dis { color: var(--ow-text-sub); cursor: not-allowed; }
+.ow-ctx-menu a.ow-ctx-dis:hover { background: transparent; color: var(--ow-text-sub); }
 
 /* 输入区 */
 /* 输入栏底色与群聊界面一致（v1.0.120），靠上边框区分。v1.1.4 改用统一变量 */

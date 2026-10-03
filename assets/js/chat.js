@@ -676,6 +676,15 @@
             };
             $('owTogglePanel').onclick = togglePanel;
             $('owOnlineClose').onclick = function () { setPanel(false); };
+            // v1.1.15：站点名右侧竖三点 → 品牌区菜单（头像+昵称 / 联系人 / 插件项）
+            // ⚠️ 必须 stopPropagation：document 级「点击菜单外关闭」会在冒泡到文档时
+            // 立刻把刚打开的菜单关掉（与 owMe 菜单同一个坑）。
+            var bm = $('owBrandMore');
+            if (bm) bm.onclick = function (e) {
+                e = e || w.event;
+                if (e.stopPropagation) e.stopPropagation(); else e.cancelBubble = true;
+                self.toggleBrandMenu();
+            };
             // 所有成员面板默认一律不展开（v1.0.101，v1.0.119 恢复：游客入口已移到顶栏）
             setPanel(false);
             $('owMask').onclick = function () { setSide(false); setPanel(false); };
@@ -783,8 +792,17 @@
             $('owCtxMenu').onclick = function (e) {
                 e = e || w.event;
                 var t = e.target || e.srcElement;
-                if (!t || (t.tagName || '').toUpperCase() !== 'A') return;
-                var it = self._ctxItems[parseInt(t.getAttribute('data-i'), 10)];
+                // ⚠️ 必须**向上找最近的 <a>**：品牌区菜单首行是「头像+昵称」，
+                // 点的往往是内部的 span/div，直接判 t.tagName==='A' 会点了没反应。
+                var a = null;
+                while (t && t !== this) {
+                    if ((t.tagName || '').toUpperCase() === 'A') { a = t; break; }
+                    t = t.parentNode;
+                }
+                if (!a) return;
+                var it = self._ctxItems[parseInt(a.getAttribute('data-i'), 10)];
+                // 禁用项（游客）：给出明确提示，不静默无反应，也不执行动作
+                if (it && it.dis) { self.hideCtxMenu(); toast(it.tip || '请先登录后再使用该功能'); return; }
                 self.hideCtxMenu();
                 if (it && it.run) it.run();
             };
@@ -2163,11 +2181,102 @@
             }
         },
 
+        /* ---------- 品牌区（站点名右侧竖三点）菜单，v1.1.15 ---------- */
+        _brandExt: [],        // 插件扩展点：OwChat.onBrandMenu 追加的菜单项
+        /**
+         * 插件扩展点：向「站点名右侧竖三点」菜单追加菜单项。
+         * 回调签名与 onMsgCtx 一致：fn(items, env)，
+         * items 元素支持 {t, run} 与 {t, dis:true, tip}（禁用，提示 tip）。
+         * @example
+         * OwChat.onBrandMenu(function (items) {
+         *     items.push({ t: '我的入口', run: function () { alert(1); } });
+         * });
+         */
+        onBrandMenu: function (fn) { if (typeof fn === 'function') this._brandExt.push(fn); },
+
+        /**
+         * 组装并弹出品牌区菜单。
+         * 菜单项：① 头像+昵称（登录用户可点 → 打开个人资料；游客禁用）
+         *        ② 联系人（**当前仅文字占位，功能未实现**，点击给出说明）
+         *        ③ 插件通过 onBrandMenu 追加的项
+         * 定位：贴着按钮下缘、左边缘对齐；空间不足时上翻，防出视口。
+         */
+        toggleBrandMenu: function () {
+            var self = this, me = this.cfg.me, menu = $('owCtxMenu');
+            var btn = $('owBrandMore');
+            if (!menu || !btn) return;
+            // 再次点击同一按钮 = 收起
+            if (menu.style.display !== 'none' && menu._from === 'brand') { this.hideCtxMenu(); return; }
+
+            var items = [];
+            // 游客态：整份菜单**全部禁用但可见**（需求明确要求）。
+            // 不隐藏按钮 —— 隐藏会让游客以为功能不存在，禁用 + 提示原因更清楚。
+            var isGuest = (this.cfg.actor || {}).kind === 'guest';
+            // ① 头像 + 昵称。html 走白名单构造（头像/昵称都经 esc 或 avatarHtml 转义）
+            if (me) {
+                items.push({
+                    t: me.nickname, head: true,
+                    html: '<span class="ow-ctx-head-in">' + avatarHtml(me.avatar, me.nickname, 'sm', me.role)
+                        + '<span class="ow-me-name">' + esc(me.nickname) + '</span></span>',
+                    run: function () { self.userCard(me.id, me.nickname); },
+                });
+            } else {
+                // 游客：同样显示这一行（保持菜单结构一致），但禁用并说明原因
+                items.push({
+                    t: this.cfg.actor.nickname || '游客', head: true, dis: true,
+                    tip: '请先登录后查看个人资料',
+                    html: '<span class="ow-ctx-head-in">' + avatarHtml('', this.cfg.actor.nickname || '?', 'sm', 'guest')
+                        + '<span class="ow-me-name">' + esc(this.cfg.actor.nickname || '游客') + '</span></span>',
+                });
+            }
+            // ② 联系人：本期只占位。**不接任何请求** —— 没有接口就是空壳，
+            // 点了给明确说明，而不是「点了没反应」或伪造一个空列表。
+            // 游客：按需求「可见但禁用」—— 与首行同口径，避免出现唯独它能点的例外。
+            if (isGuest) {
+                items.push({ t: '联系人', dis: true, tip: '请先登录后使用联系人' });
+            } else {
+                items.push({ t: '联系人', run: function () { toast('联系人功能暂未开放'); } });
+            }
+            // ③ 插件扩展
+            for (var i = 0; i < this._brandExt.length; i++) {
+                try { this._brandExt[i](items, { actor: this.cfg.actor, me: me }); } catch (e) {}
+            }
+
+            this._ctxItems = items;
+            menu._from = 'brand';
+            var html = '', j;
+            for (j = 0; j < items.length; j++) {
+                var cls = ' class="' + (items[j].head ? 'ow-ctx-head' : '') + (items[j].dis ? ' ow-ctx-dis' : '') + '"';
+                html += '<a href="javascript:;"' + (cls === ' class=""' ? '' : cls) + ' data-i="' + j + '">'
+                    + (items[j].html || esc(items[j].t)) + '</a>';
+                // 首行与后续项之间加一条分隔线（首行是身份，下方是功能）
+                if (j === 0) html += '<div class="ow-ctx-sep"></div>';
+            }
+            menu.innerHTML = html;
+            menu.style.display = 'block';
+            // 定位：按钮**右缘**与侧栏右缘对齐（不是左缘对齐）。
+            // ⚠️ 左缘对齐会让 136px 宽的菜单从按钮左侧起、右侧溢出到主聊天区
+            // （实测溢出 91px，像聊天区里凭空冒出一块浮层）。
+            // 右对齐既避免溢出，也符合「菜单从按钮下方展开」的视觉预期。
+            var r = btn.getBoundingClientRect();
+            var side = $('owSidebar');
+            var sideR = side ? side.getBoundingClientRect().right : r.right;
+            var vh = w.innerHeight || document.documentElement.clientHeight;
+            var mw = menu.offsetWidth || 136, mh = menu.offsetHeight || items.length * 32;
+            // 左缘：优先「侧栏右缘 - 菜单宽」；仍小于 4px 才退回按钮左缘
+            var left = Math.round(sideR - mw);
+            if (left < 4) left = Math.max(4, r.left);
+            menu.style.left = left + 'px';
+            // 上缘：按钮下方；放不下则上翻
+            var top = r.bottom + 4;
+            if (top + mh > vh - 4) top = Math.max(4, r.top - mh - 4);
+            menu.style.top = top + 'px';
+        },
+
         /**
          * 个人资料区操作菜单：复用消息右键菜单（owCtxMenu）的展示 / 委托点击 /
          * 点击外部与 Esc 关闭，向上弹出（资料区位于侧栏底部）。
-         */
-        toggleMeMenu: function () {
+         */        toggleMeMenu: function () {
             var self = this, me = this.cfg.me, menu = $('owCtxMenu');
             if (!me || !menu) return;
             // 再次点击资料区 = 收起

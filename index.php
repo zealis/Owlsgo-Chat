@@ -927,7 +927,12 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
 
     // 左侧栏
     echo '<aside class="ow-sidebar" id="owSidebar">'
-       . '<div class="ow-brand"><img src="assets/img/logo.svg" alt="logo"><span>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</span></div>'
+       // v1.1.15：站点名称右侧加竖三点，弹出「头像+昵称 / 联系人」下拉。
+       // 菜单内容由前端 OwChat.brandMenu() 组装（含插件钩子 OwChat.onBrandMenu），
+       // 服务端只负责把按钮放出来——**游客也显示**（内部按身份禁用各项）。
+       . '<div class="ow-brand"><img src="assets/img/logo.svg" alt="logo"><span>' . Sec::e(DB::setting('site_name', 'Owlsgo-Chat')) . '</span>'
+       . '<button class="ow-icon-btn ow-brand-more" id="owBrandMore" aria-label="更多" title="更多">'
+       . ow_icon('more-v', 16) . '</button></div>'
        // v1.1.0：列表已是「群聊 + 私聊」聚合，标题改为「聊天」；
        // 徽标数字含义同步改为「会话总数」，由 conversations 接口返回的 total 在前端回填
        . '<div class="ow-side-title">聊天 <span class="ow-badge-num" id="owRoomCount">' . count($rooms) . '</span></div>'
