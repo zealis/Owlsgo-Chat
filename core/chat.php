@@ -984,7 +984,7 @@ class Chat
             $wasPublic = (int)($room['is_public'] ?? 1) === 1;
             if (!$isPublic && $wasPublic && $actor['role'] !== 'admin'
                 && DB::setting('room_private_create_allow', '1') !== '1') {
-                return [false, '站点已关闭「不公开群聊」，无法将群聊设为不公开'];
+                return [false, '站点已关闭「创建仅邀请群聊」，无法将群聊设为仅邀请'];
             }
             $sets['is_public'] = $isPublic ? 1 : 0;
             if (!$isPublic && empty($room['invite_code'])) {

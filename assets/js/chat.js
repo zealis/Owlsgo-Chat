@@ -166,7 +166,9 @@
     function trimCls(s) { return String(s || '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); }
 
     /* 枚举值中文显示（提交时仍用英文原始值，仅界面本地化） */
-    var ROOM_TYPE_CN = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
+    // v1.1.16：'public' 的中文统一为「普通」（与后台/插件口径一致）。
+    // 'public' 是 rooms.type 的**存储值**（不是 is_public），指「无密码无角色门槛」。
+    var ROOM_TYPE_CN = { 'public': '普通', 'password': '密码房', 'role': '角色限定' };
     var ROLE_CN = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '超级管理员' };
     function cn(map, v) { return map[v] || v; }
     function opts(map, keys, current) {
@@ -1380,7 +1382,7 @@
         /** 创建群聊弹窗（用户也可创建，含后台创建房间的全部选项） */
         roomCreateModal: function () {
             var self = this;
-            var TYPE = { 'public': '公开', 'password': '密码房', 'role': '角色限定' };
+            var TYPE = { 'public': '普通', 'password': '密码房', 'role': '角色限定' };
             var ROLE = { 'guest': '游客', 'member': '普通用户', 'vip': 'VIP', 'admin': '超级管理员' };
             // v1.1.14：服务端已按当前身份算好（管理员恒为 1），前端不再自行判 role
             var canPrivate = (this.cfg.settings || {}).room_private_create !== '0';
@@ -1404,10 +1406,13 @@
                 // 类型管「进入方式」（密码/角色门槛），开关管「谁能发现这个群」。
                 // v1.1.14：后台总闸关闭时对当前身份禁用（canPrivate 由服务端按身份算好后下发），
                 // 避免留下「能点、提交必报错」的死开关。
+                // v1.1.16：删掉「开启：显示在群聊列表，游客可进入并发言。关闭：不进公开列表…」，
+                // 同样的理由（读着绕 + 「游客可发言」并非恒成立）。
+                // 「谁能看到这个群」由下方 owRCPubNote 随开关实时说明，不重复写死。
                 + '<div class="ow-form-item ow-form-item-switch">'
-                + switchHtml('owRCPublic', '公开群聊', true,
-                    canPrivate ? '开启：显示在群聊列表，游客可进入并发言。关闭：不进公开列表，只能由群成员邀请加入。'
-                               : '站点已关闭「创建不公开群聊」，新群只能公开（管理员不受此限制）。',
+                + switchHtml('owRCPublic', '普通群聊', true,
+                    canPrivate ? ''
+                               : '站点已关闭「创建仅邀请群聊」，新群只能普通（管理员不受此限制）。',
                     !canPrivate)
                 + '</div>'
                 + '<div class="ow-form-msg ow-rc-note" id="owRCPubNote"></div>'
@@ -1420,15 +1425,16 @@
             bindSwitches($('owModal'));
             var typeSel = $('owRCType'), tip = $('owRCTip'), msg = $('owRCMsg');
             var pubBox = $('owRCPublic'), pubNote = $('owRCPubNote');
-            // 公开性提示随开关变化：把「谁能进这个群」讲清楚，避免建完才发现进不去
+            // 公开性提示随开关变化：把「谁能进这个群」讲清楚，避免建完才发现进不去。
+            // v1.1.16：措辞与标签统一（普通 / 仅邀请），不再说「公开列表」。
             var refreshPub = function () {
                 if (!canPrivate) {
-                    pubNote.innerHTML = '<span style="color:#C41D1F">站点已关闭「创建不公开群聊」，新群只能公开。</span>';
+                    pubNote.innerHTML = '<span style="color:#C41D1F">站点已关闭「创建仅邀请群聊」，新群只能普通。</span>';
                     return;
                 }
                 pubNote.innerHTML = pubBox.checked
                     ? '<span style="color:var(--ow-text-sub)">群聊将出现在左侧列表，所有人（含游客）都能看到并进入。</span>'
-                    : '<span style="color:#C41D1F">群聊不会出现在列表里。创建后只有你能进，其他人需要你或群成员在群聊设置里按用户 ID 邀请。</span>';
+                    : '<span style="color:#C41D1F">仅邀请：群聊不会出现在列表里。创建后只有你能进，其他人需要你或群成员在群聊设置里按用户 ID 邀请。</span>';
             };
             pubBox.onchange = refreshPub;
             refreshPub();
@@ -1476,7 +1482,7 @@
                     self.closeModal();
                     toast('群聊「' + r.name + '」已创建'
                         + (r.cost > 0 ? '，扣除 ' + r.cost + ' 积分' : '')
-                        + (pubBox.checked ? '' : '（不公开，可在群聊设置里邀请成员）'));
+                        + (pubBox.checked ? '' : '（仅邀请，可在群聊设置里邀请成员）'));
                     self.refreshRooms(r.id, r.name);
                 });
             };
@@ -1934,7 +1940,9 @@
             var canEdit = !!r.can_edit;   // 服务端下发：群主 + 超管（口径唯一，前端不自行判身份）
             var meId = me.id || 0;
             var isOwner = !!meId && meId === (r.owner_id || 0);
-            var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '群聊');
+            // v1.1.16：与创建弹窗 / 后端口径统一 —— type='public' 显示「普通」
+            // （原先这里显示「群聊」，会与旁边的公开性标签「普通」凑成「群聊 + 普通」两个标签）
+            var typeName = r.type === 'password' ? '密码群' : (r.type === 'role' ? '角色限定' : '普通');
             var isPublic = r.is_public !== false;   // 缺省视为公开，兼容旧缓存数据
             var canInvite = !!r.can_invite;
             // v1.1.14：普通用户在总闸关闭时不能把公开群改成不公开（服务端会拒），
@@ -1957,19 +1965,23 @@
                 + '<div class="ow-card-id">'
                 + '<div class="ow-card-name">' + esc(r.name) + '</div>'
                 + '<div class="ow-card-badges"><span class="ow-tag ow-tag-green">' + typeName + '</span>'
-                + '<span class="ow-tag ow-tag-member">' + (isPublic ? '公开' : '不公开') + '</span></div>'
+                // v1.1.16：标签文案与后台/插件口径统一 —— 公开性叫「仅邀请」，
+                // 不再用「不公开」（那词描述的是「隐藏」这个动作，不是个群的状态）。
+                + '<span class="ow-tag ow-tag-member">' + (isPublic ? '普通' : '仅邀请') + '</span></div>'
                 + '</div></div>'
                 + (canEdit
                     ? '<div class="ow-card-meta">'
                       + '<div class="ow-form-item"><label>群名称</label><input class="ow-input" id="owRoomEditName" value="' + esc(r.name) + '" maxlength="30"></div>'
                       + '<div class="ow-form-item" style="margin-top:10px"><label>群简介</label><input class="ow-input" id="owRoomEditDesc" value="' + esc(r.description || '') + '" maxlength="200" placeholder="一句话介绍这个群（可选）"></div>'
                       // v1.1.11 公开性开关：与「类型」正交，只控制谁能发现这个群。
-                      // 关闭后群不出现在列表，只能靠成员邀请（按用户 ID）。
                       // v1.1.14：总闸关闭且本群当前是公开时禁用，避免「保存必报错」。
+                      // v1.1.16：删掉「开启：显示在群聊列表，游客可进入并发言。关闭：只有群主
+                      // 与成员能进，需邀请加入。」这段说明 —— 一行讲两种状态读着绕，
+                      // 且「游客可进入并发言」并非所有群都成立（受类型与角色门槛影响）。
                       + '<div class="ow-form-item ow-form-item-switch">'
-                      + switchHtml('owRoomPublic', '公开群聊', isPublic,
-                          canTogglePublic ? '开启：显示在群聊列表，游客可进入并发言。关闭：只有群主与成员能进，需邀请加入。'
-                                          : '站点已关闭「不公开群聊」，本群只能保持公开。',
+                      + switchHtml('owRoomPublic', '普通群聊', isPublic,
+                          canTogglePublic ? ''
+                                          : '站点已关闭「创建仅邀请群聊」，本群只能保持普通。',
                           !canTogglePublic)
                       + '</div>'
                       + '</div>'
@@ -1984,7 +1996,7 @@
                           ? '<div class="ow-card-meta-row"><span class="ow-card-meta-k">简介</span><span class="ow-card-meta-v">' + esc(r.description) + '</span></div>'
                           : '<div class="ow-card-meta-row"><span class="ow-card-meta-v ow-panel-empty">群主还没有写简介</span></div>')
                       + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">群主</span><span class="ow-card-meta-v">' + esc(fmtUid(r.owner_id)) + '</span></div>'
-                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">可见性</span><span class="ow-card-meta-v">' + (isPublic ? '公开（所有人可见，游客可发言）' : '不公开（仅群主与成员）') + '</span></div>'
+                      + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">可见性</span><span class="ow-card-meta-v">' + (isPublic ? '普通（所有人可见）' : '仅邀请（仅群主与成员）') + '</span></div>'
                       + '<div class="ow-card-meta-row"><span class="ow-card-meta-k">修改</span><span class="ow-card-meta-v">仅群主与超级管理员可修改</span></div>'
                       + '</div>'
                       + '<div class="ow-modal-actions ow-modal-actions-split">'
@@ -2080,7 +2092,7 @@
                     (function (el) {
                         el.onclick = function () {
                             var uid = el.getAttribute('data-id');
-                            self.confirm('确定把该成员移出本群？他将无法再进入不公开群。', function () {
+                            self.confirm('确定把该成员移出本群？他将无法再进入仅邀请群。', function () {
                                 OwApi.secure('room_remove_member', { room_id: roomId, user_id: uid }, function (res) {
                                     toast(res.msg);
                                     if (res.ok) { self.closeModal(); self.roomMembers(roomId); }
@@ -3130,11 +3142,12 @@ logs: function (main) {
                         + '</div>'
                         // v1.1.14 不公开群总闸：与「允许用户创建群聊」正交 ——
                         // 那个管能不能建群，这个管建出来的群能不能藏起来。
-                        + '<div class="ow-form-item"><label>允许用户创建不公开群聊</label>'
+                        // v1.1.16：标签与前台统一 —— 「仅邀请群聊」取代「不公开群聊」。
+                        + '<div class="ow-form-item"><label>允许用户创建仅邀请群聊</label>'
                         + sel('room_private_create_allow', { '1': '允许', '0': '仅管理员' }) + '</div>'
                         + '<p style="font-size:12px;color:#5C5C5C;margin-bottom:12px">创建群聊：填 0 表示免费创建；管理员创建始终免费。用户创建的群聊 owner 归属创建者，可在群聊管理中调整。<br>'
-                        + '不公开群聊只靠邀请链接传播，不出现在任何列表里。关闭后普通用户只能创建公开群聊，'
-                        + '已存在的不公开群仍可正常改名、改简介（仅禁止把公开群改成不公开）；管理员始终不受此限制。</p>'
+                        + '仅邀请群聊只靠邀请链接传播，不出现在任何列表里。关闭后普通用户只能创建普通群聊，'
+                        + '已存在的仅邀请群仍可正常改名、改简介（仅禁止把普通群改成仅邀请）；管理员始终不受此限制。</p>'
                         // v1.1.0 软删除：删除消息只清空正文并留行（供审计），到期才物理清除
                         + '<div class="ow-form-item"><label>已删除消息保留期(天)</label><input class="ow-input" id="owS_msg_deleted_retain_days" value="' + esc(d.msg_deleted_retain_days || '30') + '"></div>'
                         + '<p style="font-size:12px;color:#5C5C5C;margin:4px 0 12px">删除消息时正文立即清空（原文不可恢复），但记录行会保留到本期限满后物理清除，'

@@ -538,7 +538,7 @@ if ($action !== '') {
             // 且前端拿到的是余额不足之外的报错，排查时极易误判成价格配置问题。
             if ($isPublic === 0 && $actor['role'] !== 'admin'
                 && DB::setting('room_private_create_allow', '1') !== '1') {
-                Api::json(['ok' => false, 'msg' => '站点已关闭「创建不公开群聊」，请创建公开群聊']);
+                Api::json(['ok' => false, 'msg' => '站点已关闭「创建仅邀请群聊」，请创建普通群聊']);
             }
             // 积分：管理员免费；普通用户先原子扣款，再创建房间（失败退还）
             // cost 归一化：负数 / 小数 / 脏数据一律按 0 处理，避免 (int) 转换后
@@ -986,7 +986,9 @@ function renderChat(array $actor, ?array $user, ?array $guest): void
     //   · 私聊（room_id=0）时两者都不适用，renderRoomPanel 置空并给出提示。
     echo '<aside class="ow-online" id="owOnline">'
        . '<div class="ow-panel-sec ow-panel-room">'
-       . '<div class="ow-side-title">群聊信息'
+       // v1.1.16：删掉「群聊信息」标题文字。区块本身已有群头像/名称/入口行
+       // 自带语义，标题纯属冗余；只留一个供 JS 定位的空标题容器（收起按钮仍要挂这里）。
+       . '<div class="ow-side-title" id="owPanelTitle" aria-hidden="true">'
        . '<button class="ow-online-close" id="owOnlineClose" aria-label="收起侧栏" title="收起">×</button></div>'
        . '<div class="ow-panel-room-body" id="owRoomPanel"></div>'
        . '</div>'

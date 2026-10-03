@@ -853,6 +853,12 @@ button { font-family: inherit; cursor: pointer; }
 /* v1.1.10：群资料表单已搬回弹窗，本区块只剩两行入口，max-height 收紧到 24%
    （原来 62% 是为内联表单预留的，现在两行永远放得下） */
 .ow-panel-room { flex-shrink: 0; -webkit-flex-shrink: 0; max-height: 24%; overflow-y: auto; -webkit-overflow-scrolling: touch; border-bottom: 1px solid var(--ow-border); }
+/* v1.1.16：右侧栏「群聊信息」标题已删，这个容器只剩收起按钮（JS 定位用）。
+   ⚠️ **不要写 height:0 / overflow:hidden** —— 收起按钮 .ow-online-close 是
+   position:absolute 定位到这个容器上的，压掉高度会让按钮在窄屏彻底不可见
+   （Playwright 判 hidden，点不到）。这里只清掉标题留下的上下内边距。 */
+#owPanelTitle { padding: 0; position: relative; min-height: 20px; }
+#owPanelTitle .ow-online-close { position: absolute; top: 2px; right: 8px; float: none; }
 .ow-panel-members { flex: 1; -webkit-flex: 1; overflow: hidden; }
 .ow-panel-room-body { padding: 0 16px 14px; }
 .ow-panel-hint { padding: 4px 0 10px; font-size: 13px; color: var(--ow-text-sub); }
