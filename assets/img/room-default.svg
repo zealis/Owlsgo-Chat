@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="664" height="664" viewBox="180 180 664 664">
+  <defs>
+    <mask id="owl-knockout" maskUnits="userSpaceOnUse" x="180" y="180" width="664" height="664">
+      <rect x="180" y="180" width="664" height="664" fill="#fff"/>
+      <g fill="#000" stroke="#000" stroke-width="48" stroke-linejoin="round" stroke-linecap="round" transform="translate(3,7)">
+        <circle cx="420" cy="405" r="94"/>
+        <path d="M 268 700 L 572 700 A 28 28 0 0 0 600 672 L 600 652 A 180 116 0 0 0 240 652 L 240 672 A 28 28 0 0 0 268 700 Z"/>
+      </g>
+    </mask>
+  </defs>
+  <rect x="180" y="180" width="664" height="664" fill="#FFFFFF"/>
+  <g transform="translate(3,7)">
+    <g fill="#5AC5FF" mask="url(#owl-knockout)">
+      <circle cx="645" cy="434" r="70"/>
+      <path d="M 531 659 L 759 659 A 20 20 0 0 0 779 639 L 779 620 A 134 89 0 0 0 511 620 L 511 639 A 20 20 0 0 0 531 659 Z"/>
+    </g>
+    <g fill="#009CFF">
+      <circle cx="420" cy="405" r="94"/>
+      <path d="M 268 700 L 572 700 A 28 28 0 0 0 600 672 L 600 652 A 180 116 0 0 0 240 652 L 240 672 A 28 28 0 0 0 268 700 Z"/>
+    </g>
+  </g>
+</svg>

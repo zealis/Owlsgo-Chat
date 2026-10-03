@@ -326,7 +326,7 @@
     }
 
     /* 头像：有图用图；无图时游客固定米金底（#E5D5A0，深字保证可读），
-       用户按昵称长度从色盘取色 */
+       用户按昵称长度从色盘取色，群聊用固定的双人剪影图（见 roomAvatarHtml） */
     function avatarHtml(url, name, sm, role) {
         // 尺寸档：'xs'=20px、true/sm=28px（列表）、'md'=32px、'lg'=64px（资料卡/个人设置）、false=40px
         // v1.1.9：新增 'lg'。原来资料卡与个人设置都用 'md'(32px)，在 380px 弹窗里偏小。
@@ -342,6 +342,39 @@
         var colors = ['#0099FF', '#00558F', '#A05000', '#237804', '#5B21B6'];
         var ci = (name || '').length % colors.length;
         return '<span class="' + cls + '" style="background:' + colors[ci] + '">' + ch + '</span>';
+    }
+
+    /* ---------- 群聊默认头像（v1.1.19） ----------
+       需求：所有**未设置自定义头像**的群聊统一用这张双人剪影图，
+       不再用「群名首字 + 随机色块」——首字方案在侧栏里花花绿绿一片，
+       且不同群颜色由昵称长度决定（`ci = name.length % 5`），看着像乱码。
+
+       图源：设计文档/图标/svg/qunliao.svg，裁剪后落到 assets/img/room-default.svg。
+       裁剪依据（浏览器实测内容包围盒，非估算）：
+         原始画布 1024×1024，内容只有 538×388，**空白占横向 47% / 纵向 62%**
+         —— 直接用原图在 40px 头像里会小到几乎看不见。
+         内容中心 (512,512)，正方形 viewBox 取 `180 180 664 664`（边长 664）：
+         边长 = 内容半对角线 331.8 × 2，圆容器（border-radius:50%）内刚好不裁角。
+       图形已居中，容器与 <img> 的 CSS 尺寸锁由 .ow-avatar / .ow-cl-icon 负责。
+
+       带 ?v= 版本号：与 CSS/JS 的缓存参数同一套做法（index.php 用 OWLSGO_VERSION），
+       换图后不必手改文件名。 */
+    var ROOM_DEFAULT_AVATAR = 'assets/img/room-default.svg';
+
+    /**
+     * 群头像 HTML。有自定义头像用图，无则回落到默认剪影图。
+     * @param {string} url   rooms.avatar，空串表示未设置
+     * @param {string} sm    尺寸档，同 avatarHtml
+     * @param {string} extra 额外的 class（会话列表要用 .ow-cl-icon 而非 .ow-avatar）
+     */
+    function roomAvatarHtml(url, sm, extra) {
+        var sizeCls = sm === 'xs' ? ' ow-avatar-xs'
+            : (sm === 'lg' ? ' ow-avatar-lg'
+            : (sm === 'md' ? ' ow-avatar-md' : (sm ? ' ow-avatar-sm' : '')));
+        var cls = extra || ('ow-avatar' + sizeCls);
+        var ver = (OwChat.cfg && OwChat.cfg.version) || '';
+        var src = url || (ROOM_DEFAULT_AVATAR + (ver ? '?v=' + ver : ''));
+        return '<span class="' + cls + '"><img src="' + esc(src) + '" alt=""></span>';
     }
 
     /* ---------- 侧栏入口行（v1.1.10） ----------
@@ -460,9 +493,15 @@
             for (i = 0; i < list.length; i++) {
                 c = list[i];
                 var key = c.conv + ':' + (c.conv === 'dm' ? c.peer : c.id);
-                var icon = c.avatar
-                    ? '<span class="ow-cl-icon"><img src="' + esc(c.avatar) + '" alt=""></span>'
-                    : '<span class="ow-cl-icon">' + esc((c.name || '?').charAt(0)) + '</span>';
+                // v1.1.19：群聊无自定义头像 → 统一默认剪影图；私聊沿用「首字色块」。
+                // ⚠️ 必须按 c.conv 区分：私聊的 avatar 为空时用首字是**用户**语义，
+                // 群聊用首字会与「群名首字随机色」的历史行为混在一起，看着像乱码。
+                var isRoom = c.conv === 'room';
+                var icon = isRoom
+                    ? roomAvatarHtml(c.avatar, true, 'ow-cl-icon')
+                    : (c.avatar
+                        ? '<span class="ow-cl-icon"><img src="' + esc(c.avatar) + '" alt=""></span>'
+                        : '<span class="ow-cl-icon">' + esc((c.name || '?').charAt(0)) + '</span>');
                 html += '<li class="ow-cl-item' + (key === opts.activeKey ? ' active' : '') + '" data-key="' + esc(key) + '"'
                       + (c.conv === 'dm' ? ' data-dm="' + esc(c.peer) + '"' : ' data-room="' + (c.conv === 'room' ? c.id : 0) + '"')
                       + ' data-name="' + esc(c.name) + '" data-pw="' + (c.need_password ? 1 : 0) + '">'
@@ -1964,7 +2003,9 @@
                 + '<div class="ow-card-head">'
                 + '<span class="ow-set-avatar-btn" id="owRoomAvatarPreview"'
                 + (canEdit ? ' title="点击更换群头像" onclick="OwChat.roomAvatarPick()"' : '') + '>'
-                + avatarHtml(this._roomAvatar, r.name, 'lg', 'member') + '</span>'
+                // v1.1.19：群头像改走 roomAvatarHtml —— 无自定义头像时显示默认剪影图，
+                // 不再是「群名首字 + 随机色块」（那个 role 传 'member' 走的是色盘分支）。
+                + roomAvatarHtml(this._roomAvatar, 'lg') + '</span>'
                 + '<input type="file" id="owRoomAvatarFile" accept="image/*" style="display:none">'
                 + '<div class="ow-card-id">'
                 + '<div class="ow-card-name">' + esc(r.name) + '</div>'
@@ -2736,8 +2777,10 @@
                 var pv = $('owRoomAvatarPreview');
                 if (pv) {
                     // 侧栏用头像组件，后台表单用图片预览（裁剪浮层独立，两者都完好）
+                    // v1.1.19：群头像统一走 roomAvatarHtml（此处必有 url，行为与原来一致，
+                    // 只是组件口径统一，将来加默认图时不会漏掉这一处）。
                     if (pv.getAttribute('class').indexOf('ow-set-avatar-btn') >= 0)
-                        pv.innerHTML = avatarHtml(url, '', false, 'member');
+                        pv.innerHTML = roomAvatarHtml(url, false);
                     else
                         pv.innerHTML = '<img src="' + esc(url) + '" alt="">';
                 }
