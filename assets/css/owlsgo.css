@@ -344,21 +344,14 @@ button { font-family: inherit; cursor: pointer; }
     border-radius: 6px;
     cursor: pointer;
     color: var(--ow-text);
-    /* 左侧选中指示条的占位（无选中态时透明，不占视觉空间）。
-       v1.1.6：底色浅蓝 (#E6F7FF) 单独用来区分「选中」与「hover」偏弱，
-       加一条 3px 主色竖条做第二重线索 —— 且不触碰文字颜色与字重。 */
-    box-shadow: inset 3px 0 0 0 transparent;
 }
 .ow-cl-item:hover { background: var(--ow-blue-light); }
-/* v1.1.6：选中态只保留「底色 + 左侧竖条」两条视觉线索，去掉 color 与 font-weight。
+/* v1.1.6：选中态去掉 color 与 font-weight —— 文字选中前后完全一致。
    原先 `.active` 设在父容器上，color 被 .ow-cl-title 继承（变深蓝 #00558F）、
    font-weight:600 还被没有显式字重的子元素连坐 —— .ow-cl-sub 摘要与 .ow-cl-time
    时间都跟着变粗。实测：active 标题 rgb(0,85,143)/600 vs 未选中 rgb(51,51,51)/400。
-   文字颜色/字重保持不变，选中前后完全一致。 */
-.ow-cl-item.active {
-    background: var(--ow-blue-light);
-    box-shadow: inset 3px 0 0 0 var(--ow-primary-strong);
-}
+   v1.1.7：曾加过左侧 3px 主色竖条做选中指示，现按要求移除，只保留底色。 */
+.ow-cl-item.active { background: var(--ow-blue-light); }
 .ow-cl-icon {
     width: 32px; height: 32px;
     border-radius: 50%;
