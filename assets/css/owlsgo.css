@@ -35,7 +35,13 @@
        导致「改悬浮色」会连带动到 3 处非悬浮：.ow-room-item/.ow-cl-item/.ow-admin-menu
        的 .active 选中态，以及 .ow-msg.mine 自己消息气泡底色。
        用户只要求改悬浮，故这里另开一个变量，两类语义彻底分开。 */
-    --ow-hover-bg: #E4E4E4;
+    /* v1.1.23：#E4E4E4 → #E8E8E8（悬浮稍亮一点，与选中态 #E4E4E4 拉开层次）。 */
+    --ow-hover-bg: #E8E8E8;
+    /* v1.1.23：选中态独立成变量。原先 3 处 .active 都复用 --ow-blue-light(#E6F7FF 浅蓝)，
+       本轮按要求改成中性灰 #E4E4E4。新增独立变量而不是改 --ow-blue-light，
+       因为后者还被 .ow-msg.mine（自己消息气泡底色）共用 —— 那是**非选中**场景，
+       跟「当前选中行」语义无关，不能一起改。 */
+    --ow-active-bg: #E4E4E4;
     --ow-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     --ow-mono: Consolas, Monaco, "Courier New", monospace;
     /* v1.1.17：顶栏高度带。实测 = padding 10+10 + 图标钮 36 + 下边框 1 = 57px。
@@ -416,7 +422,7 @@ button { font-family: inherit; cursor: pointer; }
     color: var(--ow-text);
 }
 .ow-room-item:hover { background: var(--ow-hover-bg); }
-.ow-room-item.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
+.ow-room-item.active { background: var(--ow-active-bg); color: var(--ow-primary-dark); font-weight: 600; }
 .ow-room-icon {
     width: 32px; height: 32px;
     border-radius: 50%;
@@ -476,7 +482,7 @@ button { font-family: inherit; cursor: pointer; }
    font-weight:600 还被没有显式字重的子元素连坐 —— .ow-cl-sub 摘要与 .ow-cl-time
    时间都跟着变粗。实测：active 标题 rgb(0,85,143)/600 vs 未选中 rgb(51,51,51)/400。
    v1.1.7：曾加过左侧 3px 主色竖条做选中指示，现按要求移除，只保留底色。 */
-.ow-cl-item.active { background: var(--ow-blue-light); }
+.ow-cl-item.active { background: var(--ow-active-bg); }
 /* 容器尺寸历史：32 → 40 → 48 → **40**（v1.1.22，用户反馈「又太大了」）。
    文字区宽度（实测）：列表 239px、行 223px，扣 padding 20 + gap 10 + 头像 40
    → 文字区 **118.9px**。足够显示「群名 + 标签」与摘要；长摘要按 ellipsis 省略。 */
@@ -1099,7 +1105,7 @@ button { font-family: inherit; cursor: pointer; }
     font-size: 14px;
 }
 .ow-admin-menu li:hover { background: var(--ow-bg-sub); }
-.ow-admin-menu li.active { background: var(--ow-blue-light); color: var(--ow-primary-dark); font-weight: 600; }
+.ow-admin-menu li.active { background: var(--ow-active-bg); color: var(--ow-primary-dark); font-weight: 600; }
 .ow-admin-ico { font-size: 15px; }
 /* 菜单分类：标题占满剩余宽度，使折叠箭头贴右侧 */
 .ow-admin-label { flex: 1; -webkit-flex: 1; min-width: 0; }
