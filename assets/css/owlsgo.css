@@ -195,6 +195,15 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---------- 头像 ---------- */
 .ow-avatar {
+    /* v1.1.8：补 display:inline-block —— **行内元素不接受 width/height**。
+       原先只写了 width:40px;height:40px 却没设 display，规则被浏览器忽略：
+       实测资料卡里的头像算出来是 332×21（撑满整个弹窗），
+       里面的 <img> 拿 width:100% 找不到有效参照，退化成原图尺寸被放大成巨图。
+       设置页看起来正常，只是因为它被 .ow-set-avatar-btn（inline-block）包住了 ——
+       也就是说尺寸档是否生效取决于外层恰好是什么 display，非常脆弱。
+       补上 inline-block 后，所有尺寸档（xs/sm/md/默认）才真正按预期生效。 */
+    display: inline-block; -webkit-inline-block: middle;
+    vertical-align: middle;
     width: 40px; height: 40px;
     border-radius: 50%;
     background: var(--ow-border);
@@ -206,7 +215,7 @@ button { font-family: inherit; cursor: pointer; }
     flex-shrink: 0;
     -webkit-flex-shrink: 0;
 }
-.ow-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.ow-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
 .ow-avatar-sm { width: 28px; height: 28px; line-height: 28px; font-size: 12px; }
 .ow-avatar-md { width: 32px; height: 32px; line-height: 32px; font-size: 14px; }
 .ow-avatar-xs { width: 20px; height: 20px; line-height: 20px; font-size: 10px; }
@@ -487,6 +496,18 @@ button { font-family: inherit; cursor: pointer; }
     margin-bottom: 14px;
 }
 .ow-msg-body { min-width: 0; max-width: 78%; }
+/* 消息头像可点（v1.1.8）：与昵称同行为——左击打开该用户资料卡。
+   align-self:flex-start 必须写 —— .ow-msg 是 flex 容器，子项默认 align-self:stretch，
+   而本元素是 inline-block，被拉伸后高度会跟着消息行一起变高（实测 278px），
+   点击热区会变成一条竖长条而不是圆形头像。 */
+.ow-msg-av {
+    cursor: pointer; border-radius: 50%;
+    display: inline-block; -webkit-inline-block: middle;
+    line-height: 0;
+    align-self: flex-start; -webkit-align-self: flex-start;
+    flex-shrink: 0; -webkit-flex-shrink: 0;
+}
+.ow-msg-av:hover { opacity: .85; }
 .ow-msg-meta { font-size: 12px; color: var(--ow-text-sub); margin-bottom: 2px; }
 .ow-msg-meta .ow-msg-nick { color: var(--ow-text); font-weight: 600; cursor: pointer; margin-right: 4px; }
 .ow-msg-meta .ow-msg-nick:hover { color: var(--ow-primary-dark); }

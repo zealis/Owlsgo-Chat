@@ -1319,7 +1319,12 @@
 
             return {
                 cls: cls,
-                html: (isSys ? '' : avatarHtml(m.avatar, m.nickname, false, m.role))
+                // v1.1.8：消息头像与昵称一样可点 —— 左击头像即打开该用户资料卡
+                //（原先只有昵称带 onclick，头像是纯展示，两处行为不一致）。
+                // 游客（uid 为 0）传 0，userCard 内部会走 pmHint 提示不可查看。
+                // 加 .ow-msg-av 可点类供 CSS 给 cursor:pointer 与 hover 反馈。
+                html: (isSys ? '' : '<span class="ow-msg-av" onclick="OwChat.userCard(' + (m.uid || 0) + ',\'' + esc(m.nickname) + '\')">'
+                    + avatarHtml(m.avatar, m.nickname, false, m.role) + '</span>')
                     + '<div class="ow-msg-body">' + meta + content + '</div>'
             };
         },
@@ -1692,28 +1697,65 @@
         },
 
         /* ---------- 用户资料卡 ---------- */
+        /**
+         * 打开用户资料卡。
+         *
+         * v1.1.8 起与个人设置**共用同一套头像轮子**（cropForTarget → avatarCropSave
+         * → avatarUpload），并统一头像尺寸：
+         *  - 尺寸：资料卡与设置页都用 'md'（32px）。原先资料卡是 40px、设置页是
+         *    20px，比例 2:1 看着不像同一个东西。
+         *  - 自己的卡片：头像可点直接换头像（标题提示 + hover 反馈），
+         *    与设置页的点击上传走同一条链；上传后两处预览同时回填。
+         *  - 「关闭」按钮对所有身份都显示（原先只有能私信的人才有，
+         *    看自己资料卡时只剩右上角 ✕）。
+         */
         userCard: function (uid, nick) {
             if (!uid) { this.pmHint(nick); return; }
             var self = this;
             OwApi.post('user_card', { id: uid }, function (r) {
                 if (!r.ok) { toast(r.msg); return; }
                 var u = r.data;
+                var meId = (self.cfg.me && self.cfg.me.id) || 0;
+                var isMe = self.cfg.actor.kind === 'user' && meId > 0 && meId === u.id;
                 // v1.1.0：资料卡加「发私信」入口，与头像右键菜单走同一条私聊路径
-                var canPm = self.cfg.actor.kind === 'user' && self.cfg.actor.id !== u.id;
+                var canPm = self.cfg.actor.kind === 'user' && !isMe && self.cfg.actor.id !== u.id;
+                // 自己的卡片：头像包一层可点容器，点它=打开隐藏的 file input
+                var avHtml = avatarHtml(u.avatar, u.nickname, 'md', u.role);
+                if (isMe) {
+                    avHtml = '<span class="ow-set-avatar-btn" id="owCardAvatarPreview" title="点击更换头像"'
+                        + ' onclick="OwChat.pickCardAvatar()">' + avHtml + '</span>'
+                        + '<input type="file" id="owCardAvatarFile" accept="image/*" style="display:none">';
+                }
                 OwChat.openModal(
                     '<h3>用户资料</h3>'
-                    + '<div style="text-align:center;margin-bottom:14px">' + avatarHtml(u.avatar, u.nickname, false, u.role)
+                    + '<div style="text-align:center;margin-bottom:14px">' + avHtml
                     + '<div class="ow-me-name" style="margin-top:8px">' + esc(u.nickname) + '</div>'
                     + '<div style="margin-top:4px">' + roleTag(u.role, u.title, u.id) + '</div></div>'
                     // 用户名已取消：资料卡以用户 ID 作为唯一标识，昵称可重名只作展示
                     + '<p style="font-size:13px;color:#5C5C5C">用户 ID：' + esc(fmtUid(u.id)) + '<br>'
                     + '积分：' + esc(u.points || 0) + '<br>'
                     + '注册：' + esc(u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-') + '</p>'
-                    + (canPm ? '<div class="ow-modal-actions">'
-                        + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">关闭</button>'
-                        + '<button class="ow-btn ow-btn-primary" onclick="OwChat.closeModal();OwChat.openDm(\'user:' + (u.id) + '\',' + JSON.stringify(u.nickname).replace(/"/g, '&quot;') + ')">发私信</button></div>' : '')
+                    + '<div class="ow-modal-actions">'
+                    + '<button class="ow-btn ow-btn-ghost" onclick="OwChat.closeModal()">关闭</button>'
+                    + (canPm ? '<button class="ow-btn ow-btn-primary" onclick="OwChat.closeModal();OwChat.openDm(\'user:' + (u.id) + '\',' + JSON.stringify(u.nickname).replace(/"/g, '&quot;') + ')">发私信</button>' : '')
+                    + '</div>'
                 );
+                // 绑定隐藏 file input：选图后走**与设置页完全相同**的裁剪轮子
+                if (isMe) {
+                    var f = $('owCardAvatarFile');
+                    f.onchange = function () {
+                        if (!this.files || !this.files[0]) return;
+                        self.avatarCrop(this.files[0]);   // 轮子入口与 openSettings 一致
+                        this.value = '';
+                    };
+                }
             });
+        },
+
+        /** 资料卡里点击自己的头像 → 打开隐藏的 file input（与设置页 pickAvatar 同义） */
+        pickCardAvatar: function () {
+            var f = $('owCardAvatarFile');
+            if (f) f.click();
         },
 
         pmHint: function (nick) { toast('游客用户无法查看资料卡'); },
@@ -1923,7 +1965,7 @@
                 // 头像置顶：点击当前头像即触发上传（不另设上传按钮）
                 + '<div class="ow-set-avatar">'
                 + '<span id="owSetAvatarPreview" class="ow-set-avatar-btn" title="点击更换头像" onclick="document.getElementById(\'owSetAvatarFile\').click()">'
-                + avatarHtml(me.avatar, me.nickname, 'xs', me.role) + '</span>'
+                + avatarHtml(me.avatar, me.nickname, 'md', me.role) + '</span>'
                 + '<input type="file" id="owSetAvatarFile" accept="image/*" style="display:none">'
                 + '</div>'
                 + '<div class="ow-form-item"><label>昵称</label><input class="ow-input" id="owSetNick" value="' + esc(me.nickname) + '">'
@@ -2245,14 +2287,27 @@
             x.send(fd);
         },
 
-        /** 上传个人头像（file 可为 File 或 canvas 导出的 Blob），成功后刷新预览 */
+        /**
+         * 上传个人头像（file 可为 File 或 canvas 导出的 Blob），成功后刷新全部预览。
+         *
+         * v1.1.8：改为**回填所有可能出现头像预览的容器** —— 个人设置弹窗
+         * （#owSetAvatarPreview）与自己的资料卡（#owCardAvatarPreview）。
+         * 原先只回填前者，于是从资料卡上传后，卡片里的头像还是旧图
+         * （必须关掉再打开才刷新），而资料卡恰恰是最新的入口。
+         * 裁剪 → 导出 → 上传 → 回填这一整条链路由 cropForTarget / avatarCropSave
+         * 与本方法共享，群聊头像另走 roomAvatarUpload 但复用 uploadAvatarBlob。
+         */
         avatarUpload: function (file, filename) {
             var self = this;
             try {
                 self.uploadAvatarBlob(file, filename, function (url) {
                     self.cfg.me.avatar = url;
+                    // 设置弹窗预览
                     var pv = $('owSetAvatarPreview');
-                    if (pv) pv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'xs', self.cfg.me.role);
+                    if (pv) pv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'md', self.cfg.me.role);
+                    // 自己的资料卡预览
+                    var cv = $('owCardAvatarPreview');
+                    if (cv) cv.innerHTML = avatarHtml(url, self.cfg.me.nickname, 'md', self.cfg.me.role);
                     self.renderMe();
                     toast('头像已上传，点击保存生效');
                 });
