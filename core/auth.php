@@ -26,7 +26,7 @@ class Auth
     /** 当前游客（数组）或 null */
     public static function guest(): ?array
     {
-        $token = $_COOKIE['owl_guest'] ?? '';
+        $token = $_COOKIE['hal_guest'] ?? '';
         if (!$token || !preg_match('/^[a-f0-9]{32}$/', $token)) return null;
         $g = DB::one('SELECT * FROM guests WHERE token=?', [$token]);
         if ($g && (string)($g['client_key'] ?? '') === '') $g = self::ensureKey($g, 'guests');
@@ -45,7 +45,7 @@ class Auth
             'client_key' => Sec::clientKey(), 'ip' => Sec::ip(),
             'created_at' => time(),
         ]);
-        setcookie('owl_guest', $token, [
+        setcookie('hal_guest', $token, [
             'expires' => time() + 86400 * 365, 'path' => '/',
             'httponly' => true, 'secure' => Sec::isHttps(), 'samesite' => 'Lax',
         ]);

@@ -1,9 +1,9 @@
-# Owlsgo-Chat (OChat)
+# Halou-Chat
 
 纯原生 PHP 8.1+ 即时通讯聊天室 —— **零框架、零 Composer 依赖**，单入口 `index.php`，开箱即用。
 支持 SQLite / MySQL / PostgreSQL，适合 Web 在线聊天、低成本部署与 AI 二次开发。
 
-当前版本：**v1.0.118**（版本以根目录 `VERSION` 文件为准，完整更新记录见 `设计文档/CHANGELOG.md`）。
+当前版本：**v1.2.0**（版本以根目录 `VERSION` 文件为准，完整更新记录见 `设计文档/CHANGELOG.md`）。
 
 ## 快速开始
 
@@ -21,12 +21,12 @@
 
 鸟瞰图：`.birdview/architecture.html`
 
-核心分层：`index.php`（页面 + AJAX API + 安装向导统一分发）→ `core/`（配置 / DB / 安全 / 认证 / 聊天 / 后台 / 上传 / 插件）→ `plugins/`（可选功能）→ `assets/`（ow- 前缀自研扁平 UI）。
+核心分层：`index.php`（页面 + AJAX API + 安装向导统一分发）→ `core/`（配置 / DB / 安全 / 认证 / 聊天 / 后台 / 上传 / 插件）→ `plugins/`（可选功能）→ `assets/`（ha- 前缀自研扁平 UI）。
 
 ## 功能
 
 - **聊天核心**：多聊天室（公开 / 密码私密 / 限定角色）、AJAX 长轮询实时推送 + 心跳 + 断线降级短轮询、普通 / @提及 / 私信 / 系统消息、3 分钟撤回（管理员与房主不限）、滚动加载历史、图片消息（粘贴 / 上传 / 大图预览）、Emoji 面板 + 自定义贴纸收藏、新消息提示音、聊天室背景自定义
-- **群公告**（`announcements` 插件）：群主/超管发布，类型支持「聊天室上方公告条」与「进群弹窗通知」，可置顶；公告条只展示置顶或最新一条，点击进群公告页（群名 + 卡片列表 + 展开收起 + 置顶标）；`room_id=0` 为全站公告
+- **群公告**（`announcements` 插件）：群主/超管发布，类型支持「聊天室上方公告条」与「进群弹窗通知」，可置顶；公告条只展示置顶或最新一条，点击进群公告页（群名 + 卡片列表 + 展开收起 + 置顶标）
 - **用户系统**：邮箱注册（无用户名，账号一律以数字用户 ID 标识，显示名为昵称）、邮箱验证码、密码找回、游客模式（随机昵称、每日限额、可配置浏览 / 发言）、资料卡（昵称 / 头像）、角色标签与自定义称号、可选两步验证插件
 - **在线状态**：实时在线列表（默认收起，点顶栏成员图标展开）、心跳同步
 - **管理后台**（通用列表轮子：服务端分页 + 数字页码/跳转 + 多选框批量）：群聊审核与回收站（可撤销）、用户管理、禁言管理、群聊公告、敏感词过滤、安全日志、站点设置、插件管理
@@ -50,7 +50,7 @@
 ```
 index.php              统一入口（页面 + AJAX API + 安装向导）
 core/                  配置 / 数据层 / 安全 / 邮件 / 认证 / 聊天 / 后台 / 上传 / 插件
-assets/                ow 前缀自研扁平 UI（CSS + ES5 JS + SVG Logo）
+assets/                ha 前缀自研扁平 UI（CSS + ES5 JS + SVG Logo）
 plugins/               插件目录（plugin.json + main.php）
 data/                  SQLite 数据库、安装锁、缓存（运行时生成）
 uploads/               头像 / 贴纸 / 图片 / 文件附件（运行时生成）
@@ -59,16 +59,9 @@ nginx-server.conf      随程序走的 Nginx 站点配置（含安全屏蔽规�
 设计文档/              开发文档、约定与 CHANGELOG.md
 ```
 
-## UI 规范（二次开发必读）
-
-- **禁止浏览器原生弹窗**（`confirm` / `alert` / `prompt`）：确认用 `OwChat.confirm(text, onOk)`（前台）/ `OwAdmin.confirm`（后台），提示用 `toast(msg)`，输入用 `OwChat.openModal(html)` 自建表单弹窗。
-  发版前自检：`grep -rn "w\.confirm(\|window\.confirm(\|[^.a-zA-Z]alert(\|w\.prompt(" assets/js/chat.js plugins/*/*.js`
-- 组件 0 间隙贴合 + 共享边框；配色走 CSS 变量（`--ow-primary-strong` 等），不使用渐变/毛玻璃（公告条渐变配色为特例）。
-- 前端为纯 ES5 + XHR，无构建步骤，改完即生效；兼容落后内核浏览器。
-
 ## 二次开发
 
-- 所有 API 走 `index.php?action=<动作>`，POST 携带 `ts` + `sign=md5(key|ts|action)`；敏感操作另需先取 `?action=ticket` 的票据并随请求提交（`OwApi.secure` 已封装）。
+- 所有 API 走 `index.php?action=<动作>`，POST 携带 `ts` + `sign=md5(key|ts|action)`；敏感操作另需先取 `?action=ticket` 的票据并随请求提交（`HaApi.secure` 已封装）。
 - 插件示例：在 `plugins/<name>/` 放 `plugin.json` 与 `main.php`，用 `Plugin::on('message.after_send', fn)` 挂载钩子、`Plugin::route('plugin_<name>_xxx', fn, ['sensitive' => true])` 注册路由、`Plugin::adminPage('<slug>', '标题', fn)` 挂后台页、`Plugin::asset('js'|'css', '<name>/file')` 注入资源。
-- 前端扩展钩子：`OwChat.onRoomSwitch(fn)`（切群/进群）、`OwChat.onRoomEdit(fn)`（群聊设置弹窗，往 `#owREExtras` 加入口）。
+- 前端扩展钩子：`HaChat.onRoomSwitch(fn)`（切群/进群）、`HaChat.onRoomEdit(fn)`（群聊设置弹窗，往 `#haREExtras` 加入口）。
 - 发版流程：只改根目录 `VERSION` → 提交 → 合并主仓 → 运行 `.tools/sync-www.sh`；随后执行 `python .tools/gen_changelog.py` 更新 `设计文档/CHANGELOG.md`。

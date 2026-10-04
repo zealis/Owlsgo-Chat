@@ -12,7 +12,7 @@
     'use strict';
 
     /* ---------- 极简 QR 码生成器（字节模式，自动版本，EC=M） ---------- */
-    var owQR = (function () {
+    var haQR = (function () {
         var EXP = new Array(512), LOG = new Array(256);
         (function () {
             var x = 1;
@@ -242,7 +242,7 @@
         return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
     }
     function showToast(msg) {
-        var t = $('owToast');
+        var t = $('haToast');
         if (!t) { toast(msg); return; }   // v1.0.112：兜底改核心 toast，禁原生 alert
         t.textContent = msg; t.style.display = 'block';
         setTimeout(function () { t.style.display = 'none'; }, 2200);
@@ -252,11 +252,11 @@
      * 登录页：覆盖密码登录表单为普通提交 + 2FA 挑战表单
      * ========================================================================== */
     function initLoginPage() {
-        var form = document.querySelector('.ow-auth-form[data-mode="login"]');
+        var form = document.querySelector('.ha-auth-form[data-mode="login"]');
         if (!form) return;
 
         // 接管登录提交：核心 AJAX login 成功后，先查询是否待两步验证
-        // （普通表单提交到 plugin_twofa_* 会被核心签名门禁拒绝，故全程走 OwApi）
+        // （普通表单提交到 plugin_twofa_* 会被核心签名门禁拒绝，故全程走 HaApi）
         var origSubmit = form.onsubmit;
         form.onsubmit = function (e) {
             if (e.preventDefault) e.preventDefault(); else e.returnValue = false;
@@ -265,20 +265,20 @@
                 if (!els[i].name || els[i].name === 'ts' || els[i].name === 'sign') continue;
                 data[els[i].name] = els[i].value;
             }
-            var msg = form.querySelector('.ow-form-msg');
+            var msg = form.querySelector('.ha-form-msg');
             if (msg) msg.innerHTML = '登录中…';
-            OwApi.post('login', data, function (r) {
+            HaApi.post('login', data, function (r) {
                 if (!r.ok) {
                     if (msg) msg.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>';
-                    if (r.captcha && $('owCaptchaRow')) {
-                        $('owCaptchaRow').style.display = 'block';
-                        var img = $('owCaptchaImg');
+                    if (r.captcha && $('haCaptchaRow')) {
+                        $('haCaptchaRow').style.display = 'block';
+                        var img = $('haCaptchaImg');
                         if (img) img.src = '?action=captcha&_=' + new Date().getTime();
                     }
                     return;
                 }
                 // 密码已通过：查询是否需要两步验证（钩子已撤销会话并置 pending）
-                OwApi.post('plugin_twofa_check', {}, function (c) {
+                HaApi.post('plugin_twofa_check', {}, function (c) {
                     if (c.ok && c.need) { showTwoFAChallenge(form); return; }
                     location.href = '?page=chat';
                 });
@@ -288,40 +288,40 @@
 
     /** 两步验证挑战表单（AJAX 提交，原位替换登录表单） */
     function showTwoFAChallenge(form) {
-        var card = document.querySelector('.ow-auth-card');
+        var card = document.querySelector('.ha-auth-card');
         if (!card) return;
-        var html = '<div class="ow-auth-logo"><img src="assets/img/logo.svg" alt="Owlsgo-Chat"><h1>两步验证</h1>'
+        var html = '<div class="ha-auth-logo"><img src="assets/img/logo.svg" alt="Halou-Chat"><h1>两步验证</h1>'
             + '<p>请输入验证器 App 中的 6 位动态验证码，或使用一次性恢复码。</p></div>'
-            + '<form class="ow-auth-form">'
-            + '<div class="ow-form-item"><label>动态验证码 / 恢复码</label>'
-            + '<input class="ow-input" id="owTwoFACode" required autocomplete="one-time-code" placeholder="6 位数字或恢复码" style="letter-spacing:4px;font-size:18px;text-align:center">'
+            + '<form class="ha-auth-form">'
+            + '<div class="ha-form-item"><label>动态验证码 / 恢复码</label>'
+            + '<input class="ha-input" id="haTwoFACode" required autocomplete="one-time-code" placeholder="6 位数字或恢复码" style="letter-spacing:4px;font-size:18px;text-align:center">'
             + '</div>'
-            + '<div class="ow-form-msg"></div>'
-            + '<button class="ow-btn ow-btn-primary ow-btn-block" type="submit">验 证</button>'
+            + '<div class="ha-form-msg"></div>'
+            + '<button class="ha-btn ha-btn-primary ha-btn-block" type="submit">验 证</button>'
             + '</form>'
-            + '<div class="ow-auth-links">'
-            + '<a href="javascript:;" id="owTwoFACancel">返回重新登录</a>'
+            + '<div class="ha-auth-links">'
+            + '<a href="javascript:;" id="haTwoFACancel">返回重新登录</a>'
             + '</div>';
         card.innerHTML = html;
-        var m = card.querySelector('.ow-form-msg');
+        var m = card.querySelector('.ha-form-msg');
         var f = card.querySelector('form');
         f.onsubmit = function (e) {
             if (e.preventDefault) e.preventDefault(); else e.returnValue = false;
-            var code = ($('owTwoFACode') || {}).value || '';
+            var code = ($('haTwoFACode') || {}).value || '';
             if (!code) { m.innerHTML = '<span style="color:#C41D1F">请填写验证码</span>'; return; }
             m.innerHTML = '验证中…';
-            OwApi.post('plugin_twofa_verify', { code: code }, function (r) {
+            HaApi.post('plugin_twofa_verify', { code: code }, function (r) {
                 if (r.ok) { location.href = '?page=chat'; return; }
                 m.innerHTML = '<span style="color:#C41D1F">' + esc(r.msg) + '</span>';
-                var input = $('owTwoFACode');
+                var input = $('haTwoFACode');
                 if (input) { input.value = ''; input.focus(); }
             });
         };
-        var cancel = $('owTwoFACancel');
+        var cancel = $('haTwoFACancel');
         if (cancel) cancel.onclick = function () {
-            OwApi.post('plugin_twofa_cancel', {}, function () { location.href = '?page=login'; });
+            HaApi.post('plugin_twofa_cancel', {}, function () { location.href = '?page=login'; });
         };
-        var input = $('owTwoFACode');
+        var input = $('haTwoFACode');
         if (input) input.focus();
     }
 
@@ -329,51 +329,51 @@
      * 聊天页个人设置：注入两步验证管理
      * ========================================================================== */
     function initChatPage() {
-        if (!w.OwChat || !OwChat.cfg) return;
-        if (w.__owTwoFALoaded) return;
-        w.__owTwoFALoaded = true;
+        if (!w.HaChat || !HaChat.cfg) return;
+        if (w.__haTwoFALoaded) return;
+        w.__haTwoFALoaded = true;
 
-        var origOpenSettings = OwChat.openSettings;
-        OwChat.openSettings = function () {
+        var origOpenSettings = HaChat.openSettings;
+        HaChat.openSettings = function () {
             origOpenSettings.call(this);
             loadTwoFASection();
         };
     }
 
     function loadTwoFASection() {
-        OwApi.post('plugin_twofa_status', {}, function (r) {
+        HaApi.post('plugin_twofa_status', {}, function (r) {
             if (!r.ok) return;
             injectTwoFASection(r.enabled, r.recovery_remain);
         });
     }
 
     function injectTwoFASection(enabled, remain) {
-        var modal = $('owModal');
+        var modal = $('haModal');
         if (!modal) return;
-        var saveBtn = modal.querySelector('.ow-btn-primary');
+        var saveBtn = modal.querySelector('.ha-btn-primary');
         if (!saveBtn) return;
 
         // 避免重复注入
-        if (modal.querySelector('#owTwoFASection')) return;
+        if (modal.querySelector('#haTwoFASection')) return;
 
         var section = document.createElement('div');
-        section.id = 'owTwoFASection';
-        section.style.cssText = 'border-top:1px solid var(--ow-border,#e8e8e8);margin-top:16px;padding-top:16px';
+        section.id = 'haTwoFASection';
+        section.style.cssText = 'border-top:1px solid var(--ha-border,#e8e8e8);margin-top:16px;padding-top:16px';
 
         var title = '<h3 style="margin:0 0 10px;font-size:15px">两步验证（2FA）</h3>';
         var body;
 
         if (enabled) {
-            body = '<div class="ow-form-item"><label>状态</label>'
-                + '<div class="ow-input" style="background:var(--ow-bg-sub,#f5f5f5);color:#237804">已启用 · 剩余恢复码 ' + remain + ' 个</div></div>'
-                + '<div class="ow-form-row" style="gap:8px">'
-                + '<button class="ow-btn ow-btn-ghost" onclick="OwTwoFA.resetCodes()" style="flex:1">重置恢复码</button>'
-                + '<button class="ow-btn ow-btn-danger" onclick="OwTwoFA.disable()" style="flex:1">关闭两步验证</button>'
+            body = '<div class="ha-form-item"><label>状态</label>'
+                + '<div class="ha-input" style="background:var(--ha-bg-sub,#f5f5f5);color:#237804">已启用 · 剩余恢复码 ' + remain + ' 个</div></div>'
+                + '<div class="ha-form-row" style="gap:8px">'
+                + '<button class="ha-btn ha-btn-ghost" onclick="HaTwoFA.resetCodes()" style="flex:1">重置恢复码</button>'
+                + '<button class="ha-btn ha-btn-danger" onclick="HaTwoFA.disable()" style="flex:1">关闭两步验证</button>'
                 + '</div>';
         } else {
-            body = '<div class="ow-form-item"><label>状态</label>'
-                + '<div class="ow-input" style="background:var(--ow-bg-sub,#f5f5f5);color:#999">未启用</div></div>'
-                + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwTwoFA.setup()">启用两步验证</button>';
+            body = '<div class="ha-form-item"><label>状态</label>'
+                + '<div class="ha-input" style="background:var(--ha-bg-sub,#f5f5f5);color:#999">未启用</div></div>'
+                + '<button class="ha-btn ha-btn-primary ha-btn-block" onclick="HaTwoFA.setup()">启用两步验证</button>';
         }
 
         section.innerHTML = title + body;
@@ -381,38 +381,38 @@
     }
 
     /* ---------- 2FA 管理操作 ---------- */
-    var OwTwoFA = {
+    var HaTwoFA = {
         setup: function () {
-            OwApi.post('plugin_twofa_setup', {}, function (r) {
+            HaApi.post('plugin_twofa_setup', {}, function (r) {
                 if (!r.ok) { showToast(r.msg); return; }
                 showSetupModal(r.secret, r.otpauth);
             });
         },
 
         /**
-         * 自研密码确认弹窗（复用核心 OwChat.openModal）。
+         * 自研密码确认弹窗（复用核心 HaChat.openModal）。
          * 确认后执行 onSubmit(密码)；取消则回到个人设置弹窗。
          */
         passwordModal: function (title, desc, onSubmit) {
-            OwChat.openModal(
+            HaChat.openModal(
                 '<h3>' + esc(title) + '</h3>'
-                + '<p class="ow-modal-desc">' + esc(desc) + '</p>'
-                + '<input type="password" class="ow-input" id="owTwoFAPw" placeholder="当前账号密码" autocomplete="current-password">'
-                + '<div class="ow-modal-actions">'
-                + '<button class="ow-btn ow-btn-ghost" id="owTwoFAPwNo">取消</button>'
-                + '<button class="ow-btn ow-btn-primary" id="owTwoFAPwOk">确认</button></div>'
+                + '<p class="ha-modal-desc">' + esc(desc) + '</p>'
+                + '<input type="password" class="ha-input" id="haTwoFAPw" placeholder="当前账号密码" autocomplete="current-password">'
+                + '<div class="ha-modal-actions">'
+                + '<button class="ha-btn ha-btn-ghost" id="haTwoFAPwNo">取消</button>'
+                + '<button class="ha-btn ha-btn-primary" id="haTwoFAPwOk">确认</button></div>'
             );
             var submit = function () {
-                var pw = $('owTwoFAPw').value;
+                var pw = $('haTwoFAPw').value;
                 if (!pw) { showToast('请输入账号密码'); return; }
                 onSubmit(pw);
             };
-            $('owTwoFAPwOk').onclick = submit;
-            $('owTwoFAPwNo').onclick = function () {
-                OwChat.closeModal();
-                if (OwChat.cfg && OwChat.cfg.me) OwChat.openSettings();
+            $('haTwoFAPwOk').onclick = submit;
+            $('haTwoFAPwNo').onclick = function () {
+                HaChat.closeModal();
+                if (HaChat.cfg && HaChat.cfg.me) HaChat.openSettings();
             };
-            var input = $('owTwoFAPw');
+            var input = $('haTwoFAPw');
             input.onkeydown = function (e) {
                 e = e || window.event;
                 if ((e.key === 'Enter' || e.keyCode === 13) && typeof submit === 'function') submit();
@@ -422,23 +422,23 @@
 
         /** 启用确认：读取启用弹窗内的验证码输入框（自研 UI，不用浏览器原生 prompt） */
         enable: function (secret) {
-            var input = $('owTwoFAEnableCode');
+            var input = $('haTwoFAEnableCode');
             var code = input ? input.value.replace(/\s+/g, '') : '';
             if (!code) { showToast('请输入验证码'); return; }
-            OwApi.post('plugin_twofa_enable', { code: code }, function (r) {
+            HaApi.post('plugin_twofa_enable', { code: code }, function (r) {
                 if (!r.ok) { showToast(r.msg); return; }
                 showRecoveryCodes(r.recovery_codes, '两步验证已启用！请妥善保存以下恢复码，每个仅可使用一次：');
                 // 刷新个人设置弹窗
-                if (OwChat && OwChat.cfg && OwChat.cfg.me) OwChat.openSettings();
+                if (HaChat && HaChat.cfg && HaChat.cfg.me) HaChat.openSettings();
             });
         },
 
         disable: function () {
             var self = this;
             self.passwordModal('关闭两步验证', '关闭后登录将不再需要动态验证码。为确认是本人操作，请输入当前账号密码：', function (pw) {
-                OwApi.secure('plugin_twofa_disable', { password: pw }, function (r) {
+                HaApi.secure('plugin_twofa_disable', { password: pw }, function (r) {
                     showToast(r.msg);
-                    if (r.ok && OwChat && OwChat.cfg && OwChat.cfg.me) OwChat.openSettings();
+                    if (r.ok && HaChat && HaChat.cfg && HaChat.cfg.me) HaChat.openSettings();
                 });
             });
         },
@@ -446,20 +446,20 @@
         resetCodes: function () {
             var self = this;
             self.passwordModal('重置恢复码', '重置后旧恢复码将全部作废。为确认是本人操作，请输入当前账号密码：', function (pw) {
-                OwApi.secure('plugin_twofa_reset_codes', { password: pw }, function (r) {
+                HaApi.secure('plugin_twofa_reset_codes', { password: pw }, function (r) {
                     if (!r.ok) { showToast(r.msg); return; }
                     showRecoveryCodes(r.recovery_codes, '恢复码已重置！旧恢复码全部作废，请妥善保存新恢复码：');
                 });
             });
         }
     };
-    w.OwTwoFA = OwTwoFA;
+    w.HaTwoFA = HaTwoFA;
 
     function showSetupModal(secret, otpauth) {
-        var qrSvg = owQR.svg(otpauth, 6);
-        var modal = $('owModal');
+        var qrSvg = haQR.svg(otpauth, 6);
+        var modal = $('haModal');
         if (!modal) return;
-        var section = $('owTwoFASection');
+        var section = $('haTwoFASection');
         var html = '<h3 style="margin:0 0 10px;font-size:15px">启用两步验证</h3>'
             + '<ol style="margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.8">'
             + '<li>打开验证器 App（如 Google Authenticator、Microsoft Authenticator）</li>'
@@ -468,54 +468,54 @@
             + '</ol>'
             + '<div style="text-align:center;margin:12px 0">'
             + qrSvg
-            + '<div style="margin-top:10px;display:inline-block;background:var(--ow-bg-sub,#f5f5f5);border:1px solid var(--ow-border,#e8e8e8);border-radius:4px;padding:6px 12px">'
+            + '<div style="margin-top:10px;display:inline-block;background:var(--ha-bg-sub,#f5f5f5);border:1px solid var(--ha-border,#e8e8e8);border-radius:4px;padding:6px 12px">'
             + '<span style="font-family:monospace;font-size:13px;letter-spacing:2px;color:#333;user-select:all">' + esc(secret) + '</span>'
             + '</div>'
             + '</div>'
-            + '<div class="ow-form-row" style="align-items:stretch">'
-            + '<input class="ow-input" id="owTwoFAEnableCode" placeholder="输入 6 位验证码" style="flex:1;letter-spacing:3px;text-align:center;height:38px;box-sizing:border-box;margin:0">'
-            + '<button class="ow-btn ow-btn-primary" onclick="OwTwoFA.enable()" style="height:38px;box-sizing:border-box;line-height:1;margin:0">确认启用</button>'
+            + '<div class="ha-form-row" style="align-items:stretch">'
+            + '<input class="ha-input" id="haTwoFAEnableCode" placeholder="输入 6 位验证码" style="flex:1;letter-spacing:3px;text-align:center;height:38px;box-sizing:border-box;margin:0">'
+            + '<button class="ha-btn ha-btn-primary" onclick="HaTwoFA.enable()" style="height:38px;box-sizing:border-box;line-height:1;margin:0">确认启用</button>'
             + '</div>';
         if (section) section.innerHTML = html;
         // 绑定确认按钮（因为 prompt 方式改用输入框）
-        var btn = section.querySelector('button[onclick="OwTwoFA.enable()"]');
+        var btn = section.querySelector('button[onclick="HaTwoFA.enable()"]');
         if (btn) {
             btn.onclick = function () {
-                var code = $('owTwoFAEnableCode').value;
+                var code = $('haTwoFAEnableCode').value;
                 if (!code) { showToast('请输入验证码'); return; }
-                OwApi.post('plugin_twofa_enable', { code: code }, function (r) {
+                HaApi.post('plugin_twofa_enable', { code: code }, function (r) {
                     if (!r.ok) { showToast(r.msg); return; }
                     showRecoveryCodes(r.recovery_codes, '两步验证已启用！请妥善保存以下恢复码，每个仅可使用一次：');
-                    if (OwChat && OwChat.cfg && OwChat.cfg.me) OwChat.openSettings();
+                    if (HaChat && HaChat.cfg && HaChat.cfg.me) HaChat.openSettings();
                 });
             };
         }
     }
 
     function showRecoveryCodes(codes, title) {
-        var modal = $('owModal');
-        if (!modal) { w.OwChat.openModal('<h3>' + esc(title) + '</h3><p class="ow-modal-desc">' + codes.map(function (c) { return esc(c); }).join('<br>') + '</p>'); return; }   // v1.0.112：兜底改自研弹窗
+        var modal = $('haModal');
+        if (!modal) { w.HaChat.openModal('<h3>' + esc(title) + '</h3><p class="ha-modal-desc">' + codes.map(function (c) { return esc(c); }).join('<br>') + '</p>'); return; }   // v1.0.112：兜底改自研弹窗
         var list = codes.map(function (c) {
-            return '<span style="display:inline-block;font-family:monospace;background:var(--ow-bg-sub,#f5f5f5);padding:4px 10px;margin:4px;border-radius:3px;min-width:90px;text-align:center">' + esc(c) + '</span>';
+            return '<span style="display:inline-block;font-family:monospace;background:var(--ha-bg-sub,#f5f5f5);padding:4px 10px;margin:4px;border-radius:3px;min-width:90px;text-align:center">' + esc(c) + '</span>';
         }).join('');
         var html = '<h3 style="margin:0 0 10px;font-size:15px;color:#C41D1F">⚠ 恢复码</h3>'
             + '<p style="font-size:13px;margin:0 0 12px">' + esc(title) + '</p>'
             + '<div style="text-align:center;margin-bottom:12px">' + list + '</div>'
             + '<p style="font-size:12px;color:#999;margin:0 0 12px">这些恢复码仅显示一次，请立即复制并保存在安全的地方。丢失后无法找回。</p>'
-            + '<button class="ow-btn ow-btn-primary ow-btn-block" onclick="OwChat.closeModal()">我已保存</button>';
-        modal.innerHTML = '<button class="ow-modal-close" onclick="OwChat.closeModal()">✕</button>' + html;
-        $('owModalMask').style.display = 'flex';
+            + '<button class="ha-btn ha-btn-primary ha-btn-block" onclick="HaChat.closeModal()">我已保存</button>';
+        modal.innerHTML = '<button class="ha-modal-close" onclick="HaChat.closeModal()">✕</button>' + html;
+        $('haModalMask').style.display = 'flex';
     }
 
     /* ---------- 启动 ---------- */
     function boot() {
         // 登录页
-        if (document.querySelector('.ow-auth-form[data-mode="login"]')) {
+        if (document.querySelector('.ha-auth-form[data-mode="login"]')) {
             initLoginPage();
             return;
         }
         // 聊天页
-        if (w.OwChat && OwChat.cfg) initChatPage();
+        if (w.HaChat && HaChat.cfg) initChatPage();
     }
 
     if (document.readyState === 'loading') {

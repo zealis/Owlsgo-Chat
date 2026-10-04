@@ -9,7 +9,7 @@
  *   - 词库存 sensitive_words 表（沿用剥离前的表与数据，无需迁移）。
  *   - 后台「敏感词过滤」管理页：添加 / 启用停用 / 删除。
  */
-if (!defined('OWLSGO_VERSION')) exit;   // 禁止直接 HTTP 访问本文件
+if (!defined('HALOU_VERSION')) exit;   // 禁止直接 HTTP 访问本文件
 
 /** 词库（static 缓存，进程内只查一次表） */
 $GLOBALS['sw_words'] = function (): array {
@@ -31,18 +31,18 @@ Plugin::on('text.filter', function (&$text, $scene, $actor) {
 /* ---------- 后台管理页（v1.0.110 对齐通用列表样式：多选框 + 批量删除 + 分页轮子） ---------- */
 Plugin::adminPage('sensitive-words', '敏感词过滤', function () {
     $rows = DB::all('SELECT * FROM sensitive_words ORDER BY id DESC LIMIT 200');
-    $h = '<h2>敏感词过滤</h2><p class="ow-admin-desc">添加敏感词及替换词，支持启用 / 停用。对所有输入文字生效（发言、昵称、群名称、群简介、群公告等）。</p>'
-        . '<div class="ow-card"><div class="ow-form-row">'
-        . '<div class="ow-form-item"><label>敏感词</label><input class="ow-input" id="owWWord"></div>'
-        . '<div class="ow-form-item"><label>替换为</label><input class="ow-input" id="owWRep" value="***"></div>'
-        . '<button class="ow-btn ow-btn-primary" onclick="OwSW.wordAdd()">添加</button></div></div>'
-        . '<div class="ow-card">'
-        . '<div class="ow-admin-batch">'
-        . '<button class="ow-btn ow-btn-danger" id="owSWBatchDel" onclick="OwSW.batchDelete()" disabled>批量删除</button>'
-        . '<span id="owSWStat" style="color:var(--ow-text-sub);font-size:12px"></span>'
+    $h = '<h2>敏感词过滤</h2><p class="ha-admin-desc">添加敏感词及替换词，支持启用 / 停用。对所有输入文字生效（发言、昵称、群名称、群简介、群公告等）。</p>'
+        . '<div class="ha-card"><div class="ha-form-row">'
+        . '<div class="ha-form-item"><label>敏感词</label><input class="ha-input" id="haWWord"></div>'
+        . '<div class="ha-form-item"><label>替换为</label><input class="ha-input" id="haWRep" value="***"></div>'
+        . '<button class="ha-btn ha-btn-primary" onclick="HaSW.wordAdd()">添加</button></div></div>'
+        . '<div class="ha-card">'
+        . '<div class="ha-admin-batch">'
+        . '<button class="ha-btn ha-btn-danger" id="haSWBatchDel" onclick="HaSW.batchDelete()" disabled>批量删除</button>'
+        . '<span id="haSWStat" style="color:var(--ha-text-sub);font-size:12px"></span>'
         . '</div>'
-        . '<div class="ow-table-wrap"><table class="ow-table" id="owSWTable"></table></div>'
-        . '<div id="owSWPager"></div></div>';
+        . '<div class="ha-table-wrap"><table class="ha-table" id="haSWTable"></table></div>'
+        . '<div id="haSWPager"></div></div>';
     return $h;
 });
 

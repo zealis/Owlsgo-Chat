@@ -40,7 +40,7 @@ class Mailer
             'ip' => Sec::ip(), 'used' => 0,
             'expires_at' => time() + 600, 'created_at' => time(),
         ]);
-        $site = DB::setting('site_name', 'Owlsgo-Chat');
+        $site = DB::setting('site_name', 'Halou-Chat');
         $ok = self::send(
             $email,
             "[$site] 验证码 $code",

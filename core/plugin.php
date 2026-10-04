@@ -199,7 +199,7 @@ class Plugin
         // 以及后台页里 adminPages() 先加载、随后 fire() 又按清单加载。
         // 用 require 时第二次会重新执行整个文件 → 插件顶层定义的函数重复声明
         // → Fatal error: Cannot redeclare xxx() → 整个请求 500（空响应，无 JSON）。
-        // 踩过：login-logs 的 owLLEnsureTable() 就是这么把 ?action=cron 打成 500 的。
+        // 踩过：login-logs 的 haLLEnsureTable() 就是这么把 ?action=cron 打成 500 的。
         // require_once 第二次直接返回 true 且不执行，语义正是我们要的。
         try { require_once $main; } catch (Throwable $e) { Sec::log('plugin_error', $name, ['error' => $e->getMessage()]); }
         self::$loading = '';
@@ -237,7 +237,7 @@ class Plugin
     /**
      * 注册 API 路由。$opts['sensitive'] = true 标记为敏感操作：
      * 服务端会要求一次性操作票据（见 PLUGIN.md「敏感操作安全校验」），
-     * 前端须用 OwApi.secure() 调用（自动先取票再提交）。
+     * 前端须用 HaApi.secure() 调用（自动先取票再提交）。
      */
     public static function route(string $action, callable $fn, array $opts = []): void
     {

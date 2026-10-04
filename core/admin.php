@@ -392,8 +392,8 @@ class Admin
                     if (isset($installed[$slug])) {
                         Api::json(['ok' => true, 'html' =>
                             '<h2>' . Sec::e($installed[$slug]['name']) . '</h2>'
-                            . '<div class="ow-card"><p style="margin:0 0 12px">该插件当前处于<b>停用</b>状态，设置页面不可用。启用后即可使用其功能与设置页。</p>'
-                            . '<button class="ow-btn ow-btn-primary" onclick="OwAdmin.pluginToggle(\'' . Sec::e($slug) . '\',1)">启用插件</button></div>']);
+                            . '<div class="ha-card"><p style="margin:0 0 12px">该插件当前处于<b>停用</b>状态，设置页面不可用。启用后即可使用其功能与设置页。</p>'
+                            . '<button class="ha-btn ha-btn-primary" onclick="HaAdmin.pluginToggle(\'' . Sec::e($slug) . '\',1)">启用插件</button></div>']);
                     }
                     Api::json(['ok' => false, 'msg' => '页面不存在'], 404);
                 }

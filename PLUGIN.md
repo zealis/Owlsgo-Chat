@@ -1,8 +1,8 @@
 # 插件开发规范（PLUGIN.md）
 
-本文件是 AI 新建、修改和审查 Owlsgo-Chat 插件时的规范。开始工作前先读完本文件，再检查核心文件（`core/plugin.php`）和功能最接近的现有插件（`plugins/user-manager/`）；实现时以当前代码为准，不臆造接口。
+本文件是 AI 新建、修改和审查 Halou-Chat 插件时的规范。开始工作前先读完本文件，再检查核心文件（`core/plugin.php`）和功能最接近的现有插件（`plugins/user-manager/`）；实现时以当前代码为准，不臆造接口。
 
-> 本文档只描述 Owlsgo-Chat 自身的插件机制，全部内容以 `core/plugin.php` 与现有插件的实际代码为准。
+> 本文档只描述 Halou-Chat 自身的插件机制，全部内容以 `core/plugin.php` 与现有插件的实际代码为准。
 
 ## 执行顺序
 
@@ -16,9 +16,9 @@
 
 - 兼容 PHP 8.1+ 与 SQLite / MySQL / PostgreSQL 三驱动，不引入框架、Composer 包或构建依赖；跨库差异处理遵循项目既有写法（见 `core/db.php` 的 `DB::driver()` 分支与 `DB::rebuildTableWithout()` 等助手）。
 - 插件目录与插件 ID 相同，只允许小写字母、数字、下划线或短横线。
-- 插件自有的 PHP 函数、JS 全局对象、CSS 类、文件名必须以插件 ID 相关的名称开头，避免与核心或其他插件冲突。例：插件 `user-manager` 的 JS 全局对象是 `OwUM`（自有命名），API 路由前缀 `plugin_user_manager_`。
+- 插件自有的 PHP 函数、JS 全局对象、CSS 类、文件名必须以插件 ID 相关的名称开头，避免与核心或其他插件冲突。例：插件 `user-manager` 的 JS 全局对象是 `HaUM`（自有命名），API 路由前缀 `plugin_user_manager_`。
 - 插件路由的 action 名**必须**以 `plugin_<插件ID下划线形式>_` 开头（如 `plugin_user_manager_search`）。`index.php` 对未知 action 会调用 `Plugin::dispatch()` 兜底，带前缀可避免与核心 action 或其他插件冲突。
-- `main.php` 开头必须包含 `if (!defined('OWLSGO_VERSION')) exit;`，禁止直接 HTTP 访问。
+- `main.php` 开头必须包含 `if (!defined('HALOU_VERSION')) exit;`，禁止直接 HTTP 访问。
 - `plugin.json` 声明 `name`（显示名）、`version`、`description`（面向用户的简短说明）、`author`。
 - 插件数据库操作一律使用核心 `DB` 类（`DB::run/one/all/val/insert/upsert`），禁止自行 new PDO；表名建议带 `plugin_<id>_` 前缀。建表/改表如需跨驱动兼容，参考 `core/db.php` 既有实现，不要照搬单驱动 SQL。
 - **加列只能用公开的 `DB::ensureColumn($table, $col, $type, $default)`**（`$default` 传**带引号的字面量**，如 `"'1'"` / `"''"`）。`DB::addColumn()` / `hasColumn()` / `dropColumn()` 都是 **private**，插件调用会抛 `Error`。⚠️ 这个坑后果特别隐蔽：`Plugin::loadPlugin()` 用 `try/catch` 吞掉插件异常只记一条 `plugin_error`，于是**该行之后的所有 `Plugin::on()` 都没注册，但缓存清单里仍写着旧的 hooks 列表** —— 表现为「插件静默半个身位」，极像「钩子没触发」，排查方向会被带偏。
@@ -37,7 +37,7 @@ plugins/<插件ID>/
 
 ```php
 <?php
-if (!defined('OWLSGO_VERSION')) exit;
+if (!defined('HALOU_VERSION')) exit;
 
 Plugin::on('page.footer', function () {
     echo '<p style="text-align:center">Hello</p>';
@@ -79,9 +79,9 @@ Plugin::route('plugin_xxx_delete', function (array $ctx) { ... });
 Plugin::sensitive('plugin_xxx_delete');
 ```
 
-前端调用必须用 `OwApi.secure(action, data, cb)`（签名同 post；自动先请求
+前端调用必须用 `HaApi.secure(action, data, cb)`（签名同 post；自动先请求
 `?action=ticket` 取一次性票据再随请求提交，服务端校验后立即作废票据）。
-不要用 `OwApi.post` 调敏感接口——会被 403 拒绝并记入安全日志（`sensitive_reject`）。
+不要用 `HaApi.post` 调敏感接口——会被 403 拒绝并记入安全日志（`sensitive_reject`）。
 
 约定要点：
 - 票据 5 分钟有效、一次性；签名验证依旧先行，票据是额外一道防线；
@@ -98,7 +98,7 @@ Plugin::adminPage('user-manager', '用户管理', function () {
 ```
 
 - 注册后，后台侧栏「插件管理」分类下出现该插件的子页（一插件一页）；分类标题本身仍指向插件列表页。
-- 页面 HTML 通过 `admin_plugin_page` 接口取回并注入 `#owAdminMain`；回调 **echo 输出**与 **return 字符串**两种写法都支持。
+- 页面 HTML 通过 `admin_plugin_page` 接口取回并注入 `#haAdminMain`；回调 **echo 输出**与 **return 字符串**两种写法都支持。
 - 页面 HTML 是经 `innerHTML` 注入的，**内联 `<script>` 不会执行**——交互函数必须写在插件自己的 JS 文件里（见下）。
 
 ## API 路由（Plugin::route）
@@ -128,9 +128,9 @@ Plugin::asset('js', 'user-manager/admin.js');   // 相对插件目录；css 同�
 ```
 
 - 合并输出地址：`?action=assets&type=js` / `?action=assets&type=css`（免签名 GET，纯静态无写操作）。
-- **后台页面**已自动引入 `<script src="?action=assets&type=js">`：需要后台交互的插件在此声明 JS，交互对象挂为全局（如 `window.OwUM`），页面 HTML 里用 `onclick="OwUM.search()"` 调用。
-- 脚本可复用主程序暴露的全局：`OwApi`（AJAX + 自动签名）、`esc`、`toast`、`fmtUid`、`opts`、`ROLE_CN`、`OwAdmin`、`OwChat`。不要重复实现这些能力。
-- 前端可从 `OwChat.cfg.site_url` 取当前站点根地址（后端 `ow_site_url()`，未配置时为自动识别值）。
+- **后台页面**已自动引入 `<script src="?action=assets&type=js">`：需要后台交互的插件在此声明 JS，交互对象挂为全局（如 `window.HaUM`），页面 HTML 里用 `onclick="HaUM.search()"` 调用。
+- 脚本可复用主程序暴露的全局：`HaApi`（AJAX + 自动签名）、`esc`、`toast`、`fmtUid`、`opts`、`ROLE_CN`、`HaAdmin`、`HaChat`。不要重复实现这些能力。
+- 前端可从 `HaChat.cfg.site_url` 取当前站点根地址（后端 `ow_site_url()`，未配置时为自动识别值）。
 
 ### 站点地址（ow_site_url / ow_abs_url）
 
@@ -180,16 +180,16 @@ ow_abs_url('uploads/a.jpg');    // 拼接绝对地址；第二个参数默认 tr
 | `nickname.before_save` | 昵称校验（注册 / 改资料 / 安装向导，`Auth::checkNickname` 内） | `[&$nick, &$err, $ctx]` —— 可改写 `$nick`，或把 `$err` 设为非空字符串拦截（即用户看到的文案）；`$ctx['scene']` 为 `register` / `profile` / `install`。参考实现：`plugins/nickname-guard/` |
 | `ban.check` | 消息发送禁言判定（`Chat::isBanned` 内，核心 bans 表无命中时触发，每条消息一次） | `[&$reason, $actor, $roomId]` —— `$reason` 初始为 **null**，设为非空字符串即拦截（即用户看到的文案）；回调签名必须用 **`?string &$reason`**（nullable，初始 null 传非 nullable 引用会 TypeError 且被 fire 静默吞掉）。参考：`plugins/ban-manager/` 的运行时说明 |
 | `ban.after_add` / `ban.after_del` | 禁言添加 / 解除后（ban-manager 插件触发） | `[$banId, $type, $target, $actor]` / `[$banId, $actor]` —— 通知型，供审计、通知类插件扩展 |
-| `ip.location` | 管理员查 IP 归属地（`?action=ip_loc`，核心 v1.0.55 起不再内置实现） | `[&$loc, $ip, $actor]` —— `$loc` 初始 `''`，设为非空字符串即作为归属地结果返回；无人响应时接口返回「未安装归属地查询插件」。菜单入口由插件用 `OwChat.onMsgCtx` 自行注册 |
+| `ip.location` | 管理员查 IP 归属地（`?action=ip_loc`，核心 v1.0.55 起不再内置实现） | `[&$loc, $ip, $actor]` —— `$loc` 初始 `''`，设为非空字符串即作为归属地结果返回；无人响应时接口返回「未安装归属地查询插件」。菜单入口由插件用 `HaChat.onMsgCtx` 自行注册 |
 | `message.quote` | 消息带引用发送时（`Chat::send` 内，引用已规范化为 JSON 后） | `[&$quote, $content, $actor, $roomId]` —— `$quote` 为 `{nick,text}` 的 JSON 字符串；可改写为脱敏后的内容，或置空禁用该条引用 |
 | `msg.before_delete` | 删除消息前（`Chat::deleteMessage` 内，权限判定后、执行前） | `[&$allow, &$reason, $msg, $actor]` —— `$allow` 置 false 即拦截，`$reason` 为展示给用户的理由；可用于保护特定消息/房间 |
 | `msg.after_delete` | 删除消息后 | `[$msgId, $msg, $actor]` —— 通知型，供审计、同步、通知类插件扩展 |
 
 前端扩展点（右键菜单按落点分流，v1.0.69 起）：
 
-- `OwChat.onMsgCtx(fn)`：右键**头像**（针对「人」）时追加菜单项——@、私信、收藏、撤回、禁言等都在这里。
-- `OwChat.onMsgContent(fn)`：右键**消息内容**（针对「消息」）时追加菜单项——内置复制 / 引用 / 删除，插件可追加翻译、举报等。
-- `OwChat.onQuote(fn)`：构造引用内容时改写（`[quote, msg]`，可改 `quote.nick` / `quote.text`）；服务端另有 `message.quote` 做最终校验。
+- `HaChat.onMsgCtx(fn)`：右键**头像**（针对「人」）时追加菜单项——@、私信、收藏、撤回、禁言等都在这里。
+- `HaChat.onMsgContent(fn)`：右键**消息内容**（针对「消息」）时追加菜单项——内置复制 / 引用 / 删除，插件可追加翻译、举报等。
+- `HaChat.onQuote(fn)`：构造引用内容时改写（`[quote, msg]`，可改 `quote.nick` / `quote.text`）；服务端另有 `message.quote` 做最终校验。
 
 | `mail.send` | 注册/找回密码发验证码时（`Mailer::send`） | `[&$sent, $to, $subject, $body]` —— 核心 v1.0.81 起不再内置 SMTP；插件完成发送后把 `$sent` 置 true，无人响应时验证码仍入库但接口提示未启用邮件 |
 | `room.restored` | 群聊从审核回收站撤销「删除」后 | `[$roomId, $row, $actor]` —— `$row` 为恢复的整行数据 |
@@ -209,21 +209,21 @@ ow_abs_url('uploads/a.jpg');    // 拼接绝对地址；第二个参数默认 tr
 
 - 钩子回调里的 `echo` 直接进入页面输出；输出前所有用户数据必须经 `Sec::e()` 或前端 `esc()` 转义。
 - 不修改核心文件即可扩展页面；确需新的注入点时，先在核心 `pageHead()` / 页面渲染处增加 `Plugin::fire()`，再讨论合入，不要在插件里用输出缓冲 hack。
-- **前台资源（v1.0.55 起）**：聊天页与后台页**都由主程序统一引入** `<script src="?action=assets&type=js">`（聊天页位于 `OwChat.init` 之后），插件无需自行注入。多个插件各自用 `page.footer` 注入会导致脚本重复加载、菜单项重复注册——不要这么做。
+- **前台资源（v1.0.55 起）**：聊天页与后台页**都由主程序统一引入** `<script src="?action=assets&type=js">`（聊天页位于 `HaChat.init` 之后），插件无需自行注入。多个插件各自用 `page.footer` 注入会导致脚本重复加载、菜单项重复注册——不要这么做。
 - 脚本头部做场景判断与幂等保护：
 
 ```js
-if (!w.OwChat || !OwChat.cfg) return;   // 后台 / 登录页也会加载本脚本
-if (w.__owXxxLoaded) return;            // 幂等：防止重复引入时二次注册菜单项
-w.__owXxxLoaded = true;
+if (!w.HaChat || !HaChat.cfg) return;   // 后台 / 登录页也会加载本脚本
+if (w.__haXxxLoaded) return;            // 幂等：防止重复引入时二次注册菜单项
+w.__haXxxLoaded = true;
 ```
 
-### 前端扩展点（OwChat.onMsgCtx）
+### 前端扩展点（HaChat.onMsgCtx）
 
 聊天室消息右键菜单支持插件追加菜单项（v1.0.54 新增）：
 
 ```js
-OwChat.onMsgCtx(function (items, msg, env) {
+HaChat.onMsgCtx(function (items, msg, env) {
     // items.push({ t: '菜单文案', run: function () { ... } });
     // msg：消息对象（uid/gid/nickname/role/mine/recalled 等）
     // env：{ roomId, actor }
@@ -232,11 +232,11 @@ OwChat.onMsgCtx(function (items, msg, env) {
 
 - 回调在菜单渲染前同步执行，`try/catch` 包裹（插件异常不影响基础菜单）。
 - 显示判定只做用户体验过滤，**权限必须在服务端路由内重新校验**（参考 `plugin_ban_manager_quick`：管理员 / 房主守卫、不能禁言自己与管理员、房间归属校验）。
-- 弹窗复用 `OwChat.openModal()` / `OwChat.closeModal()`，与全站确认框同一样式。参考实现：`plugins/ban-manager/chat.js`。
+- 弹窗复用 `HaChat.openModal()` / `HaChat.closeModal()`，与全站确认框同一样式。参考实现：`plugins/ban-manager/chat.js`。
 
 ## 安全要点
 
-- 插件路由第一步做权限自查（见上）；涉及写操作的只接受 POST + 核心签名（前端经 `OwApi` 自动携带，无需额外处理）。
+- 插件路由第一步做权限自查（见上）；涉及写操作的只接受 POST + 核心签名（前端经 `HaApi` 自动携带，无需额外处理）。
 - SQL 一律参数化（`DB::run/one/all/val` 的 `?` 占位），禁止拼接用户输入。
 - 文件路径白名单校验，防目录穿越；对外请求设置超时。
 - 错误信息简短，不暴露凭据与 SQL。

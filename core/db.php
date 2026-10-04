@@ -464,7 +464,7 @@ class DB
     public static function defaults(): void
     {
         $defs = [
-            'site_name'        => 'Owlsgo-Chat',
+            'site_name'        => 'Halou-Chat',
             'allow_register'   => '1',
             'reg_email_verify' => '1',
             'guest_browse'     => '1',

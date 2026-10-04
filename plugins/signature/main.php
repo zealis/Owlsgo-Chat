@@ -7,11 +7,11 @@
  *   - 在「个人资料卡」中展示个性签名
  *   - 不修改主程序：仅依赖 Plugin::route / asset，不新增钩子
  */
-if (!defined('OWLSGO_VERSION')) exit;
+if (!defined('HALOU_VERSION')) exit;
 
 /* ===================== 数据库表 ===================== */
 
-function owSigEnsureTable(): void
+function haSigEnsureTable(): void
 {
     static $done = false;
     if ($done) return;
@@ -25,7 +25,7 @@ function owSigEnsureTable(): void
     )";
     DB::run($sql);
 }
-owSigEnsureTable();
+haSigEnsureTable();
 
 /* ===================== 路由 ===================== */
 

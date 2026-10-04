@@ -219,7 +219,7 @@ class Sec
         // 会话数据存活期与 Cookie（7 天）一致：默认 gc_maxlifetime 仅 24 分钟，
         // 关闭页面 / 电脑休眠半小时后回来刷新，会话数据已被 GC 清空 → 表现为「自动退出登录」
         @ini_set('session.gc_maxlifetime', (string)(86400 * 7));
-        session_name($cfg['session_name'] ?? 'OWLSESSID');
+        session_name($cfg['session_name'] ?? 'HALOUSSESSID');
         session_set_cookie_params([
             'lifetime' => 86400 * 7,
             'path'     => '/',

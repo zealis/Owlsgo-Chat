@@ -19,7 +19,7 @@
  *   - 发布 / 删除路由标记 sensitive（一次性操作票据），且仅群主或超级管理员。
  *   - 内容经 Chat::filterText 敏感词过滤，长度截断。
  */
-if (!defined('OWLSGO_VERSION')) exit;   // 禁止直接 HTTP 访问本文件
+if (!defined('HALOU_VERSION')) exit;   // 禁止直接 HTTP 访问本文件
 
 /** 建表（v1.1.2：去掉旧 announcements 表迁移，公告只隶属具体群聊） */
 $GLOBALS['oa_boot'] = function () {
@@ -57,19 +57,19 @@ $oaCanManage = function (array $ctx, int $roomId): bool {
 
 /* ---------- 后台管理页（v1.0.108 模仿附件列表：群聊ID搜索 + 多选批量 + 通用分页） ---------- */
 Plugin::adminPage('announcements', '群聊公告', function () {
-    return '<h2>群聊公告</h2><p class="ow-admin-desc">各群聊由群主发布的公告（聊天室上方公告条 / 进群弹窗通知）。删除需谨慎，成员端立即不再展示。</p>'
-        . '<div class="ow-card"><div class="ow-form-row">'
-        . '<div class="ow-form-item" style="min-width:140px"><label>群聊ID</label>'
-        . '<input class="ow-input" id="oaAdmRoom" type="number" min="1" placeholder="留空=全部" value="" onkeydown="if(event.key===\'Enter\')OwOA.load(1)"></div>'
-        . '<button class="ow-btn ow-btn-primary" onclick="OwOA.load(1)">搜索</button>'
-        . '<button class="ow-btn ow-btn-ghost" onclick="OwOA.resetFilter()">重置</button>'
+    return '<h2>群聊公告</h2><p class="ha-admin-desc">各群聊由群主发布的公告（聊天室上方公告条 / 进群弹窗通知）。删除需谨慎，成员端立即不再展示。</p>'
+        . '<div class="ha-card"><div class="ha-form-row">'
+        . '<div class="ha-form-item" style="min-width:140px"><label>群聊ID</label>'
+        . '<input class="ha-input" id="oaAdmRoom" type="number" min="1" placeholder="留空=全部" value="" onkeydown="if(event.key===\'Enter\')HaOA.load(1)"></div>'
+        . '<button class="ha-btn ha-btn-primary" onclick="HaOA.load(1)">搜索</button>'
+        . '<button class="ha-btn ha-btn-ghost" onclick="HaOA.resetFilter()">重置</button>'
         . '</div></div>'
-        . '<div class="ow-card">'
-        . '<div class="ow-admin-batch">'
-        . '<button class="ow-btn ow-btn-danger" id="oaAdmBatchDel" onclick="OwOA.batchDelete()" disabled>批量删除</button>'
-        . '<span id="oaAdmStat" style="color:var(--ow-text-sub);font-size:12px"></span>'
+        . '<div class="ha-card">'
+        . '<div class="ha-admin-batch">'
+        . '<button class="ha-btn ha-btn-danger" id="oaAdmBatchDel" onclick="HaOA.batchDelete()" disabled>批量删除</button>'
+        . '<span id="oaAdmStat" style="color:var(--ha-text-sub);font-size:12px"></span>'
         . '</div>'
-        . '<div class="ow-table-wrap"><table class="ow-table" id="oaAdmTable"></table></div>'
+        . '<div class="ha-table-wrap"><table class="ha-table" id="oaAdmTable"></table></div>'
         . '<div id="oaAdmPager"></div></div>';
 });
 

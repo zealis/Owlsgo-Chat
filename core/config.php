@@ -1,6 +1,6 @@
 <?php
 /**
- * Owlsgo-Chat 全局配置
+ * Halou-Chat 全局配置
  * 纯原生 PHP 8.1+，无框架 / 无 Composer 依赖。
  * 首次访问会自动进入安装向导；也可直接手动修改本文件后删除 data/install.lock 跳过向导。
  */
@@ -8,10 +8,10 @@ return [
     // ---------- 数据库（三选一：sqlite / mysql / pgsql）----------
     'db' => [
         'driver'   => 'sqlite',                 // sqlite | mysql | pgsql
-        'sqlite'   => __DIR__ . '/../data/owlsgo.db',
+        'sqlite'   => __DIR__ . '/../data/halou.db',
         'host'     => '127.0.0.1',
         'port'     => 3306,                     // pgsql 默认 5432
-        'name'     => 'owlsgo',
+        'name'     => 'halou',
         'user'     => 'root',
         'pass'     => '',
         'charset'  => 'utf8mb4',
@@ -19,7 +19,7 @@ return [
 
     // ---------- 安全 ----------
     'secret'     => 'CHANGE_ME_RANDOM_64_CHARS', // API 签名密钥（安装向导会自动改写为随机值）
-    'session_name' => 'OWLSESSID',
+    'session_name' => 'HALOUSSESSID',
     'sign_window'  => 1800,                      // 签名时间窗（秒）；前端已用服务器时间校正时钟偏差
 
     // ---------- 邮件（注册验证码 / 密码找回）----------
